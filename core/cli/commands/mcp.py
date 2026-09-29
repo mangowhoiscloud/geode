@@ -109,6 +109,13 @@ def _mcp_add(mgr: _Any, raw: str) -> None:
         _pkg.console.print(f"  [success]Added MCP server: {name}[/success]")
         _pkg.console.print(f"  [muted]Command: {command} {' '.join(cmd_args)}[/muted]")
         _pkg.console.print("  [muted]Saved to .claude/mcp_servers.json[/muted]")
+        from core.config.project_trust import is_project_trusted
+
+        if not is_project_trusted():
+            _pkg.console.print(
+                "  [muted]This folder is not trusted: the server loads in later sessions"
+                " only after `geode config trust`.[/muted]"
+            )
     else:
         _pkg.console.print(f"  [warning]Failed to add MCP server: {name}[/warning]")
     _pkg.console.print()

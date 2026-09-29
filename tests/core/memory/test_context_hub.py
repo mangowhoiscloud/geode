@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 
 class TestLoadCareer:
-    """FileBasedUserProfile.load_career() loads ~/.geode/identity/career.toml."""
+    """FileBasedUserProfile.load_career() loads ~/.geode/user_profile/career.toml."""
 
     def test_load_career_missing_file(self, tmp_path: Path) -> None:
         from core.memory.user_profile import FileBasedUserProfile

@@ -49,6 +49,9 @@ geode (thin CLI) ── Unix socket IPC ──→ geode serve (unified daemon)
 
 ### 1. API Keys
 
+`geode setup`과 `/login`은 API key를 `~/.geode/auth.toml`에 저장합니다.
+`~/.geode/.env`는 선택 사항이며, 아래 Slack 토큰처럼 직접 설정하는 변수를 둡니다.
+
 `~/.geode/.env`를 편집하되 기존 항목을 보존하고 필요한 자격 증명만 추가하세요.
 새 파일을 만든다면 비밀을 넣기 전에 소유자 읽기·쓰기 전용 권한(`0600`)으로
 제한하세요. 아래는 파일 내용의 예시이며 기존 파일을 교체하는 명령이 아닙니다.
@@ -73,10 +76,9 @@ SLACK_TEAM_ID=T...                 # 선택; doctor의 클릭 가능한 채널 �
 chmod 600 ~/.geode/.env
 ```
 
-**Secret 우선순위**: 수동 env export > 전역 `~/.geode/.env` > 프로젝트 `.env`.
-전역 파일이 권위를 갖는 secret store이고, 프로젝트 `.env`는 전역에 없는 키만
-채웁니다. Behavior 설정은 반대로 project `./.geode/config.toml` 이 global
-`~/.geode/config.toml` 을 덮습니다.
+export한 변수, `~/.geode/.env`, 프로젝트 `.env`, `config.toml`의 적용 순서는
+[설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics/)를
+참고하세요.
 
 ### 2. 프로젝트 설정
 
@@ -88,6 +90,11 @@ uv run geode init
 mkdir -p .geode
 touch .geode/config.toml
 ```
+
+프로젝트 `.env`, 그리고 `.geode/config.toml`에서 에이전트 권한을 넓히는 설정은
+해당 폴더에서 `geode config trust`를 실행한 뒤에만 적용됩니다.
+[프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)를
+참고하세요.
 
 ### 3. Global CLI 설치
 
@@ -187,26 +194,17 @@ geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect 
 - `SLACK_BOT_TOKEN=xoxb-...`와 `SLACK_APP_TOKEN=xapp-...`를 모두
   `~/.geode/.env`에 넣고, 바인딩한 모든 채널에서 `/invite @geode` 실행
 
-### 2. Channel Binding (`.geode/config.toml`)
+### 2. Channel Binding (`config.toml`)
 
-`.geode/config.toml.example`을 참고해 아래 gateway 설정을
-`.geode/config.toml`에 병합하세요. 다른 섹션과 기존 바인딩은 보존하고,
-`[gateway]` 테이블이 이미 있다면 중복 선언하지 말고 해당 테이블을 수정하세요.
-
-```toml
-[gateway]
-enabled = true
-allow_computer_use = false  # 원격 desktop control은 기본 차단
-
-[gateway.bindings]
-
-[[gateway.bindings.rules]]
-channel = "slack"
-channel_id = "C0XXXXXXXXX"   # Slack channel → 이름 클릭 → 하단 "Channel ID"
-auto_respond = true
-require_mention = true        # true: @mention만 반응
-max_rounds = 5
-```
+`~/.geode/config.toml`에 `[gateway] enabled = true`를 넣어 gateway를 켜고,
+응답할 Slack 채널마다 같은 파일이나 프로젝트 `.geode/config.toml`에
+`[[gateway.bindings.rules]]` 항목을 추가하세요. 규칙 형식은
+[바인딩 설정](https://mangowhoiscloud.github.io/geode/docs/guides/binding/)에
+있습니다. `[gateway]` 테이블이 이미 있다면 중복 선언하지 말고 해당 테이블을
+수정하세요. Slack에서 채널 이름을 클릭하면 열리는 창 맨 아래에 채널 ID가
+있습니다. 프로젝트 `[gateway]` 테이블은
+[신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)에서만
+적용됩니다.
 
 ### 3. 확인
 
@@ -289,8 +287,9 @@ history poll 경로를 마이그레이션 호환용으로 유지합니다. `geod
 
 ### 영속성
 
-- Jobs: `~/.geode/scheduler/jobs.json` (atomic write, fcntl lock)
-- 실행 로그: `~/.geode/scheduler/logs/{job_id}.jsonl` (자동 정리 2MB/2000 lines)
+- Jobs: 프로젝트 `.geode/scheduled_tasks.json` (atomic write, `scheduled_tasks.lock` lock 파일)
+- 실행 로그: 프로젝트 `.geode/scheduler_logs/{job_id}.jsonl` (자동 정리 2MB/2000 lines)
+- 레거시 `~/.geode/scheduler/jobs.json`은 프로젝트에 job 파일이 없을 때만 읽습니다
 - Guardrail: `action=""` jobs 거부 (zombie no-op 방지)
 
 ---
@@ -334,10 +333,11 @@ geode serve [-p 3.0]                   # Headless daemon
 
 ## 설정 레퍼런스
 
-Secret 은 user-global `~/.geode/.env` 에 둡니다. Project `./.env` 는
-global secret 이 없을 때만 채우는 고급 fallback 입니다. Behavior 는
-`config.toml` 에 두며, project `./.geode/config.toml` 이
-`~/.geode/config.toml` 보다 우선합니다.
+어떤 파일이 무엇을 담는지와
+[프로젝트 파일이 언제 적용되는지](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)는
+[설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics/)에서,
+전체 디스크 구조는 [storage-hierarchy.md](architecture/storage-hierarchy.md)에서
+다룹니다.
 
 환경 설정 선언: [`core/config/_settings.py`](../core/config/_settings.py).
 
@@ -348,7 +348,7 @@ global secret 이 없을 때만 채우는 고급 fallback 입니다. Behavior �
 | `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `OPENROUTER_API_KEY` | | OpenRouter 크레딧 기반 API key; `openrouter/<publisher>/<model>` 형태로 정확한 모델 참조 선택 |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
-| `GEODE_MODEL` | `claude-opus-4-8` | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
+| `GEODE_MODEL` | [routing 기본값](https://mangowhoiscloud.github.io/geode/docs/run/providers/) | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
 | `GEODE_ENSEMBLE_MODE` | `single` | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
 | **Gateway** | | |
 | `GEODE_GATEWAY_ENABLED` | `false` | 수동 session override; 지속 설정은 `config.toml` 의 `[gateway] enabled = true` 권장 |

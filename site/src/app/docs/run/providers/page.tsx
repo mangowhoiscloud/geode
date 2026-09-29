@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 export const metadata = { title: "Configure Providers — GEODE Docs" };
@@ -47,7 +46,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>OpenRouter</td>
-                  <td><code>openrouter/openrouter/free</code>, <code>openrouter/openrouter/auto</code> 또는 정확한 catalogue id</td>
+                  <td><code>routing.toml</code> 기본값 없음. <code>openrouter/openrouter/free</code>, <code>openrouter/openrouter/auto</code> 또는 정확한 catalogue id를 직접 고릅니다.</td>
                   <td><code>openrouter/&lt;publisher&gt;/&lt;model&gt;</code>. 외부 namespace 하나를 제거해 OpenRouter에 전달</td>
                   <td><code>OPENROUTER_API_KEY</code>. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다.</td>
                 </tr>
@@ -94,7 +93,7 @@ export default function Page() {
               2026-09-24에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
             </p>
             <h2>키와 설정이 사는 곳</h2>
-            <p>역할이 파일별로 분리되어 있습니다. 키와 프로필은 로컬 비밀 파일, 동작은 config.toml에 둡니다.</p>
+            <p>모델, effort, 로그인 소스 선택이 어느 <code>config.toml</code>에 저장되는지는 <a href="/geode/docs/config/basics">설정 기초</a>에 있습니다.</p>
             <table>
               <thead>
                 <tr><th>파일</th><th>역할</th></tr>
@@ -102,19 +101,11 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>시크릿 전용 평문 파일(<code>0600</code>). <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. 전역 파일이 권위를 가지며 프로젝트 <code>.env</code>는 빠진 값만 채웁니다.</td>
+                  <td>선택 사항인 시크릿 전용 평문 파일(<code>0600</code>). 키를 환경 변수로 둘 때 씁니다: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. 전역 파일이 권위를 가지며, 프로젝트 <code>.env</code>는 빠진 값만 채우고 <a href="/geode/docs/config/basics#project-trust">신뢰한 폴더</a>에서만 읽습니다.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/auth.toml</code></td>
-                  <td>Plan/Profile 메타데이터와 GEODE가 관리하는 자격증명 평문 파일(<code>0600</code>). 외부 CLI가 관리하는 자격증명은 복제하지 않습니다.</td>
-                </tr>
-                <tr>
-                  <td><code>~/.geode/config.toml</code></td>
-                  <td>전역 동작 설정. 모델 선택, effort, 로그인 소스가 여기 저장됩니다.</td>
-                </tr>
-                <tr>
-                  <td><code>.geode/config.toml</code></td>
-                  <td>프로젝트별 덮어쓰기. <code>/model</code>의 기본 저장 위치입니다.</td>
+                  <td>Plan/Profile 메타데이터와 GEODE가 관리하는 자격증명 평문 파일(<code>0600</code>). <code>geode setup</code>, <code>/login add</code>, <code>/key</code>로 등록한 API 키가 여기 저장됩니다. 외부 CLI가 관리하는 자격증명은 복제하지 않습니다. <a href="/geode/docs/runtime/auth">인증과 OAuth</a> 참고.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/routing.toml</code></td>
@@ -128,12 +119,6 @@ export default function Page() {
               프로세스까지 격리하지는 못하므로 공유·비신뢰 호스트에서는 환경
               주입 또는 전용 secret manager를 사용합니다. Google Workspace OAuth의
               OS keyring 저장소는 이 LLM API-key 경로와 별개입니다.
-            </p>
-            <p>
-              모델, effort, 로그인 소스를 .env에 적는 방식은 폐기되었습니다.
-              예전 버전이 남긴 .env의 모델 줄은 <code>/model</code>이 toml에
-              쓰면서 자동으로 지우고 &quot;removed stale ... from .env&quot;
-              안내를 출력합니다.
             </p>
 
             <h2>실행 중 세션과 새 세션의 기본값</h2>
@@ -154,21 +139,12 @@ export default function Page() {
             </p>
 
             <h2>모델 결정 순서</h2>
-            <p>위가 아래를 가립니다. 첫 번째로 값이 설정된 레이어가 이깁니다.</p>
-            <pre>{`1. CLI 인자
-2. env 레이어 (os.environ + project .env + global .env)
-3. 프로젝트 .geode/config.toml
-4. 전역 ~/.geode/config.toml
-5. 라우팅 기본값 (core/config/routing.toml)`}</pre>
-            <figure>
-              <Image
-                width={741}
-                height={579}
-                src="/geode/diagrams/model-resolution.svg"
-                alt="Model resolution ladder: CLI argument, env layer, project config.toml, global config.toml, then the routing default; the first layer with a value wins"
-              />
-              <figcaption>값이 설정된 첫 레이어가 이깁니다. 어느 레이어가 이겼는지는 geode config explain model이 보여줍니다.</figcaption>
-            </figure>
+            <p>
+              모델도 다른 설정과 같은 레이어 순서로 결정됩니다. 순서와{" "}
+              <a href="/geode/docs/config/basics#project-trust">신뢰한 폴더</a>에서만
+              적용되는 프로젝트 파일은 <a href="/geode/docs/config/basics">설정 기초</a>에
+              있습니다.
+            </p>
             <p>
               데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로
               (<code>BEHAVIOR_ENV_KEYS</code>, <code>core/config/env_io.py</code>),
@@ -298,7 +274,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 </tr>
                 <tr>
                   <td>OpenRouter</td>
-                  <td><code>openrouter/openrouter/free</code>, <code>openrouter/openrouter/auto</code>, or an exact catalogue id</td>
+                  <td>No <code>routing.toml</code> default. Pick <code>openrouter/openrouter/free</code>, <code>openrouter/openrouter/auto</code>, or an exact catalogue id.</td>
                   <td><code>openrouter/&lt;publisher&gt;/&lt;model&gt;</code>; GEODE strips one outer namespace before sending the request</td>
                   <td><code>OPENROUTER_API_KEY</code>. Credit-backed PAYG; never equivalent-fallbacks to a direct provider.</td>
                 </tr>
@@ -350,7 +326,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               own verification.
             </p>
             <h2>Where keys and settings live</h2>
-            <p>Roles are split by file. Keys and profiles live in local secret files; behavior lives in config.toml.</p>
+            <p>Which <code>config.toml</code> holds model, effort, and login-source choices is covered in <a href="/geode/docs/config/basics">Configuration basics</a>.</p>
             <table>
               <thead>
                 <tr><th>File</th><th>Role</th></tr>
@@ -358,19 +334,11 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               <tbody>
                 <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>Secrets-only plaintext file (<code>0600</code>). <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. The global file is authoritative; a project <code>.env</code> only fills missing values.</td>
+                  <td>Optional secrets-only plaintext file (<code>0600</code>) for keys kept as environment variables: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>OPENROUTER_API_KEY</code>, <code>ZAI_API_KEY</code>. The global file is authoritative; a project <code>.env</code> only fills missing values, and only in <a href="/geode/docs/config/basics#project-trust">trusted folders</a>.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/auth.toml</code></td>
-                  <td>Plan/Profile metadata and GEODE-managed credentials in an owner-only plaintext file (<code>0600</code>). Credentials owned by external CLIs are not copied.</td>
-                </tr>
-                <tr>
-                  <td><code>~/.geode/config.toml</code></td>
-                  <td>Durable global behavior. Model choice, effort, and login source persist here.</td>
-                </tr>
-                <tr>
-                  <td><code>.geode/config.toml</code></td>
-                  <td>Per-project overrides. The default write target of <code>/model</code>.</td>
+                  <td>Plan/Profile metadata and GEODE-managed credentials in an owner-only plaintext file (<code>0600</code>). API keys registered with <code>geode setup</code>, <code>/login add</code>, or <code>/key</code> are saved here. Credentials owned by external CLIs are not copied. See <a href="/geode/docs/runtime/auth">Auth and OAuth</a>.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/routing.toml</code></td>
@@ -385,12 +353,6 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               environment injection or a dedicated secret manager on shared or
               untrusted hosts. The Google Workspace OAuth keyring is a separate
               path from these LLM API keys.
-            </p>
-            <p>
-              Writing the model, effort, or login source to .env is retired.
-              When an older release left a model line in .env, the
-              <code>/model</code> picker removes it as it writes the toml and
-              prints a &quot;removed stale ... from .env&quot; notice.
             </p>
 
             <h2>Live sessions and future defaults</h2>
@@ -413,21 +375,12 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
             </p>
 
             <h2>Model resolution order</h2>
-            <p>Higher masks lower. The first layer with a value wins.</p>
-            <pre>{`1. CLI arguments
-2. env layer (os.environ + project .env + global .env)
-3. project .geode/config.toml
-4. global ~/.geode/config.toml
-5. routing default (core/config/routing.toml)`}</pre>
-            <figure>
-              <Image
-                width={741}
-                height={579}
-                src="/geode/diagrams/model-resolution.svg"
-                alt="Model resolution ladder: CLI argument, env layer, project config.toml, global config.toml, then the routing default; the first layer with a value wins"
-              />
-              <figcaption>The first layer with a value wins; geode config explain model shows which one did.</figcaption>
-            </figure>
+            <p>
+              The model resolves through the same layers as every other
+              setting. <a href="/geode/docs/config/basics">Configuration basics</a>{" "}
+              lists them in order, including the project files that apply only in{" "}
+              <a href="/geode/docs/config/basics#project-trust">trusted folders</a>.
+            </p>
             <p>
               The serve daemon deliberately drops model-pick env keys at startup
               (<code>BEHAVIOR_ENV_KEYS</code>, <code>core/config/env_io.py</code>),

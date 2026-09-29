@@ -318,7 +318,7 @@ def cmd_context(args: str) -> None:
         career = profile.load_career()
         if not career:
             _pkg.console.print(
-                "  [muted]No career data. Edit ~/.geode/identity/career.toml[/muted]"
+                "  [muted]No career data. Edit ~/.geode/user_profile/career.toml[/muted]"
             )
             _pkg.console.print()
             return

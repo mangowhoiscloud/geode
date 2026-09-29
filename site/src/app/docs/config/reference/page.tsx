@@ -20,7 +20,7 @@ export default function Page() {
               다룹니다. 키는 세 무리로 나뉩니다. Settings 필드
               (<code>core/config/_settings.py</code>), 라우팅 매니페스트
               (<code>core/config/routing.toml</code>), self-improving 루프
-              섹션(<code>core/config/self_improving.py</code>).
+              섹션(<code>evals/config.py</code>).
             </p>
             <p>
               모든 Settings 필드는 <code>GEODE_</code> 접두사를 붙인 env
@@ -41,14 +41,22 @@ export default function Page() {
                 <tr><th>필드</th><th>toml 키</th><th>타입 / 기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>model</code></td><td><code>llm.primary_model</code></td><td>str = <code>&quot;claude-opus-4-8&quot;</code></td><td>기본 모델. 기본값은 routing.toml의 anthropic 기본값을 따라갑니다.</td></tr>
+                <tr><td><code>model</code></td><td><code>llm.primary_model</code></td><td>str = <code>&quot;claude-opus-5-5&quot;</code></td><td>기본 모델. 기본값은 routing.toml의 anthropic 기본값을 따라갑니다.</td></tr>
+                <tr><td><code>model_policy_path</code></td><td><code>llm.model_policy_path</code></td><td>str = <code>&quot;&quot;</code></td><td>필수 모델 정책 파일의 절대 경로. 비우면 선택적 프로젝트 정책을 유지합니다.</td></tr>
                 <tr><td><code>act_model</code></td><td><code>llm.act_model</code></td><td>str = <code>&quot;&quot;</code></td><td>액션 루프 모델. 비우면 <code>model</code>로 폴백합니다.</td></tr>
                 <tr><td><code>judge_model</code></td><td><code>llm.judge_model</code></td><td>str = <code>&quot;&quot;</code></td><td>턴 단위 verify judge 모델. 비우면 <code>model</code>로 폴백합니다.</td></tr>
                 <tr><td><code>learning_extract_model</code></td><td><code>llm.learning_extract_model</code></td><td>str = <code>&quot;glm-4.7-flash&quot;</code></td><td>learning 추출 훅용 무료 티어 GLM 모델.</td></tr>
                 <tr><td><code>anthropic_credential_source</code></td><td><code>llm.anthropic_credential_source</code></td><td>str = <code>&quot;auto&quot;</code></td><td>Anthropic 자격 경로. <code>CredentialSource</code> 값 + <code>oauth</code> 별칭 + <code>none</code>.</td></tr>
                 <tr><td><code>openai_credential_source</code></td><td><code>llm.openai_credential_source</code></td><td>str = <code>&quot;auto&quot;</code></td><td>OpenAI 자격 경로. 같은 검증을 거칩니다.</td></tr>
+                <tr><td><code>anthropic_native_web_tools</code></td><td><code>llm.anthropic_native_web_tools</code></td><td>bool = false</td><td>Anthropic이 서버에서 실행하는 web_search/web_fetch 도구 옵트인. 끄면 GEODE 자체 웹 도구를 씁니다.</td></tr>
+                <tr><td><code>tool_search_defer</code></td><td><code>llm.tool_search_defer</code></td><td>bool = true</td><td>호스팅 tool search를 쓰는 지연 도구 로딩(Anthropic, OpenAI API). 끄는 스위치입니다.</td></tr>
+                <tr><td><code>tool_search_defer_codex</code></td><td><code>llm.tool_search_defer_codex</code></td><td>bool = true</td><td>Codex 백엔드의 같은 지연 도구 로딩.</td></tr>
+                <tr><td><code>prompt_cache_extended_ttl</code></td><td><code>llm.prompt_cache_extended_ttl</code></td><td>bool = true</td><td>Anthropic 정적 프롬프트 prefix의 1시간 캐시 TTL. false면 공급자 기본값 5분을 씁니다.</td></tr>
+                <tr><td><code>prompt_cache_key_enabled</code></td><td><code>llm.prompt_cache_key_enabled</code></td><td>bool = true</td><td>OpenAI API 키·Codex 경로에 <code>prompt_cache_key</code> 캐시 라우팅 힌트를 보냅니다. 끄는 스위치입니다.</td></tr>
+                <tr><td><code>glm_reasoning_effort</code></td><td><code>llm.glm_reasoning_effort</code></td><td>str = <code>&quot;&quot;</code></td><td>effort를 지정하지 않은 GLM 요청의 reasoning effort. 비우면 공급자 기본값을 씁니다.</td></tr>
               </tbody>
             </table>
+            <p>프로젝트 <code>.geode/config.toml</code>의 <code>llm.model_policy_path</code>는 신뢰한 폴더에서만 적용됩니다(<a href="/geode/docs/config/basics#project-trust">프로젝트 신뢰</a>).</p>
 
             <h3>[agentic]</h3>
             <table>
@@ -57,7 +65,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>agentic_effort</code></td><td><code>agentic.effort</code></td><td>str = <code>&quot;high&quot;</code></td><td>허용 값은 선택한 모델의 공통 스펙과 <code>/model</code> 선택 화면을 따릅니다. Anthropic <code>output_config.effort</code>, OpenAI <code>reasoning.effort</code>, GLM <code>reasoning_effort</code>에 같은 값을 전달하며, 지원하지 않는 조합은 호출 전에 거절합니다.</td></tr>
-                <tr><td><code>agentic_loop_time_budget</code></td><td><code>agentic.time_budget</code></td><td>float = 0.0</td><td>벽시계 초 단위 예산. 0이면 무제한.</td></tr>
                 <tr><td><code>agentic_thinking_budget</code></td><td><code>agentic.thinking_budget</code></td><td>int = 0</td><td>레거시 thinking 토큰 예산. 0이면 비활성.</td></tr>
               </tbody>
             </table>
@@ -73,8 +80,16 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h3>[judgment] · Unreleased</h3>
-            <p>아래 판정 옵션과 상시 Reflection 정책은 소스 체크아웃에 추가된 기능이며 패키지 릴리스는 아직입니다.</p>
+            <h3>[judgment]</h3>
+            <table>
+              <thead>
+                <tr><th>필드</th><th>toml 키</th><th>타입 / 기본값</th><th>용도</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>judgment_engine</code></td><td><code>judgment.engine</code></td><td>str = <code>&quot;llm&quot;</code></td><td>판정 엔진. <code>llm</code> 또는 <code>jev</code>.</td></tr>
+                <tr><td><code>jev_provider</code></td><td><code>judgment.provider</code></td><td>str = <code>&quot;auto&quot;</code></td><td>Jev 공급자. <code>auto</code>, <code>typesafe</code>, <code>openrouter</code>.</td></tr>
+              </tbody>
+            </table>
             <p><code>engine = &quot;llm&quot;</code>이 기본입니다. <code>engine = &quot;jev&quot;</code>로 선택하고 TypeSafe 또는 OpenRouter 키가 있을 때 Jev 판정을 사용합니다. <code>provider = &quot;auto&quot;</code>는 TypeSafe 키를 먼저 확인하며 <code>typesafe</code>나 <code>openrouter</code>로 고정할 수 있습니다. 키가 없으면 LLM 경로를 유지합니다. <code>/model judgment</code> 선택창과 <code>/model judgment llm|jev|typesafe|openrouter</code>가 같은 설정을 저장하며, 상위 환경변수·프로젝트 설정이 가리면 변경을 거부하고 해당 층을 표시합니다.</p>
             <p>TypeSafe는 <code>TYPESAFE_API_KEY</code> 환경 입력을 사용합니다. OpenRouter는 <code>/login add</code>로 등록한 인증 또는 <code>OPENROUTER_API_KEY</code> 환경 입력을 사용합니다. 키만 등록해도 Jev가 자동 활성화되지는 않습니다. 요청 실패 시 다른 공급자로 재시도하지 않습니다.</p>
             <h3>[cognitive]</h3>
@@ -86,7 +101,8 @@ export default function Page() {
                 <tr><td><code>cognitive_reflection_enabled</code></td><td><code>cognitive.reflection_enabled</code></td><td>bool = true</td><td>퇴역 예정 호환 필드. false도 true로 정규화하며 매 도구 결과 라운드와 최종 응답 전 판정합니다.</td></tr>
                 <tr><td><code>cognitive_reflection_model</code></td><td><code>cognitive.reflection_model</code></td><td>str = <code>&quot;&quot;</code></td><td>비워두면 현재 agentic loop 모델/소스를 상속하고, 값이 있으면 별도 reflection 모델로 사용한다.</td></tr>
                 <tr><td><code>cognitive_reflection_max_tokens</code></td><td><code>cognitive.reflection_max_tokens</code></td><td>int = 512</td><td>리플렉션 출력 토큰 상한.</td></tr>
-                <tr><td><code>cognitive_reflection_interval</code></td><td><code>cognitive.reflection_interval</code></td><td>int = 1</td><td>퇴역 예정: 1로 정규화합니다. reflection_adaptive도 false로 고정합니다.</td></tr>
+                <tr><td><code>cognitive_reflection_interval</code></td><td><code>cognitive.reflection_interval</code></td><td>int = 1</td><td>퇴역 예정: 1로 정규화합니다.</td></tr>
+                <tr><td><code>cognitive_reflection_adaptive</code></td><td><code>cognitive.reflection_adaptive</code></td><td>bool = false</td><td>퇴역 예정: false로 정규화합니다.</td></tr>
               </tbody>
             </table>
 
@@ -114,139 +130,144 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h2>Settings: env 전용 필드</h2>
+            <h2>Settings: 그 밖의 필드</h2>
             <p>
-              아래 무리는 toml 매핑이 없습니다. <code>GEODE_*</code> env
-              변수나 <code>.env</code>로만 설정합니다.
+              아래 필드도 config.toml 키가 있습니다. env 전용은 API 키 필드
+              (<code>_TOML_ENV_ONLY_FIELDS</code>)뿐이며, 환경 변수나 <code>.env</code>로만 설정합니다.
             </p>
 
             <h3>시크릿과 프로바이더</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>타입 / 기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>타입 / 기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td><code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>로 별칭됩니다. 외부 환경 입력이며, <code>/login</code>으로 등록한 키는 <code>auth.toml</code>에 별도로 저장됩니다.</td></tr>
-                <tr><td><code>ensemble_mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> 또는 <code>cross</code> 멀티 LLM 모드.</td></tr>
-                <tr><td><code>forced_login_method</code></td><td>dict = {`{}`}</td><td>프로바이더별 인증 방식 강제(<code>{`{"openai": "apikey"}`}</code>). 기본은 구독 우선.</td></tr>
+                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>openrouter_api_key</code> / <code>typesafe_api_key</code> / <code>zai_api_key</code></td><td></td><td>str = <code>&quot;&quot;</code></td><td><code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>OPENROUTER_API_KEY</code> / <code>TYPESAFE_API_KEY</code> / <code>ZAI_API_KEY</code>로 별칭됩니다. 외부 환경 입력이며, <code>/login</code>으로 등록한 키는 <code>auth.toml</code>에 별도로 저장됩니다.</td></tr>
+                <tr><td><code>ensemble_mode</code></td><td><code>ensemble.mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> 또는 <code>cross</code> 멀티 LLM 모드.</td></tr>
+                <tr><td><code>forced_login_method</code></td><td><code>llm.forced_login_method</code></td><td>dict = {`{}`}</td><td>프로바이더별 인증 방식 강제(<code>{`{"openai": "apikey"}`}</code>). 기본은 구독 우선.</td></tr>
               </tbody>
             </table>
 
             <h3>Temperature (0.0-2.0)</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>temperature_agent_loop</code></td><td>1.0</td><td>에이전트 루프 호출.</td></tr>
-                <tr><td><code>temperature_reflection</code></td><td>1.0</td><td>리플렉션 호출.</td></tr>
-                <tr><td><code>temperature_verification</code></td><td>0.0</td><td>verify 호출. cross-LLM 합의를 위한 결정성.</td></tr>
-                <tr><td><code>temperature_commentary</code></td><td>1.0</td><td>커멘터리 호출.</td></tr>
-                <tr><td><code>temperature_self_improving_mutation</code></td><td>1.0</td><td>변이 제안 호출.</td></tr>
+                <tr><td><code>temperature_agent_loop</code></td><td><code>temperature.agent_loop</code></td><td>1.0</td><td>에이전트 루프 호출.</td></tr>
+                <tr><td><code>temperature_reflection</code></td><td><code>temperature.reflection</code></td><td>1.0</td><td>리플렉션 호출.</td></tr>
+                <tr><td><code>temperature_self_improving_mutation</code></td><td><code>temperature.self_improving_mutation</code></td><td>1.0</td><td>변이 제안 호출.</td></tr>
               </tbody>
             </table>
 
             <h3>서브에이전트</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>max_subagent_depth</code></td><td>1</td><td>중첩 위임 깊이 상한.</td></tr>
-                <tr><td><code>max_total_subagents</code></td><td>15</td><td>총 서브에이전트 상한.</td></tr>
-                <tr><td><code>subagent_max_rounds</code></td><td>0</td><td>서브에이전트 라운드 상한. 0이면 무제한.</td></tr>
-                <tr><td><code>subagent_max_tokens</code></td><td>32768</td><td>서브에이전트 출력 토큰 상한.</td></tr>
+                <tr><td><code>max_subagent_depth</code></td><td><code>subagent.max_depth</code></td><td>1</td><td>중첩 위임 깊이 상한.</td></tr>
+                <tr><td><code>max_total_subagents</code></td><td><code>subagent.max_total</code></td><td>15</td><td>총 서브에이전트 상한.</td></tr>
+                <tr><td><code>subagent_max_tokens</code></td><td><code>subagent.max_tokens</code></td><td>32768</td><td>서브에이전트 출력 토큰 상한.</td></tr>
               </tbody>
             </table>
 
             <h3>토큰 가드와 오프로딩</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>max_tool_result_tokens</code></td><td>25000</td><td>도구 결과 토큰 상한. 0이면 무제한.</td></tr>
-                <tr><td><code>tool_offload_threshold</code></td><td>15000</td><td>이 토큰을 넘는 결과는 디스크로 오프로드됩니다. 0이면 비활성.</td></tr>
-                <tr><td><code>tool_offload_ttl_hours</code></td><td>4.0</td><td>오프로드 보관 시간.</td></tr>
-                <tr><td><code>observation_mask_keep_rounds</code></td><td>3</td><td>관측 마스킹 전 유지 라운드.</td></tr>
-                <tr><td><code>compact_keep_recent</code></td><td>10</td><td>컴팩션 시 보존할 최근 메시지 수.</td></tr>
+                <tr><td><code>max_tool_result_tokens</code></td><td><code>subagent.max_tool_result_tokens</code></td><td>25000</td><td>도구 결과 토큰 상한. 0이면 무제한.</td></tr>
+                <tr><td><code>tool_offload_threshold</code></td><td><code>tool_offload.threshold</code></td><td>15000</td><td>이 토큰을 넘는 결과는 디스크로 오프로드됩니다. 0이면 비활성.</td></tr>
+                <tr><td><code>tool_offload_ttl_hours</code></td><td><code>tool_offload.ttl_hours</code></td><td>4.0</td><td>오프로드 보관 시간.</td></tr>
+                <tr><td><code>observation_mask_keep_rounds</code></td><td><code>observation.mask_keep_rounds</code></td><td>3</td><td>관측 마스킹 전 유지 라운드.</td></tr>
+                <tr><td><code>compact_keep_recent</code></td><td><code>compact.keep_recent</code></td><td>10</td><td>컴팩션 시 보존할 최근 메시지 수.</td></tr>
               </tbody>
             </table>
 
             <h3>스케줄러와 트리거</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>trigger_scheduler_interval_s</code></td><td>60.0</td><td>트리거 스케줄러 폴 간격.</td></tr>
-                <tr><td><code>scheduler_interval_s</code></td><td>1.0</td><td>스케줄러 틱 간격.</td></tr>
-                <tr><td><code>scheduler_auto_start</code></td><td>true</td><td>serve와 함께 스케줄러 자동 시작.</td></tr>
-                <tr><td><code>scheduler_jitter_enabled</code></td><td>true</td><td>예약 실행에 지터 적용.</td></tr>
-                <tr><td><code>scheduler_max_jitter_ms</code></td><td>900000.0</td><td>지터 상한. 15분입니다.</td></tr>
+                <tr><td><code>trigger_scheduler_interval_s</code></td><td><code>scheduler.trigger_interval_s</code></td><td>60.0</td><td>트리거 스케줄러 폴 간격.</td></tr>
+                <tr><td><code>scheduler_interval_s</code></td><td><code>scheduler.interval_s</code></td><td>1.0</td><td>스케줄러 틱 간격.</td></tr>
+                <tr><td><code>scheduler_auto_start</code></td><td><code>scheduler.auto_start</code></td><td>true</td><td>serve와 함께 스케줄러 자동 시작.</td></tr>
+                <tr><td><code>scheduler_jitter_enabled</code></td><td><code>scheduler.jitter_enabled</code></td><td>true</td><td>예약 실행에 지터 적용.</td></tr>
+                <tr><td><code>scheduler_max_jitter_ms</code></td><td><code>scheduler.max_jitter_ms</code></td><td>900000.0</td><td>지터 상한. 15분입니다.</td></tr>
               </tbody>
             </table>
+            <p>프로젝트 <code>.geode/config.toml</code>의 <code>scheduler.auto_start</code>는 신뢰한 폴더에서만 적용됩니다(<a href="/geode/docs/config/basics#project-trust">프로젝트 신뢰</a>).</p>
 
             <h3>메모리와 세션</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>session_ttl_hours</code></td><td>4.0</td><td>세션 보존 시간.</td></tr>
-                <tr><td><code>session_storage_dir</code></td><td><code>&quot;&quot;</code></td><td>세션 저장 디렉터리. 비우면 인메모리.</td></tr>
-                <tr><td><code>organization_fixture_dir</code></td><td><code>&quot;&quot;</code></td><td>조직 메모리 픽스처 경로.</td></tr>
-                <tr><td><code>user_profile_dir</code></td><td><code>&quot;&quot;</code></td><td>비우면 <code>~/.geode/user_profile</code>.</td></tr>
-                <tr><td><code>checkpoint_db</code></td><td><code>&quot;geode_checkpoints.db&quot;</code></td><td>체크포인트 DB 파일명.</td></tr>
+                <tr><td><code>session_ttl_hours</code></td><td><code>session.ttl_hours</code></td><td>4.0</td><td>세션 보존 시간.</td></tr>
+                <tr><td><code>session_storage_dir</code></td><td><code>session.storage_dir</code></td><td><code>&quot;&quot;</code></td><td>세션 저장 디렉터리. 비우면 인메모리.</td></tr>
+                <tr><td><code>organization_fixture_dir</code></td><td><code>paths.organization_fixture_dir</code></td><td><code>&quot;&quot;</code></td><td>조직 메모리 픽스처 경로.</td></tr>
+                <tr><td><code>user_profile_dir</code></td><td><code>paths.user_profile_dir</code></td><td><code>&quot;&quot;</code></td><td>비우면 <code>~/.geode/user_profile</code>.</td></tr>
               </tbody>
             </table>
+            <p>프로젝트 <code>.geode/config.toml</code>의 <code>session.storage_dir</code>, <code>paths.organization_fixture_dir</code>, <code>paths.user_profile_dir</code>는 신뢰한 폴더에서만 적용됩니다(<a href="/geode/docs/config/basics#project-trust">프로젝트 신뢰</a>).</p>
 
             <h3>게이트웨이, 알림, 웹훅</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>gateway_enabled</code></td><td>false</td><td>메신저와 webhook 등 외부 채널 활성화. CLI IPC는 이 값과 무관합니다.</td></tr>
-                <tr><td><code>gateway_poll_interval_s</code></td><td>3.0</td><td>게이트웨이 폴 간격.</td></tr>
-                <tr><td><code>gateway_max_concurrent</code></td><td>4</td><td>동시 처리 상한.</td></tr>
-                <tr><td><code>gateway_allow_computer_use</code></td><td>false</td><td>바운드 채널의 원격 desktop control 명시적 옵트인.</td></tr>
-                <tr><td><code>notification_channel</code></td><td><code>&quot;slack&quot;</code></td><td>알림 채널 종류.</td></tr>
-                <tr><td><code>notification_recipient</code></td><td><code>&quot;#geode-alerts&quot;</code></td><td>알림 수신처.</td></tr>
-                <tr><td><code>webhook_enabled</code></td><td>false</td><td>gateway 활성 시 웹훅 HTTP 엔드포인트.</td></tr>
-                <tr><td><code>webhook_port</code></td><td>8765</td><td>웹훅 포트.</td></tr>
+                <tr><td><code>gateway_enabled</code></td><td><code>gateway.enabled</code></td><td>false</td><td>메신저와 webhook 등 외부 채널 활성화. CLI IPC는 이 값과 무관합니다.</td></tr>
+                <tr><td><code>gateway_poll_interval_s</code></td><td><code>gateway.poll_interval_s</code></td><td>3.0</td><td>게이트웨이 폴 간격.</td></tr>
+                <tr><td><code>gateway_max_concurrent</code></td><td><code>gateway.max_concurrent</code></td><td>4</td><td>동시 처리 상한.</td></tr>
+                <tr><td><code>gateway_allow_computer_use</code></td><td><code>gateway.allow_computer_use</code></td><td>false</td><td>바운드 채널의 원격 desktop control 명시적 옵트인.</td></tr>
+                <tr><td><code>notification_channel</code></td><td><code>notification.channel</code></td><td><code>&quot;slack&quot;</code></td><td>알림 채널 종류.</td></tr>
+                <tr><td><code>notification_recipient</code></td><td><code>notification.recipient</code></td><td><code>&quot;#geode-alerts&quot;</code></td><td>알림 수신처.</td></tr>
+                <tr><td><code>webhook_enabled</code></td><td><code>webhook.enabled</code></td><td>false</td><td>gateway 활성 시 웹훅 HTTP 엔드포인트.</td></tr>
+                <tr><td><code>webhook_port</code></td><td><code>webhook.port</code></td><td>8765</td><td>웹훅 포트.</td></tr>
               </tbody>
             </table>
+            <p>프로젝트 <code>.geode/config.toml</code>에서는 이 표의 키(<code>gateway.*</code>, <code>notification.*</code>, <code>webhook.*</code>)가 모두 신뢰한 폴더에서만 적용됩니다(<a href="/geode/docs/config/basics#project-trust">프로젝트 신뢰</a>).</p>
 
-            <h3>HITL, 플랜, 비용, 데스크탑</h3>
+            <h3>HITL, 샌드박스, 비용, 데스크탑</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>hitl_level</code></td><td>2</td><td>2면 모두 확인, 1이면 쓰기만 확인, 0이면 자율.</td></tr>
-                <tr><td><code>cost_limit_usd</code></td><td>0.0</td><td>비용 상한. 0이면 무제한, 80%에서 경고.</td></tr>
-                <tr><td><code>computer_use_enabled</code></td><td>true</td><td>데스크탑 자동화 도구.</td></tr>
+                <tr><td><code>hitl_level</code></td><td><code>hitl.level</code></td><td>2</td><td>2면 모두 확인, 1이면 쓰기만 확인, 0이면 자율.</td></tr>
+                <tr><td><code>dangerously_skip_permissions</code></td><td><code>hitl.dangerously_skip_permissions</code></td><td>false</td><td>도구 승인 프롬프트를 건너뜁니다(hitl_level을 0으로 강제). <code>geode --dangerously-skip-permissions</code>로도 켭니다.</td></tr>
+                <tr><td><code>cost_limit_usd</code></td><td><code>cost.limit_usd</code></td><td>0.0</td><td>비용 상한. 0이면 무제한, 80%에서 경고.</td></tr>
+                <tr><td><code>computer_use_enabled</code></td><td><code>computer_use.enabled</code></td><td>true</td><td>데스크탑 자동화 도구.</td></tr>
+                <tr><td><code>computer_use_driver</code></td><td><code>computer_use.driver</code></td><td><code>&quot;auto&quot;</code></td><td><code>auto</code>는 설치된 서명 helper를 쓰고 없으면 pyautogui, <code>python</code>은 프로세스 안의 pyautogui, <code>helper</code>는 macOS helper가 없으면 실패합니다.</td></tr>
+                <tr><td><code>computer_use_helper_path</code></td><td><code>computer_use.helper_path</code></td><td><code>&quot;&quot;</code></td><td>helper 실행 파일 경로. 비우면 <code>geode setup</code>이 빌드한 helper, 다음으로 PATH의 <code>geode-computer-helper</code>를 찾습니다.</td></tr>
+                <tr><td><code>bash_sandbox</code></td><td><code>bash_sandbox.mode</code></td><td><code>&quot;off&quot;</code></td><td><code>run_bash</code>의 OS 샌드박스. <code>off</code>, <code>on</code>(샌드박스가 없으면 경고 후 그대로 실행), <code>strict</code>(없으면 실패).</td></tr>
+                <tr><td><code>package_install_guard</code></td><td><code>tools.package_install_guard</code></td><td>true</td><td>PyPI·npm에 없는 패키지의 bash 설치를 막습니다. 확실한 404일 때만 막습니다.</td></tr>
               </tbody>
             </table>
+            <p>프로젝트 <code>.geode/config.toml</code>의 <code>cost.limit_usd</code>, <code>computer_use.enabled</code>, <code>computer_use.driver</code>, <code>bash_sandbox.mode</code>, <code>tools.package_install_guard</code>는 신뢰한 폴더에서만 적용되고, <code>hitl.dangerously_skip_permissions</code>와 <code>computer_use.helper_path</code>는 프로젝트에서 읽지 않습니다(<a href="/geode/docs/config/basics#project-trust">프로젝트 신뢰</a>).</p>
 
             <h3>LLM 커넥션 풀</h3>
             <table>
               <thead>
-                <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
+                <tr><th>필드</th><th>toml 키</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>llm_max_connections</code></td><td>20</td><td>최대 연결 수.</td></tr>
-                <tr><td><code>llm_max_keepalive_connections</code></td><td>5</td><td>keepalive 연결 상한.</td></tr>
-                <tr><td><code>llm_keepalive_expiry</code></td><td>30.0</td><td>keepalive 만료 초.</td></tr>
-                <tr><td><code>llm_connect_timeout</code></td><td>5.0</td><td>연결 타임아웃.</td></tr>
-                <tr><td><code>llm_read_timeout</code></td><td>300.0</td><td>읽기 타임아웃.</td></tr>
-                <tr><td><code>llm_write_timeout</code></td><td>30.0</td><td>쓰기 타임아웃.</td></tr>
-                <tr><td><code>llm_pool_timeout</code></td><td>10.0</td><td>풀 대기 타임아웃.</td></tr>
-                <tr><td><code>llm_retry_base_delay</code></td><td>2.0</td><td>재시도 기본 지연.</td></tr>
-                <tr><td><code>llm_retry_max_delay</code></td><td>30.0</td><td>재시도 최대 지연.</td></tr>
-                <tr><td><code>llm_max_retries</code></td><td>3</td><td>최초 호출을 포함한 모델별 총 시도 횟수. 메인 루프·보조 호출·scaffold-search mutator가 공유합니다.</td></tr>
-                <tr><td><code>llm_max_fallback_cost_ratio</code></td><td>0.0</td><td>폴백 비용 비율 상한. 0이면 무제한.</td></tr>
+                <tr><td><code>llm_max_connections</code></td><td><code>llm.max_connections</code></td><td>20</td><td>최대 연결 수.</td></tr>
+                <tr><td><code>llm_max_keepalive_connections</code></td><td><code>llm.max_keepalive_connections</code></td><td>5</td><td>keepalive 연결 상한.</td></tr>
+                <tr><td><code>llm_keepalive_expiry</code></td><td><code>llm.keepalive_expiry</code></td><td>30.0</td><td>keepalive 만료 초.</td></tr>
+                <tr><td><code>llm_connect_timeout</code></td><td><code>llm.connect_timeout</code></td><td>5.0</td><td>연결 타임아웃.</td></tr>
+                <tr><td><code>llm_read_timeout</code></td><td><code>llm.read_timeout</code></td><td>300.0</td><td>읽기 타임아웃.</td></tr>
+                <tr><td><code>llm_write_timeout</code></td><td><code>llm.write_timeout</code></td><td>30.0</td><td>쓰기 타임아웃.</td></tr>
+                <tr><td><code>llm_pool_timeout</code></td><td><code>llm.pool_timeout</code></td><td>10.0</td><td>풀 대기 타임아웃.</td></tr>
+                <tr><td><code>llm_retry_base_delay</code></td><td><code>llm.retry_base_delay</code></td><td>2.0</td><td>재시도 기본 지연.</td></tr>
+                <tr><td><code>llm_retry_max_delay</code></td><td><code>llm.retry_max_delay</code></td><td>30.0</td><td>재시도 최대 지연.</td></tr>
+                <tr><td><code>llm_max_retries</code></td><td><code>llm.max_retries</code></td><td>3</td><td>최초 호출을 포함한 모델별 총 시도 횟수. 메인 루프·보조 호출·scaffold-search mutator가 공유합니다.</td></tr>
+                <tr><td><code>llm_max_fallback_cost_ratio</code></td><td><code>llm.max_fallback_cost_ratio</code></td><td>0.0</td><td>폴백 비용 비율 상한. 0이면 무제한.</td></tr>
               </tbody>
             </table>
 
@@ -255,19 +276,20 @@ export default function Page() {
               출하본은 <code>core/config/routing.toml</code>이고, 사용자
               override <code>~/.geode/routing.toml</code>이 섹션 단위로
               병합됩니다(<code>core/config/routing_manifest.py</code>).
+              현재 기본 모델과 프로바이더별 라우팅 규칙은 <a href="/geode/docs/run/providers">프로바이더 설정</a>에 있습니다.
             </p>
             <table>
               <thead>
                 <tr><th>섹션</th><th>키</th><th>내용</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>[model.defaults]</code></td><td><code>anthropic</code>, <code>anthropic_secondary</code>, <code>anthropic_budget</code>, <code>openai</code>, <code>codex</code>, <code>glm</code></td><td><code>claude-opus-4-8</code> / <code>claude-sonnet-4-6</code> / <code>claude-haiku-4-5-20251001</code> / <code>gpt-5.5</code> / <code>gpt-5.5</code> / <code>glm-5.2</code>. <code>core.config.ANTHROPIC_PRIMARY</code> 등으로 export됩니다.</td></tr>
+                <tr><td><code>[model.defaults]</code></td><td><code>anthropic</code>, <code>anthropic_secondary</code>, <code>anthropic_budget</code>, <code>openai</code>, <code>codex</code>, <code>glm</code></td><td>프로바이더별 기본 모델 id. <code>core.config.ANTHROPIC_PRIMARY</code> 등으로 export됩니다.</td></tr>
                 <tr><td><code>[model.fallbacks]</code></td><td>프로바이더별 리스트 4개</td><td>기본은 전부 빈 리스트입니다. 같은 프로바이더 묵시적 폴백 체인은 출하되지 않고, 기본 모델 실패는 예외를 던지며 사용자가 <code>/model</code>로 고릅니다. 폴백은 <code>~/.geode/routing.toml</code>에서 옵트인합니다.</td></tr>
-                <tr><td><code>[routing.prefixes]</code></td><td><code>claude-</code>, <code>glm-</code>, <code>gpt-</code>, <code>o3-</code>, <code>o3</code>, <code>o4-</code>, <code>o4-mini</code></td><td>모델 id 접두사를 프로바이더로 매핑합니다(내장 어댑터가 있는 anthropic / openai / glm만). 첫 매치가 이깁니다. 매치되는 접두사가 없는 계열(gemini-, deepseek-, llama-, qwen- 등)은 모델당 한 번 경고를 남기고 <code>fallback_provider</code>(OpenAI 호환 엔드포인트)로 흘러갑니다. 해당 id를 서빙하는 OpenAI 호환 프록시에는 정상 경로입니다.</td></tr>
+                <tr><td><code>[routing.prefixes]</code></td><td>모델 id 접두사</td><td>모델 id 접두사를 프로바이더로 매핑합니다. 첫 매치가 이깁니다. 매치되는 접두사가 없는 계열(gemini-, deepseek-, llama-, qwen- 등)은 모델당 한 번 경고를 남기고 <code>fallback_provider</code>(OpenAI 호환 엔드포인트)로 흘러갑니다. 해당 id를 서빙하는 OpenAI 호환 프록시에는 정상 경로입니다.</td></tr>
                 <tr><td><code>[routing]</code></td><td><code>codex_only_models</code>, <code>codex_suffixes</code>, <code>fallback_provider</code></td><td>Codex 전용 모델 목록은 현재 비어 있습니다. <code>gpt-5.5</code>/<code>gpt-5.5-pro</code>도 선택한 API-key 또는 구독 source를 따릅니다. <code>-codex</code>/<code>-codex-max</code>/<code>-codex-mini</code> 접미사는 <code>openai-codex</code>로 라우팅하고, 미해석 ID는 <code>openai</code>로 분류합니다. 모델 퇴역은 provider 분류와 별도로 실제 source에 적용합니다.</td></tr>
-                <tr><td><code>[nodes]</code></td><td><code>analyst</code>, <code>evaluator</code>, <code>scoring</code>, <code>synthesizer</code></td><td>파이프라인 노드 모델. 전부 <code>claude-opus-4-8</code> 고정이라 노드가 REPL 모델을 상속하지 않습니다. 조회 순서는 프로젝트 <code>.geode/routing.toml</code>, 매니페스트, 없으면 <code>settings.model</code>.</td></tr>
-                <tr><td><code>[credentials.patterns]</code></td><td><code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-</code></td><td>키 모양에서 프로바이더를 추정합니다. GLM 키({`{id}.{secret}`} 모양)는 <code>core.config.env_io.is_glm_key</code>가 감지합니다.</td></tr>
-                <tr><td><code>[credentials.env_vars]</code></td><td>3개</td><td>anthropic은 <code>ANTHROPIC_API_KEY</code>, openai는 <code>OPENAI_API_KEY</code>, glm은 <code>ZAI_API_KEY</code>.</td></tr>
+                <tr><td><code>[nodes]</code></td><td><code>analyst</code>, <code>evaluator</code>, <code>scoring</code>, <code>synthesizer</code></td><td>파이프라인 노드 모델. 출하 매니페스트가 네 노드 모두 Anthropic 기본 모델로 고정하므로 노드가 REPL 모델을 상속하지 않습니다. 조회 순서는 프로젝트 <code>.geode/routing.toml</code>, 매니페스트, 없으면 <code>settings.model</code>.</td></tr>
+                <tr><td><code>[credentials.patterns]</code></td><td>API 키 정규식</td><td>키 모양에서 프로바이더를 추정합니다. 첫 매치가 이깁니다. GLM 키({`{id}.{secret}`} 모양)는 <code>core.config.env_io.is_glm_key</code>가 감지합니다.</td></tr>
+                <tr><td><code>[credentials.env_vars]</code></td><td>프로바이더 이름</td><td>프로바이더별 API 키 환경 변수 이름.</td></tr>
               </tbody>
             </table>
 
@@ -385,7 +407,7 @@ export default function Page() {
               The keys fall into three groups: Settings fields
               (<code>core/config/_settings.py</code>), the routing manifest
               (<code>core/config/routing.toml</code>), and the self-improving
-              loop sections (<code>core/config/self_improving.py</code>).
+              loop sections (<code>evals/config.py</code>).
             </p>
             <p>
               Every Settings field can be overridden by an env var with the
@@ -406,14 +428,22 @@ export default function Page() {
                 <tr><th>Field</th><th>toml key</th><th>Type / default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>model</code></td><td><code>llm.primary_model</code></td><td>str = <code>&quot;claude-opus-4-8&quot;</code></td><td>Primary model. The default mirrors the anthropic default in routing.toml.</td></tr>
+                <tr><td><code>model</code></td><td><code>llm.primary_model</code></td><td>str = <code>&quot;claude-opus-5-5&quot;</code></td><td>Primary model. The default mirrors the anthropic default in routing.toml.</td></tr>
+                <tr><td><code>model_policy_path</code></td><td><code>llm.model_policy_path</code></td><td>str = <code>&quot;&quot;</code></td><td>Absolute path to a required model policy. Empty keeps the optional project policy.</td></tr>
                 <tr><td><code>act_model</code></td><td><code>llm.act_model</code></td><td>str = <code>&quot;&quot;</code></td><td>Action-loop model. Empty falls back to <code>model</code>.</td></tr>
                 <tr><td><code>judge_model</code></td><td><code>llm.judge_model</code></td><td>str = <code>&quot;&quot;</code></td><td>Per-turn verify judge model. Empty falls back to <code>model</code>.</td></tr>
                 <tr><td><code>learning_extract_model</code></td><td><code>llm.learning_extract_model</code></td><td>str = <code>&quot;glm-4.7-flash&quot;</code></td><td>Free-tier GLM model for the learning-extract hook.</td></tr>
                 <tr><td><code>anthropic_credential_source</code></td><td><code>llm.anthropic_credential_source</code></td><td>str = <code>&quot;auto&quot;</code></td><td>Anthropic credential lane. Validated against <code>CredentialSource</code> plus the <code>oauth</code> alias and the <code>none</code> sentinel.</td></tr>
                 <tr><td><code>openai_credential_source</code></td><td><code>llm.openai_credential_source</code></td><td>str = <code>&quot;auto&quot;</code></td><td>OpenAI credential lane. Same validation.</td></tr>
+                <tr><td><code>anthropic_native_web_tools</code></td><td><code>llm.anthropic_native_web_tools</code></td><td>bool = false</td><td>Opt-in for the web_search/web_fetch tools that Anthropic runs server-side. Off keeps GEODE&apos;s own web tools.</td></tr>
+                <tr><td><code>tool_search_defer</code></td><td><code>llm.tool_search_defer</code></td><td>bool = true</td><td>Deferred tool loading through hosted tool search (Anthropic, OpenAI API). Kill switch.</td></tr>
+                <tr><td><code>tool_search_defer_codex</code></td><td><code>llm.tool_search_defer_codex</code></td><td>bool = true</td><td>The same deferred tool loading on the Codex backend.</td></tr>
+                <tr><td><code>prompt_cache_extended_ttl</code></td><td><code>llm.prompt_cache_extended_ttl</code></td><td>bool = true</td><td>1-hour cache TTL for the Anthropic static prompt prefix. false keeps the provider&apos;s 5-minute default.</td></tr>
+                <tr><td><code>prompt_cache_key_enabled</code></td><td><code>llm.prompt_cache_key_enabled</code></td><td>bool = true</td><td>Sends the OpenAI <code>prompt_cache_key</code> cache-routing hint on API-key and Codex routes. Kill switch.</td></tr>
+                <tr><td><code>glm_reasoning_effort</code></td><td><code>llm.glm_reasoning_effort</code></td><td>str = <code>&quot;&quot;</code></td><td>GLM reasoning effort for requests that set none. Empty keeps the provider default.</td></tr>
               </tbody>
             </table>
+            <p>In a project <code>.geode/config.toml</code>, <code>llm.model_policy_path</code> applies only in a trusted folder (<a href="/geode/docs/config/basics#project-trust">Project trust</a>).</p>
 
             <h3>[agentic]</h3>
             <table>
@@ -422,7 +452,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>agentic_effort</code></td><td><code>agentic.effort</code></td><td>str = <code>&quot;high&quot;</code></td><td>Allowed values come from the selected model&apos;s shared specification and the <code>/model</code> picker. The same value is forwarded as Anthropic <code>output_config.effort</code>, OpenAI <code>reasoning.effort</code>, or GLM <code>reasoning_effort</code>; unsupported combinations are rejected before a call.</td></tr>
-                <tr><td><code>agentic_loop_time_budget</code></td><td><code>agentic.time_budget</code></td><td>float = 0.0</td><td>Wall-clock seconds. 0 means no limit.</td></tr>
                 <tr><td><code>agentic_thinking_budget</code></td><td><code>agentic.thinking_budget</code></td><td>int = 0</td><td>Legacy thinking-token budget. 0 disables.</td></tr>
               </tbody>
             </table>
@@ -438,8 +467,16 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h3>[judgment] · Unreleased</h3>
-            <p>The judgment option and required Reflection policy below are available from source; a packaged release is still pending.</p>
+            <h3>[judgment]</h3>
+            <table>
+              <thead>
+                <tr><th>Field</th><th>toml key</th><th>Type / default</th><th>Purpose</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>judgment_engine</code></td><td><code>judgment.engine</code></td><td>str = <code>&quot;llm&quot;</code></td><td>Judgment engine: <code>llm</code> or <code>jev</code>.</td></tr>
+                <tr><td><code>jev_provider</code></td><td><code>judgment.provider</code></td><td>str = <code>&quot;auto&quot;</code></td><td>Jev provider: <code>auto</code>, <code>typesafe</code> or <code>openrouter</code>.</td></tr>
+              </tbody>
+            </table>
             <p><code>engine = &quot;llm&quot;</code> is the default. Selecting <code>engine = &quot;jev&quot;</code> with a TypeSafe or OpenRouter key enables Jev judgments. <code>provider = &quot;auto&quot;</code> prefers the TypeSafe key; use <code>typesafe</code> or <code>openrouter</code> to pin a route. Missing keys retain the LLM route. The <code>/model judgment</code> picker and <code>/model judgment llm|jev|typesafe|openrouter</code> persist the same setting. A masking environment or project setting is reported instead of silently overwritten.</p>
             <p>TypeSafe uses the <code>TYPESAFE_API_KEY</code> environment input. OpenRouter accepts credentials registered through <code>/login add</code> or the <code>OPENROUTER_API_KEY</code> environment input. Keep secrets out of Git and behavior configuration. A key alone does not enable Jev. Request failures never trigger an automatic provider switch.</p>
             <h3>[cognitive]</h3>
@@ -451,7 +488,8 @@ export default function Page() {
                 <tr><td><code>cognitive_reflection_enabled</code></td><td><code>cognitive.reflection_enabled</code></td><td>bool = true</td><td>Deprecated compatibility field: normalized to true. Reflection runs after each tool-result round and before final delivery.</td></tr>
                 <tr><td><code>cognitive_reflection_model</code></td><td><code>cognitive.reflection_model</code></td><td>str = <code>&quot;&quot;</code></td><td>Empty inherits the active agentic loop model/source; a value sets a separate reflection model.</td></tr>
                 <tr><td><code>cognitive_reflection_max_tokens</code></td><td><code>cognitive.reflection_max_tokens</code></td><td>int = 512</td><td>Reflection output cap.</td></tr>
-                <tr><td><code>cognitive_reflection_interval</code></td><td><code>cognitive.reflection_interval</code></td><td>int = 1</td><td>Deprecated: normalized to 1; reflection_adaptive is fixed to false.</td></tr>
+                <tr><td><code>cognitive_reflection_interval</code></td><td><code>cognitive.reflection_interval</code></td><td>int = 1</td><td>Deprecated: normalized to 1.</td></tr>
+                <tr><td><code>cognitive_reflection_adaptive</code></td><td><code>cognitive.reflection_adaptive</code></td><td>bool = false</td><td>Deprecated: normalized to false.</td></tr>
               </tbody>
             </table>
 
@@ -479,139 +517,144 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h2>Settings: env-only fields</h2>
+            <h2>Settings: other fields</h2>
             <p>
-              The groups below carry no toml mapping. Configure them through
-              <code>GEODE_*</code> env vars or <code>.env</code>.
+              The fields below have config.toml keys too. Only the API-key fields
+              (<code>_TOML_ENV_ONLY_FIELDS</code>) are env-only: set them as env vars or in <code>.env</code>.
             </p>
 
             <h3>Secrets and providers</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Type / default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Type / default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td>Aliased to <code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>. External environment inputs; keys registered through <code>/login</code> are stored separately in <code>auth.toml</code>.</td></tr>
-                <tr><td><code>ensemble_mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> or <code>cross</code> multi-LLM mode.</td></tr>
-                <tr><td><code>forced_login_method</code></td><td>dict = {`{}`}</td><td>Per-provider auth-mode escape hatch (<code>{`{"openai": "apikey"}`}</code>). Subscription preferred by default.</td></tr>
+                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>openrouter_api_key</code> / <code>typesafe_api_key</code> / <code>zai_api_key</code></td><td></td><td>str = <code>&quot;&quot;</code></td><td>Aliased to <code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>OPENROUTER_API_KEY</code> / <code>TYPESAFE_API_KEY</code> / <code>ZAI_API_KEY</code>. External environment inputs; keys registered through <code>/login</code> are stored separately in <code>auth.toml</code>.</td></tr>
+                <tr><td><code>ensemble_mode</code></td><td><code>ensemble.mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> or <code>cross</code> multi-LLM mode.</td></tr>
+                <tr><td><code>forced_login_method</code></td><td><code>llm.forced_login_method</code></td><td>dict = {`{}`}</td><td>Per-provider auth-mode escape hatch (<code>{`{"openai": "apikey"}`}</code>). Subscription preferred by default.</td></tr>
               </tbody>
             </table>
 
             <h3>Temperature (0.0-2.0)</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>temperature_agent_loop</code></td><td>1.0</td><td>Agent-loop calls.</td></tr>
-                <tr><td><code>temperature_reflection</code></td><td>1.0</td><td>Reflection calls.</td></tr>
-                <tr><td><code>temperature_verification</code></td><td>0.0</td><td>Verify calls. Determinism for cross-LLM agreement.</td></tr>
-                <tr><td><code>temperature_commentary</code></td><td>1.0</td><td>Commentary calls.</td></tr>
-                <tr><td><code>temperature_self_improving_mutation</code></td><td>1.0</td><td>Mutation-proposal calls.</td></tr>
+                <tr><td><code>temperature_agent_loop</code></td><td><code>temperature.agent_loop</code></td><td>1.0</td><td>Agent-loop calls.</td></tr>
+                <tr><td><code>temperature_reflection</code></td><td><code>temperature.reflection</code></td><td>1.0</td><td>Reflection calls.</td></tr>
+                <tr><td><code>temperature_self_improving_mutation</code></td><td><code>temperature.self_improving_mutation</code></td><td>1.0</td><td>Mutation-proposal calls.</td></tr>
               </tbody>
             </table>
 
             <h3>Sub-agents</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>max_subagent_depth</code></td><td>1</td><td>Nested delegation depth cap.</td></tr>
-                <tr><td><code>max_total_subagents</code></td><td>15</td><td>Total sub-agent cap.</td></tr>
-                <tr><td><code>subagent_max_rounds</code></td><td>0</td><td>Sub-agent round cap. 0 means unlimited.</td></tr>
-                <tr><td><code>subagent_max_tokens</code></td><td>32768</td><td>Sub-agent output token cap.</td></tr>
+                <tr><td><code>max_subagent_depth</code></td><td><code>subagent.max_depth</code></td><td>1</td><td>Nested delegation depth cap.</td></tr>
+                <tr><td><code>max_total_subagents</code></td><td><code>subagent.max_total</code></td><td>15</td><td>Total sub-agent cap.</td></tr>
+                <tr><td><code>subagent_max_tokens</code></td><td><code>subagent.max_tokens</code></td><td>32768</td><td>Sub-agent output token cap.</td></tr>
               </tbody>
             </table>
 
             <h3>Token guards and offloading</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>max_tool_result_tokens</code></td><td>25000</td><td>Tool-result token cap. 0 means no limit.</td></tr>
-                <tr><td><code>tool_offload_threshold</code></td><td>15000</td><td>Results above this many tokens are offloaded to disk. 0 disables.</td></tr>
-                <tr><td><code>tool_offload_ttl_hours</code></td><td>4.0</td><td>Offload retention.</td></tr>
-                <tr><td><code>observation_mask_keep_rounds</code></td><td>3</td><td>Rounds kept before observation masking.</td></tr>
-                <tr><td><code>compact_keep_recent</code></td><td>10</td><td>Recent messages preserved on compaction.</td></tr>
+                <tr><td><code>max_tool_result_tokens</code></td><td><code>subagent.max_tool_result_tokens</code></td><td>25000</td><td>Tool-result token cap. 0 means no limit.</td></tr>
+                <tr><td><code>tool_offload_threshold</code></td><td><code>tool_offload.threshold</code></td><td>15000</td><td>Results above this many tokens are offloaded to disk. 0 disables.</td></tr>
+                <tr><td><code>tool_offload_ttl_hours</code></td><td><code>tool_offload.ttl_hours</code></td><td>4.0</td><td>Offload retention.</td></tr>
+                <tr><td><code>observation_mask_keep_rounds</code></td><td><code>observation.mask_keep_rounds</code></td><td>3</td><td>Rounds kept before observation masking.</td></tr>
+                <tr><td><code>compact_keep_recent</code></td><td><code>compact.keep_recent</code></td><td>10</td><td>Recent messages preserved on compaction.</td></tr>
               </tbody>
             </table>
 
             <h3>Scheduler and triggers</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>trigger_scheduler_interval_s</code></td><td>60.0</td><td>Trigger-scheduler poll interval.</td></tr>
-                <tr><td><code>scheduler_interval_s</code></td><td>1.0</td><td>Scheduler tick interval.</td></tr>
-                <tr><td><code>scheduler_auto_start</code></td><td>true</td><td>Start the scheduler with serve.</td></tr>
-                <tr><td><code>scheduler_jitter_enabled</code></td><td>true</td><td>Apply jitter to scheduled runs.</td></tr>
-                <tr><td><code>scheduler_max_jitter_ms</code></td><td>900000.0</td><td>Jitter cap (15 minutes).</td></tr>
+                <tr><td><code>trigger_scheduler_interval_s</code></td><td><code>scheduler.trigger_interval_s</code></td><td>60.0</td><td>Trigger-scheduler poll interval.</td></tr>
+                <tr><td><code>scheduler_interval_s</code></td><td><code>scheduler.interval_s</code></td><td>1.0</td><td>Scheduler tick interval.</td></tr>
+                <tr><td><code>scheduler_auto_start</code></td><td><code>scheduler.auto_start</code></td><td>true</td><td>Start the scheduler with serve.</td></tr>
+                <tr><td><code>scheduler_jitter_enabled</code></td><td><code>scheduler.jitter_enabled</code></td><td>true</td><td>Apply jitter to scheduled runs.</td></tr>
+                <tr><td><code>scheduler_max_jitter_ms</code></td><td><code>scheduler.max_jitter_ms</code></td><td>900000.0</td><td>Jitter cap (15 minutes).</td></tr>
               </tbody>
             </table>
+            <p>In a project <code>.geode/config.toml</code>, <code>scheduler.auto_start</code> applies only in a trusted folder (<a href="/geode/docs/config/basics#project-trust">Project trust</a>).</p>
 
             <h3>Memory and sessions</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>session_ttl_hours</code></td><td>4.0</td><td>Session retention.</td></tr>
-                <tr><td><code>session_storage_dir</code></td><td><code>&quot;&quot;</code></td><td>Session storage dir. Empty means in-memory.</td></tr>
-                <tr><td><code>organization_fixture_dir</code></td><td><code>&quot;&quot;</code></td><td>Organization-memory fixture path.</td></tr>
-                <tr><td><code>user_profile_dir</code></td><td><code>&quot;&quot;</code></td><td>Empty means <code>~/.geode/user_profile</code>.</td></tr>
-                <tr><td><code>checkpoint_db</code></td><td><code>&quot;geode_checkpoints.db&quot;</code></td><td>Checkpoint DB filename.</td></tr>
+                <tr><td><code>session_ttl_hours</code></td><td><code>session.ttl_hours</code></td><td>4.0</td><td>Session retention.</td></tr>
+                <tr><td><code>session_storage_dir</code></td><td><code>session.storage_dir</code></td><td><code>&quot;&quot;</code></td><td>Session storage dir. Empty means in-memory.</td></tr>
+                <tr><td><code>organization_fixture_dir</code></td><td><code>paths.organization_fixture_dir</code></td><td><code>&quot;&quot;</code></td><td>Organization-memory fixture path.</td></tr>
+                <tr><td><code>user_profile_dir</code></td><td><code>paths.user_profile_dir</code></td><td><code>&quot;&quot;</code></td><td>Empty means <code>~/.geode/user_profile</code>.</td></tr>
               </tbody>
             </table>
+            <p>In a project <code>.geode/config.toml</code>, <code>session.storage_dir</code>, <code>paths.organization_fixture_dir</code> and <code>paths.user_profile_dir</code> apply only in a trusted folder (<a href="/geode/docs/config/basics#project-trust">Project trust</a>).</p>
 
             <h3>Gateway, notification, webhook</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>gateway_enabled</code></td><td>false</td><td>Enables external channels such as messaging and webhooks. CLI IPC is independent.</td></tr>
-                <tr><td><code>gateway_poll_interval_s</code></td><td>3.0</td><td>Gateway poll interval.</td></tr>
-                <tr><td><code>gateway_max_concurrent</code></td><td>4</td><td>Concurrency cap.</td></tr>
-                <tr><td><code>gateway_allow_computer_use</code></td><td>false</td><td>Explicit remote-desktop opt-in for bound channels.</td></tr>
-                <tr><td><code>notification_channel</code></td><td><code>&quot;slack&quot;</code></td><td>Notification channel kind.</td></tr>
-                <tr><td><code>notification_recipient</code></td><td><code>&quot;#geode-alerts&quot;</code></td><td>Notification recipient.</td></tr>
-                <tr><td><code>webhook_enabled</code></td><td>false</td><td>Webhook HTTP endpoint when the gateway is enabled.</td></tr>
-                <tr><td><code>webhook_port</code></td><td>8765</td><td>Webhook port.</td></tr>
+                <tr><td><code>gateway_enabled</code></td><td><code>gateway.enabled</code></td><td>false</td><td>Enables external channels such as messaging and webhooks. CLI IPC is independent.</td></tr>
+                <tr><td><code>gateway_poll_interval_s</code></td><td><code>gateway.poll_interval_s</code></td><td>3.0</td><td>Gateway poll interval.</td></tr>
+                <tr><td><code>gateway_max_concurrent</code></td><td><code>gateway.max_concurrent</code></td><td>4</td><td>Concurrency cap.</td></tr>
+                <tr><td><code>gateway_allow_computer_use</code></td><td><code>gateway.allow_computer_use</code></td><td>false</td><td>Explicit remote-desktop opt-in for bound channels.</td></tr>
+                <tr><td><code>notification_channel</code></td><td><code>notification.channel</code></td><td><code>&quot;slack&quot;</code></td><td>Notification channel kind.</td></tr>
+                <tr><td><code>notification_recipient</code></td><td><code>notification.recipient</code></td><td><code>&quot;#geode-alerts&quot;</code></td><td>Notification recipient.</td></tr>
+                <tr><td><code>webhook_enabled</code></td><td><code>webhook.enabled</code></td><td>false</td><td>Webhook HTTP endpoint when the gateway is enabled.</td></tr>
+                <tr><td><code>webhook_port</code></td><td><code>webhook.port</code></td><td>8765</td><td>Webhook port.</td></tr>
               </tbody>
             </table>
+            <p>In a project <code>.geode/config.toml</code>, every key in this table (<code>gateway.*</code>, <code>notification.*</code>, <code>webhook.*</code>) applies only in a trusted folder (<a href="/geode/docs/config/basics#project-trust">Project trust</a>).</p>
 
-            <h3>HITL, plan, cost, desktop</h3>
+            <h3>HITL, sandbox, cost, desktop</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>hitl_level</code></td><td>2</td><td>2 = ask everything, 1 = write-only, 0 = autonomous.</td></tr>
-                <tr><td><code>cost_limit_usd</code></td><td>0.0</td><td>Cost cap. 0 means no limit; warns at 80%.</td></tr>
-                <tr><td><code>computer_use_enabled</code></td><td>true</td><td>Desktop automation tool.</td></tr>
+                <tr><td><code>hitl_level</code></td><td><code>hitl.level</code></td><td>2</td><td>2 = ask everything, 1 = write-only, 0 = autonomous.</td></tr>
+                <tr><td><code>dangerously_skip_permissions</code></td><td><code>hitl.dangerously_skip_permissions</code></td><td>false</td><td>Skips tool approval prompts (forces hitl_level 0). <code>geode --dangerously-skip-permissions</code> also turns it on.</td></tr>
+                <tr><td><code>cost_limit_usd</code></td><td><code>cost.limit_usd</code></td><td>0.0</td><td>Cost cap. 0 means no limit; warns at 80%.</td></tr>
+                <tr><td><code>computer_use_enabled</code></td><td><code>computer_use.enabled</code></td><td>true</td><td>Desktop automation tool.</td></tr>
+                <tr><td><code>computer_use_driver</code></td><td><code>computer_use.driver</code></td><td><code>&quot;auto&quot;</code></td><td><code>auto</code> uses the signed helper when installed, else pyautogui; <code>python</code> uses in-process pyautogui; <code>helper</code> fails without the macOS helper.</td></tr>
+                <tr><td><code>computer_use_helper_path</code></td><td><code>computer_use.helper_path</code></td><td><code>&quot;&quot;</code></td><td>Helper executable path. Empty looks for the helper built by <code>geode setup</code>, then <code>geode-computer-helper</code> on PATH.</td></tr>
+                <tr><td><code>bash_sandbox</code></td><td><code>bash_sandbox.mode</code></td><td><code>&quot;off&quot;</code></td><td>OS sandbox for <code>run_bash</code>: <code>off</code>, <code>on</code> (warns and runs unsandboxed when no sandbox is available), or <code>strict</code> (fails instead).</td></tr>
+                <tr><td><code>package_install_guard</code></td><td><code>tools.package_install_guard</code></td><td>true</td><td>Blocks bash installs of packages that do not exist on PyPI or npm. Only a definite 404 blocks.</td></tr>
               </tbody>
             </table>
+            <p>In a project <code>.geode/config.toml</code>, <code>cost.limit_usd</code>, <code>computer_use.enabled</code>, <code>computer_use.driver</code>, <code>bash_sandbox.mode</code> and <code>tools.package_install_guard</code> apply only in a trusted folder; <code>hitl.dangerously_skip_permissions</code> and <code>computer_use.helper_path</code> are never read from a project (<a href="/geode/docs/config/basics#project-trust">Project trust</a>).</p>
 
             <h3>LLM connection pool</h3>
             <table>
               <thead>
-                <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
+                <tr><th>Field</th><th>toml key</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>llm_max_connections</code></td><td>20</td><td>Connection cap.</td></tr>
-                <tr><td><code>llm_max_keepalive_connections</code></td><td>5</td><td>Keepalive connection cap.</td></tr>
-                <tr><td><code>llm_keepalive_expiry</code></td><td>30.0</td><td>Keepalive expiry seconds.</td></tr>
-                <tr><td><code>llm_connect_timeout</code></td><td>5.0</td><td>Connect timeout.</td></tr>
-                <tr><td><code>llm_read_timeout</code></td><td>300.0</td><td>Read timeout.</td></tr>
-                <tr><td><code>llm_write_timeout</code></td><td>30.0</td><td>Write timeout.</td></tr>
-                <tr><td><code>llm_pool_timeout</code></td><td>10.0</td><td>Pool wait timeout.</td></tr>
-                <tr><td><code>llm_retry_base_delay</code></td><td>2.0</td><td>Retry base delay.</td></tr>
-                <tr><td><code>llm_retry_max_delay</code></td><td>30.0</td><td>Retry max delay.</td></tr>
-                <tr><td><code>llm_max_retries</code></td><td>3</td><td>Total attempts per model, including the initial call; shared by the main loop, auxiliary calls, and scaffold-search mutator.</td></tr>
-                <tr><td><code>llm_max_fallback_cost_ratio</code></td><td>0.0</td><td>Fallback cost-ratio cap. 0 means unlimited.</td></tr>
+                <tr><td><code>llm_max_connections</code></td><td><code>llm.max_connections</code></td><td>20</td><td>Connection cap.</td></tr>
+                <tr><td><code>llm_max_keepalive_connections</code></td><td><code>llm.max_keepalive_connections</code></td><td>5</td><td>Keepalive connection cap.</td></tr>
+                <tr><td><code>llm_keepalive_expiry</code></td><td><code>llm.keepalive_expiry</code></td><td>30.0</td><td>Keepalive expiry seconds.</td></tr>
+                <tr><td><code>llm_connect_timeout</code></td><td><code>llm.connect_timeout</code></td><td>5.0</td><td>Connect timeout.</td></tr>
+                <tr><td><code>llm_read_timeout</code></td><td><code>llm.read_timeout</code></td><td>300.0</td><td>Read timeout.</td></tr>
+                <tr><td><code>llm_write_timeout</code></td><td><code>llm.write_timeout</code></td><td>30.0</td><td>Write timeout.</td></tr>
+                <tr><td><code>llm_pool_timeout</code></td><td><code>llm.pool_timeout</code></td><td>10.0</td><td>Pool wait timeout.</td></tr>
+                <tr><td><code>llm_retry_base_delay</code></td><td><code>llm.retry_base_delay</code></td><td>2.0</td><td>Retry base delay.</td></tr>
+                <tr><td><code>llm_retry_max_delay</code></td><td><code>llm.retry_max_delay</code></td><td>30.0</td><td>Retry max delay.</td></tr>
+                <tr><td><code>llm_max_retries</code></td><td><code>llm.max_retries</code></td><td>3</td><td>Total attempts per model, including the initial call; shared by the main loop, auxiliary calls, and scaffold-search mutator.</td></tr>
+                <tr><td><code>llm_max_fallback_cost_ratio</code></td><td><code>llm.max_fallback_cost_ratio</code></td><td>0.0</td><td>Fallback cost-ratio cap. 0 means unlimited.</td></tr>
               </tbody>
             </table>
 
@@ -620,20 +663,21 @@ export default function Page() {
               The shipped manifest is <code>core/config/routing.toml</code>;
               the user override <code>~/.geode/routing.toml</code> merges over
               it section by section
-              (<code>core/config/routing_manifest.py</code>).
+              (<code>core/config/routing_manifest.py</code>). Current default
+              models and per-provider routing rules are on <a href="/geode/docs/run/providers">Configure providers</a>.
             </p>
             <table>
               <thead>
                 <tr><th>Section</th><th>Keys</th><th>Content</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>[model.defaults]</code></td><td><code>anthropic</code>, <code>anthropic_secondary</code>, <code>anthropic_budget</code>, <code>openai</code>, <code>codex</code>, <code>glm</code></td><td><code>claude-opus-4-8</code> / <code>claude-sonnet-4-6</code> / <code>claude-haiku-4-5-20251001</code> / <code>gpt-5.5</code> / <code>gpt-5.5</code> / <code>glm-5.2</code>. Exported as <code>core.config.ANTHROPIC_PRIMARY</code> and friends.</td></tr>
+                <tr><td><code>[model.defaults]</code></td><td><code>anthropic</code>, <code>anthropic_secondary</code>, <code>anthropic_budget</code>, <code>openai</code>, <code>codex</code>, <code>glm</code></td><td>Default model id per provider. Exported as <code>core.config.ANTHROPIC_PRIMARY</code> and friends.</td></tr>
                 <tr><td><code>[model.fallbacks]</code></td><td>4 per-provider lists</td><td>All empty by default: no silent same-provider fallback chain ships. A primary failure raises and the user picks via <code>/model</code>. Opt in by editing <code>~/.geode/routing.toml</code>.</td></tr>
-                <tr><td><code>[routing.prefixes]</code></td><td><code>claude-</code>, <code>glm-</code>, <code>gpt-</code>, <code>o3-</code>, <code>o3</code>, <code>o4-</code>, <code>o4-mini</code></td><td>Model-id prefix to provider (only anthropic / openai / glm ship built-in adapters). First match wins. A family with no matching prefix (gemini-, deepseek-, llama-, qwen-, …) logs a once-per-model warning and rides the <code>fallback_provider</code> (OpenAI-compatible endpoint) — legitimate for an OpenAI-compatible proxy that serves that id.</td></tr>
+                <tr><td><code>[routing.prefixes]</code></td><td>model-id prefixes</td><td>Model-id prefix to provider. First match wins. A family with no matching prefix (gemini-, deepseek-, llama-, qwen-, …) logs a once-per-model warning and rides the <code>fallback_provider</code> (OpenAI-compatible endpoint) — legitimate for an OpenAI-compatible proxy that serves that id.</td></tr>
                 <tr><td><code>[routing]</code></td><td><code>codex_only_models</code>, <code>codex_suffixes</code>, <code>fallback_provider</code></td><td>The Codex-only model list is currently empty. <code>gpt-5.5</code>/<code>gpt-5.5-pro</code> also follow the selected API-key or subscription source. The <code>-codex</code>/<code>-codex-max</code>/<code>-codex-mini</code> suffixes route to <code>openai-codex</code>; unresolved IDs classify as <code>openai</code>. Model retirement is enforced per actual source, separately from provider classification.</td></tr>
-                <tr><td><code>[nodes]</code></td><td><code>analyst</code>, <code>evaluator</code>, <code>scoring</code>, <code>synthesizer</code></td><td>Pipeline-node models, all pinned to <code>claude-opus-4-8</code>, so nodes never inherit the REPL model. Lookup: project <code>.geode/routing.toml</code>, then the manifest, else <code>settings.model</code>.</td></tr>
-                <tr><td><code>[credentials.patterns]</code></td><td><code>sk-ant-</code>, <code>sk-proj-</code>, <code>sk-</code></td><td>Key shape to provider. GLM keys ({`{id}.{secret}`} shape) are sniffed by <code>core.config.env_io.is_glm_key</code>.</td></tr>
-                <tr><td><code>[credentials.env_vars]</code></td><td>3</td><td>anthropic to <code>ANTHROPIC_API_KEY</code>, openai to <code>OPENAI_API_KEY</code>, glm to <code>ZAI_API_KEY</code>.</td></tr>
+                <tr><td><code>[nodes]</code></td><td><code>analyst</code>, <code>evaluator</code>, <code>scoring</code>, <code>synthesizer</code></td><td>Pipeline-node models. The shipped manifest pins all four to the Anthropic default model, so nodes never inherit the REPL model. Lookup: project <code>.geode/routing.toml</code>, then the manifest, else <code>settings.model</code>.</td></tr>
+                <tr><td><code>[credentials.patterns]</code></td><td>API-key regexes</td><td>Key shape to provider. First match wins. GLM keys ({`{id}.{secret}`} shape) are sniffed by <code>core.config.env_io.is_glm_key</code>.</td></tr>
+                <tr><td><code>[credentials.env_vars]</code></td><td>provider names</td><td>The env var that holds each provider&apos;s API key.</td></tr>
               </tbody>
             </table>
 

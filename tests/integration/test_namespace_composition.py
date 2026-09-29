@@ -46,9 +46,13 @@ def test_evaluation_cli_owns_migration_commands() -> None:
     from core.cli.commands.config import build_config_app
     from evals import cli
 
-    assert {command.name for command in build_config_app().registered_commands} == {"explain"}
+    assert {command.name for command in build_config_app().registered_commands} == {
+        "explain",
+        "trust",
+    }
     assert {command.name for command in cli.config_app.registered_commands} == {
         "explain",
+        "trust",
         "migrate-petri-toml",
     }
 

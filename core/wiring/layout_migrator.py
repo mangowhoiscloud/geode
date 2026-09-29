@@ -58,7 +58,7 @@ log = logging.getLogger(__name__)
 
 #: Current target layout schema version. Bumped each time a path-level
 #: migration is added.
-GEODE_LAYOUT_VERSION = 4
+GEODE_LAYOUT_VERSION = 5
 
 #: TTL in days for v2→v3 archival steps (runs/vault/projects). Override via
 #: ``GEODE_ARCHIVE_TTL_DAYS`` env var. Lowering for tests / aggressive
@@ -255,6 +255,8 @@ def _run_pending_migrations(current_version: int, report: LayoutMigrationReport)
         report.steps.append(_migrate_v2_to_v3())
     if current_version < 4:
         report.steps.append(_migrate_v3_to_v4())
+    if current_version < 5:
+        report.steps.append(_migrate_v4_to_v5())
 
 
 # ---------------------------------------------------------------------------
@@ -292,6 +294,12 @@ def _migrate_v0_to_v1() -> MigrationResult:
         ),
     ]
 
+    _move_legacy_files(moves, result)
+    return result
+
+
+def _move_legacy_files(moves: list[tuple[Path, Path]], result: MigrationResult) -> None:
+    """Move each ``src`` to ``dst``; a present destination leaves ``src`` for review."""
     for src, dst in moves:
         if not src.exists():
             result.skipped.append(f"{src.name}: source absent")
@@ -305,11 +313,9 @@ def _migrate_v0_to_v1() -> MigrationResult:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dst))
             result.moved.append((str(src), str(dst)))
-            log.info("Layout v0→v1: moved %s → %s", src, dst)
+            log.info("Layout %s: moved %s → %s", result.name, src, dst)
         except OSError as exc:
             result.warnings.append(f"{src.name}: move failed: {exc}")
-
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -663,4 +669,27 @@ def _migrate_v3_to_v4() -> MigrationResult:
             f"skipped_corrupt={skipped_corrupt}"
         )
 
+    return result
+
+
+# ---------------------------------------------------------------------------
+# v4 → v5: one home for the career profile
+# ---------------------------------------------------------------------------
+
+
+def _migrate_v4_to_v5() -> MigrationResult:
+    """v5 — fold ``~/.geode/identity/career.toml`` into ``user_profile/``.
+
+    ``geode init`` wrote its career template to ``identity/`` while
+    ``FileBasedUserProfile.load_career`` only reads ``user_profile/career.toml``,
+    so edits made in ``identity/`` never reached the agent. The empty
+    ``identity/`` directory is removed after the move.
+    """
+    result = MigrationResult(name="v4→v5: identity/ → user_profile/")
+    identity_dir = GEODE_HOME / "identity"
+    _move_legacy_files(
+        [(identity_dir / "career.toml", GEODE_HOME / "user_profile" / "career.toml")], result
+    )
+    with contextlib.suppress(OSError):
+        identity_dir.rmdir()  # only when empty; anything else stays for review
     return result

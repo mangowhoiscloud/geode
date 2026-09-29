@@ -341,7 +341,6 @@ PETRI_LOGS_DIR = GEODE_HOME / "petri" / "logs"
 LATEST_PETRI_EVAL = PETRI_LOGS_DIR / "latest.eval"
 
 # User identity & profile
-GLOBAL_IDENTITY_DIR = GEODE_HOME / "identity"
 GLOBAL_USER_PROFILE_DIR = GEODE_HOME / "user_profile"
 # P3 (v0.95.x) — user preferences TOML inside user_profile/.
 # Read by `core/tools/policy.py` to seed ProfilePolicy at boot.
@@ -375,12 +374,12 @@ GLOBAL_AUDIT_AGREEMENT_DIR = GEODE_HOME / "audit" / "agreement"
 # autoresearch/seed-generation run) + ``<session_id>/events.jsonl``
 # (P1c, event stream within a single run). See
 # ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
-# LEGACY home dir ``~/.geode/autoresearch/handoff/`` — the pre-split policy
-# location, kept ONLY as the lazy-migration source (see ``LEGACY_SOT_DIR``
-# below). Post PR-STATE-SOT-RUNTIME-SPLIT the live runtime handoff is
-# ``AUTORESEARCH_HANDOFF_DIR`` (``RUNTIME_ROOT/handoff``) and the tracked
-# policies live in-repo under ``AUTORESEARCH_POLICIES_DIR``; this constant is
-# neither — it is the rollback breadcrumb the operator may still hold.
+# ``~/.geode/autoresearch/handoff/`` — despite the historical name, a live
+# operator-local tier: per-machine policy overrides (``OPERATOR_LOCAL_*``
+# below), the scaffold-search ledger, auto-trigger state and run timelines.
+# It is also the lazy-migration source (``LEGACY_SOT_DIR``). The runtime
+# handoff is ``AUTORESEARCH_HANDOFF_DIR`` (``RUNTIME_ROOT/handoff``) and the
+# tracked policies live in-repo under ``AUTORESEARCH_POLICIES_DIR``.
 GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # PR-RATCHET-1 (2026-05-21) — the 5 mutation-target files now live in
 # the in-repo ``evolve/scaffold_search/state/policies/`` directory rather than
@@ -603,6 +602,10 @@ MCP_REGISTRY_CACHE = GEODE_HOME / "mcp" / "registry-cache.json"
 # The writer is retired; this path remains so migration and cleanup tooling can
 # preserve the legacy operator archive without silently deleting user data.
 APPROVE_HISTORY = GEODE_HOME / "approval_history.jsonl"
+# REPL input recall (prompt_toolkit FileHistory), 0600 and secret-redacted.
+PROMPT_HISTORY_FILE = GEODE_HOME / "prompt_history"
+# Pre-1.0.31 location outside GEODE_HOME; core.cli.prompt_session adopts it once.
+LEGACY_PROMPT_HISTORY_FILE = Path.home() / ".geode_history"
 
 # ---------------------------------------------------------------------------
 # Project-level — {workspace}/.geode/
@@ -685,7 +688,7 @@ def get_project_data_dir(workspace_path: str | Path | None = None) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Project-scoped user directories (session, journal, snapshots)
+# Project-scoped user directories (session, journal)
 # ---------------------------------------------------------------------------
 
 
@@ -697,11 +700,6 @@ def get_project_journal_dir(workspace_path: str | Path | None = None) -> Path:
 def get_project_sessions_dir(workspace_path: str | Path | None = None) -> Path:
     """Sessions directory: ``~/.geode/projects/{id}/sessions/``."""
     return get_project_data_dir(workspace_path) / "sessions"
-
-
-def get_project_snapshots_dir(workspace_path: str | Path | None = None) -> Path:
-    """Snapshots directory: ``~/.geode/projects/{id}/snapshots/``."""
-    return get_project_data_dir(workspace_path) / "snapshots"
 
 
 def resolve_pending_asks_dir(workspace_path: str | Path | None = None) -> Path:
@@ -720,10 +718,8 @@ def resolve_pending_asks_dir(workspace_path: str | Path | None = None) -> Path:
 # Old paths (pre-v0.31) stored these under {workspace}/.geode/
 _OLD_JOURNAL_DIR = PROJECT_GEODE_DIR / "journal"
 _OLD_SESSION_DIR = PROJECT_GEODE_DIR / "session"
-_OLD_SNAPSHOT_DIR = PROJECT_GEODE_DIR / "snapshots"
 _OLD_RESULT_CACHE_DIR = PROJECT_GEODE_DIR / "result_cache"
 _OLD_VAULT_DIR = PROJECT_GEODE_DIR / "vault"
-_OLD_MODELS_DIR = PROJECT_GEODE_DIR / "models"
 
 
 def resolve_journal_dir(workspace_path: str | Path | None = None) -> Path:
@@ -794,7 +790,6 @@ def ensure_directories() -> None:
         GLOBAL_SCHEDULER_DIR,
         GLOBAL_GOOGLE_DIR,
         GLOBAL_PROJECTS_DIR,
-        GLOBAL_IDENTITY_DIR,
         GLOBAL_USER_PROFILE_DIR,
     ]
     for d in global_dirs:
@@ -808,7 +803,6 @@ def ensure_directories() -> None:
         project_data,
         project_data / "journal",
         project_data / "sessions",
-        project_data / "snapshots",
         project_data / "result_cache",
     ]
     for d in project_user_dirs:

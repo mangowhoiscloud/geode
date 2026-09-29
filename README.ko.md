@@ -13,7 +13,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.30 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.31 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE는 리서치, 파일 작업, 예약 작업을 위한 Python 에이전트 런타임입니다.
 에이전트는 도구를 호출하고 결과를 읽으며 작업을 이어갑니다.
@@ -79,7 +79,7 @@ GEODE가 관리하는 제공자 키와 OAuth 계정은 `~/.geode/auth.toml`에 �
 
 ### Jev 판정 선택
 
-v1.0.30은 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
+GEODE는 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
 사용할 자격 증명을 설정한 뒤 판정 경로를 명시적으로 선택합니다.
 
 ```text
@@ -100,13 +100,19 @@ v1.0.30은 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
 
 | 위치 | 역할 |
 |---|---|
-| `~/.geode/auth.toml` | GEODE가 관리하는 제공자 자격 증명과 계정 정보 |
+| `~/.geode/auth.toml` | `geode setup`과 `/login`이 저장하는 제공자 자격 증명과 계정 정보(0600) |
 | `~/.geode/.env` | 선택적으로 사용하는 환경변수 자격 증명과 연동 시크릿 |
-| `~/.geode/config.toml` | 사용자 공통 동작 기본값 |
-| `./.geode/config.toml` | 프로젝트별 동작 설정 |
+| `~/.geode/config.toml` | 사용자 공통 동작 기본값과 `geode config trust`로 신뢰한 폴더 |
+| `~/.geode/extension-policy.json` | 번들되지 않은 MCP 서버·훅·스킬·어댑터의 실행 승인 |
+| `./.geode/config.toml` | 프로젝트별 동작 설정. git에서 제외되며, 권한을 넓히는 키는 신뢰한 폴더에서만 적용 |
+| `./.env` | 프로젝트 환경변수. 신뢰한 폴더에서만 읽고, 전역 파일에 없는 키만 채움 |
 | `~/.geode/` | 런타임 상태, 세션, 진단 기록, 비공개 산출물 |
 
-프로젝트 동작 설정은 사용자 기본값보다 우선합니다. 자격 증명은 선택한
+프로젝트 동작 설정은 사용자 기본값보다 우선합니다. 저장소에 들어 있는 `.env`,
+MCP 서버, 게이트웨이 설정, 권한을 넓히는 키(샌드박스, computer use, 웹훅,
+저장 경로)는 그 폴더에서 `geode config trust`를 실행한 뒤에만 적용됩니다.
+전체 우선순위는 [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics/)에
+있습니다. 자격 증명은 선택한
 모델·소스·계정에 따라서도 결정되므로 모든 설정을 하나의 우선순위 목록으로
 설명할 수는 없습니다. Google Workspace OAuth는 별도의
 [계정·키링 저장소](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace/)를
@@ -152,6 +158,8 @@ Gateway 세션의 원격 컴퓨터 사용은 명시적으로 허용하기 전까
 [Gateway 설정](docs/setup.md#slack-gateway)을 참고하세요.
 
 **MCP 클라이언트.** GEODE의 MCP 설정으로 외부 도구 서버를 연결합니다.
+번들되지 않은 서버는 `~/.geode/extension-policy.json`에서 승인해야 로드되고,
+프로젝트에 정의한 서버는 신뢰한 폴더에서만 로드됩니다.
 [MCP 가이드](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp/)를
 참고하세요.
 

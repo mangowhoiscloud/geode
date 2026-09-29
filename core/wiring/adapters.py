@@ -160,6 +160,7 @@ def _load_gateway_config(*, strict: bool = False) -> tuple[dict[str, Any], list[
     """
     import tomllib
 
+    from core.config.project_trust import project_files_allowed
     from core.config.toml_edit import resolve_config_toml_path
     from core.paths import PROJECT_CONFIG_TOML
 
@@ -170,9 +171,12 @@ def _load_gateway_config(*, strict: bool = False) -> tuple[dict[str, Any], list[
     # first-match routing).
     merged_rules: dict[tuple[str, str], dict[str, Any]] = {}
     sources: list[str] = []
-    for label, path in (("global", resolve_config_toml_path()), ("project", PROJECT_CONFIG_TOML)):
+    global_path = resolve_config_toml_path()
+    for label, path in (("global", global_path), ("project", PROJECT_CONFIG_TOML)):
         if not path.exists():
             continue
+        if label == "project" and global_path.exists() and path.resolve() == global_path.resolve():
+            continue  # run from $HOME: the "project" file is the global one
         try:
             with open(path, "rb") as fh:
                 raw = tomllib.load(fh)
@@ -187,6 +191,9 @@ def _load_gateway_config(*, strict: bool = False) -> tuple[dict[str, Any], list[
         if not isinstance(gw, dict):
             if strict and "gateway" in raw:
                 raise ValueError("gateway must be a table")
+            continue
+        # Project channels, bindings and computer-use access need a trusted folder.
+        if label == "project" and not project_files_allowed("gateway config"):
             continue
         sources.append(f"{label}:{path}")
         for key, value in gw.items():

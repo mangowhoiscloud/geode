@@ -12,6 +12,7 @@ from typing import Any
 
 from dotenv import dotenv_values
 
+from core.config.project_trust import project_files_allowed
 from core.config.toml_edit import resolve_config_toml_path
 from core.paths import GLOBAL_ENV_FILE, get_project_root
 
@@ -41,15 +42,29 @@ class MCPConfigCatalog:
         self.servers = {}
         self.origins = {}
         self.collisions = []
-        for config_toml in (
-            resolve_config_toml_path(),
-            self._project_root() / ".geode" / "config.toml",
-        ):
+        root = self._project_root()
+        global_toml = resolve_config_toml_path()
+        project_toml = root / ".geode" / "config.toml"
+        for is_project, config_toml in ((False, global_toml), (True, project_toml)):
             if not config_toml.exists():
                 continue
+            if (
+                is_project
+                and global_toml.exists()
+                and config_toml.resolve() == global_toml.resolve()
+            ):
+                continue  # run from $HOME: the "project" file is the global one
             try:
                 with config_toml.open("rb") as file:
                     mcp_section = tomllib.load(file).get("mcp", {}).get("servers", {})
+                # A project server can replace a granted server's command under
+                # the same name (grants are keyed by name), so it needs trust.
+                if (
+                    is_project
+                    and mcp_section
+                    and not project_files_allowed("MCP servers", root=root)
+                ):
+                    continue
                 for name, config in mcp_section.items():
                     entry: dict[str, Any] = dict(config)
                     if previous := self.origins.get(name):
@@ -73,7 +88,10 @@ class MCPConfigCatalog:
             except Exception as exc:
                 log.debug("Failed to load MCP from %s: %s", config_toml, exc)
 
-        if self.config_path.exists():
+        if self.config_path.exists() and (
+            not self.config_path.resolve().is_relative_to(root.resolve())
+            or project_files_allowed("MCP servers", root=root)
+        ):
             try:
                 file_servers: dict[str, dict[str, Any]] = json.loads(
                     self.config_path.read_text(encoding="utf-8")
@@ -137,30 +155,45 @@ class MCPConfigCatalog:
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
     ) -> bool:
+        from core.memory.atomic_write import atomic_write_text
+
         entry: dict[str, Any] = {"command": command}
         if args:
             entry["args"] = args
         if env:
             entry["env"] = env
-        self.servers[name] = entry
-        self.origins[name] = str(self.config_path)
+        # Edit the file's own entries. The merged view also holds config.toml
+        # servers (and their env), which must not be copied into this file, and
+        # misses the file's entries whenever the folder is untrusted.
         try:
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            self.config_path.write_text(
-                json.dumps(self.servers, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
+            on_disk = (
+                json.loads(self.config_path.read_text(encoding="utf-8"))
+                if self.config_path.exists()
+                else {}
             )
-            log.info("Added MCP server '%s' and saved config", name)
-            return True
-        except OSError as exc:
+            if not isinstance(on_disk, dict):
+                raise ValueError("top level is not an object")
+            on_disk[name] = entry
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(
+                self.config_path, json.dumps(on_disk, indent=2, ensure_ascii=False) + "\n"
+            )
+        except (OSError, ValueError) as exc:
             log.error("Failed to save MCP config after adding '%s': %s", name, exc)
             return False
+        self.servers[name] = entry
+        self.origins[name] = str(self.config_path)
+        log.info("Added MCP server '%s' and saved config", name)
+        return True
 
     def _load_dotenv_cache(self) -> None:
         if self.dotenv_cache:
             return
-        for path in (self._project_root() / ".env", self._global_env_path()):
+        root = self._project_root()
+        for path in (root / ".env", self._global_env_path()):
             if not path.exists():
+                continue
+            if path != self._global_env_path() and not project_files_allowed(".env", root=root):
                 continue
             for key, value in dotenv_values(str(path)).items():
                 if value:

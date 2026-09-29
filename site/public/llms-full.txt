@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.30. Last sync 2026-09-28. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.31. Last sync 2026-09-28. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -379,11 +379,11 @@ uv tool install -e . --force
 
 ## 2\. 설정 마법사
 
-`geode setup`이 자격을 잡아줍니다. ChatGPT 구독 OAuth(`~/.codex/auth.json`)가 있으면 API 키를 묻기 전에 먼저 감지합니다. 시크릿은 `~/.geode/.env`에, 모델 선택 같은 동작 설정은 `~/.geode/config.toml`에 저장됩니다. .env에 모델을 적는 방식은 더 이상 쓰지 않습니다.
+`geode setup`이 자격을 잡아줍니다. ChatGPT 구독 OAuth(`~/.codex/auth.json`)가 있으면 API 키를 묻기 전에 먼저 감지합니다. 입력한 키는 `~/.geode/auth.toml`에 저장됩니다([인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md)). 모델 선택 같은 설정이 어느 파일에 저장되는지는 [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)에 있습니다.
 
 ```
 geode setup        # 처음 설정
-geode setup -r     # 처음부터 다시
+geode setup -r     # ~/.geode/.env 삭제 후 마법사 재실행
 ```
 
 ## 3\. 첫 대화
@@ -410,7 +410,7 @@ geode
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | 모델을 바꿨는데 그대로 | 상위 레이어가 가리는 중 | `geode config explain model`로 어느 레이어가 이기는지 확인합니다. `geode about`이 실효값입니다. |
-| 외부 채널 메시지가 들어오지 않음 | gateway 비활성 | 로컬 대화는 그대로 동작합니다. 외부 채널도 쓰려면 `GEODE_GATEWAY_ENABLED=true`를 설정합니다. |
+| 외부 채널 메시지가 들어오지 않음 | gateway 비활성 | 로컬 대화는 그대로 동작합니다. 외부 채널도 쓰려면 [게이트웨이를 켭니다](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md#start-stop). |
 | 응답이 비거나 끊김 | 자격 만료 또는 무효 | `geode doctor`로 키와 OAuth 상태를 점검하고 `/login`으로 갱신합니다. |
 | 배너 모델과 실제 응답 모델이 다름 | 오래된 데몬이 살아 있음 | `pkill -f "geode serve"` 후 다시 `geode`를 실행합니다. |
 
@@ -422,7 +422,7 @@ geode
 2.  `geode about`. 실제로 어떤 모델과 경로가 잡혀 있는지 확인합니다.
 3.  `geode config explain model`. 설정이 어디서 가려지는지 봅니다.
 4.  `pkill -f "geode serve"` 후 재진입. 데몬을 새로 띄웁니다.
-5.  `geode setup -r`. 그래도 안 되면 설정을 처음부터 다시 합니다.
+5.  `geode setup -r`. `~/.geode/.env`와 dry-run 마커만 지우고 마법사를 다시 실행합니다. `auth.toml`의 키는 남고, `.env`에 둔 연동 토큰은 사라집니다.
 
 ## 업데이트와 삭제
 
@@ -466,11 +466,11 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 
 | 경로 | 자격 | 등록 방법 | 적합한 상황 |
 | --- | --- | --- | --- |
-| 1\. ChatGPT 구독 OAuth | ChatGPT 구독 OAuth | `/login openai`로 device-code 로그인. 기존 `~/.codex/auth.json` 자격도 가져올 수 있습니다. | 이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. `gpt-5.5`는 이 경로로만 라우팅됩니다. |
-| 2\. PAYG API 키 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY` | `~/.geode/.env`에 키만 적습니다. `geode setup` 또는 `/login add`로 기록할 수도 있습니다. | 토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다. |
-| 3\. 저비용 GLM 경로 | `ZAI_API_KEY` (GLM) | 같은 방식으로 `~/.geode/.env`에 등록합니다. | 거의 무료로 먼저 체험할 때. `glm-4.7-flash`는 한시 무료 티어입니다. |
+| 1\. ChatGPT 구독 OAuth | ChatGPT 구독 OAuth | `/login openai`로 device-code 로그인. 기존 `~/.codex/auth.json` 자격도 가져올 수 있습니다. | 이미 ChatGPT를 결제 중이고 API 키를 따로 만들기 싫을 때. |
+| 2\. PAYG API 키 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY` | `geode setup` 또는 `/login add`로 등록하면 `~/.geode/auth.toml`에 저장됩니다. 환경 변수나 `~/.geode/.env`에 둔 키도 읽습니다. | 토큰 단위로 비용을 직접 통제하고 싶을 때. 팀 계정과 CI에도 맞습니다. |
+| 3\. 저비용 GLM 경로 | `ZAI_API_KEY` (GLM) | 2번과 같은 방식으로 등록합니다. | 거의 무료로 먼저 체험할 때. `glm-4.7-flash`는 한시 무료 티어입니다. |
 
-`~/.geode/.env`는 시크릿 전용 파일입니다. 모델 선택 같은 동작 설정은 `~/.geode/config.toml`에 저장되며, .env에 모델을 적는 방식은 더 이상 쓰지 않습니다.
+모델은 키와 별개로 고릅니다. `/model`은 프로젝트 `.geode/config.toml`에, `/model global <model>`은 `~/.geode/config.toml`에 저장합니다([설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)).
 
 ## 가장 빠른 길 찾기
 
@@ -479,7 +479,7 @@ GEODE를 돌리려면 프로바이더 자격이 하나 필요합니다. 이 페�
 | 이미 ChatGPT Plus를 결제 중입니다 | `geode setup`. `~/.codex/auth.json`이 있으면 API 키를 묻기 전에 먼저 잡습니다. |
 | API 키로 비용을 직접 통제하고 싶습니다 | `~/.geode/.env`에 키를 넣고 [비용 모니터링](https://mangowhoiscloud.github.io/geode/docs/ops/cost.md)으로 예산을 겁니다. |
 | 거의 무료로 먼저 체험하고 싶습니다 | GLM 키(`ZAI_API_KEY`)를 등록하고 `/model`에서 `glm-4.7-flash`를 고릅니다. |
-| 특정 프로바이더를 키 인증으로 강제하고 싶습니다 | `/login source <provider> api_key`. 선택은 `config.toml`에만 저장됩니다. |
+| 특정 프로바이더를 키 인증으로 강제하고 싶습니다 | `/login source <provider> api_key`. 선택은 프로젝트 `.geode/config.toml`에 저장됩니다. |
 | 지금 뭐가 잡혀 있는지 확인하고 싶습니다 | `geode about`. 실효 모델, 프로바이더, 자격 프로파일 수를 한 화면에 보여줍니다. |
 
 ## 자격 소스 값
@@ -539,7 +539,7 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter, GLM 
 | --- | --- | --- | --- |
 | Anthropic | `claude-opus-5-5` (보조 `claude-sonnet-5`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
 | OpenAI / Codex | `gpt-6-sol` | `gpt-`, `o3-`, `o4-` 접두사. `-codex` 접미사는 기존 provider 별칭으로 해석하며, 실제 API 키 또는 구독 경로는 선택한 자격 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다. | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
-| OpenRouter | `openrouter/openrouter/free`, `openrouter/openrouter/auto` 또는 정확한 catalogue id | `openrouter/<publisher>/<model>`. 외부 namespace 하나를 제거해 OpenRouter에 전달 | `OPENROUTER_API_KEY`. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다. |
+| OpenRouter | `routing.toml` 기본값 없음. `openrouter/openrouter/free`, `openrouter/openrouter/auto` 또는 정확한 catalogue id를 직접 고릅니다. | `openrouter/<publisher>/<model>`. 외부 namespace 하나를 제거해 OpenRouter에 전달 | `OPENROUTER_API_KEY`. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다. |
 | GLM (ZhipuAI) | `glm-5.3` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. PAYG API 경로입니다. 현재 Coding Plan 정책에서 GEODE 사용 자격은 확인되지 않아 구독 실행을 차단합니다. |
 
 (프로바이더, 자격 소스) 조합마다 어댑터가 하나씩 등록됩니다 (`core/llm/adapters/`). `geode adapters list`로 현재 등록 상태, API transport, billing, 자격 환경을 확인할 수 있습니다.
@@ -556,19 +556,15 @@ Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이
 
 ## 키와 설정이 사는 곳
 
-역할이 파일별로 분리되어 있습니다. 키와 프로필은 로컬 비밀 파일, 동작은 config.toml에 둡니다.
+모델, effort, 로그인 소스 선택이 어느 `config.toml`에 저장되는지는 [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)에 있습니다.
 
 | 파일 | 역할 |
 | --- | --- |
-| `~/.geode/.env` | 시크릿 전용 평문 파일(`0600`). `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `ZAI_API_KEY`. 전역 파일이 권위를 가지며 프로젝트 `.env`는 빠진 값만 채웁니다. |
-| `~/.geode/auth.toml` | Plan/Profile 메타데이터와 GEODE가 관리하는 자격증명 평문 파일(`0600`). 외부 CLI가 관리하는 자격증명은 복제하지 않습니다. |
-| `~/.geode/config.toml` | 전역 동작 설정. 모델 선택, effort, 로그인 소스가 여기 저장됩니다. |
-| `.geode/config.toml` | 프로젝트별 덮어쓰기. `/model`의 기본 저장 위치입니다. |
+| `~/.geode/.env` | 선택 사항인 시크릿 전용 평문 파일(`0600`). 키를 환경 변수로 둘 때 씁니다: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `ZAI_API_KEY`. 전역 파일이 권위를 가지며, 프로젝트 `.env`는 빠진 값만 채우고 [신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)에서만 읽습니다. |
+| `~/.geode/auth.toml` | Plan/Profile 메타데이터와 GEODE가 관리하는 자격증명 평문 파일(`0600`). `geode setup`, `/login add`, `/key`로 등록한 API 키가 여기 저장됩니다. 외부 CLI가 관리하는 자격증명은 복제하지 않습니다. [인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md) 참고. |
 | `~/.geode/routing.toml` | 라우팅 매니페스트 덮어쓰기. 폴백 체인 옵트인도 여기서 합니다. |
 
 이 두 비밀 파일은 Git에서 제외되고 읽기·쓰기 때 소유자 전용 권한을 강제하지만 OS Keychain은 아닙니다. 같은 사용자 권한으로 실행되는 프로세스까지 격리하지는 못하므로 공유·비신뢰 호스트에서는 환경 주입 또는 전용 secret manager를 사용합니다. Google Workspace OAuth의 OS keyring 저장소는 이 LLM API-key 경로와 별개입니다.
-
-모델, effort, 로그인 소스를 .env에 적는 방식은 폐기되었습니다. 예전 버전이 남긴 .env의 모델 줄은 `/model`이 toml에 쓰면서 자동으로 지우고 "removed stale ... from .env" 안내를 출력합니다.
 
 ## 실행 중 세션과 새 세션의 기본값
 
@@ -578,19 +574,7 @@ Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이
 
 ## 모델 결정 순서
 
-위가 아래를 가립니다. 첫 번째로 값이 설정된 레이어가 이깁니다.
-
-```
-1. CLI 인자
-2. env 레이어 (os.environ + project .env + global .env)
-3. 프로젝트 .geode/config.toml
-4. 전역 ~/.geode/config.toml
-5. 라우팅 기본값 (core/config/routing.toml)
-```
-
-![Model resolution ladder: CLI argument, env layer, project config.toml, global config.toml, then the routing default; the first layer with a value wins](https://mangowhoiscloud.github.io/geode/diagrams/model-resolution.svg)
-
-값이 설정된 첫 레이어가 이깁니다. 어느 레이어가 이겼는지는 geode config explain model이 보여줍니다.
+모델도 다른 설정과 같은 레이어 순서로 결정됩니다. 순서와 [신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)에서만 적용되는 프로젝트 파일은 [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)에 있습니다.
 
 데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로 (`BEHAVIOR_ENV_KEYS`, `core/config/env_io.py`), 새 세션은 유효한 설정에서 시작합니다. 기존 세션은 승인된 선택을 유지합니다. 셸에서 직접 export한`GEODE_MODEL`은 그 세션 한정의 파워유저 오버라이드입니다.
 
@@ -657,12 +641,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/serve.md
 
 ## CLI IPC는 기본, 외부 gateway는 선택
 
-`geode serve`는 `gateway_enabled`가 꺼져도 로컬 CLI IPC와 스케줄러를 시작합니다. Slack, Discord, Telegram, webhook도 쓰려면 `~/.geode/.env`에 한 줄을 추가합니다.
-
-```
-# ~/.geode/.env
-GEODE_GATEWAY_ENABLED=true
-```
+`geode serve`는 `gateway_enabled`가 꺼져도 로컬 CLI IPC와 스케줄러를 시작합니다. Slack, Discord, Telegram, webhook도 쓰려면 [Serve와 게이트웨이](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md#start-stop)에 적힌 대로 게이트웨이를 켭니다.
 
 ```
 geode serve              # 포그라운드 실행
@@ -686,7 +665,7 @@ SIGTERM을 받으면 데몬은 단계적으로 내려갑니다. 새 요청 수�
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 외부 채널 메시지가 들어오지 않음 | gateway 비활성 | 로컬 CLI는 그대로 동작합니다. 외부 채널도 쓰려면 `GEODE_GATEWAY_ENABLED=true`를 설정합니다. |
+| 외부 채널 메시지가 들어오지 않음 | gateway 비활성 | 로컬 CLI는 그대로 동작합니다. 외부 채널도 쓰려면 [게이트웨이를 켭니다](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md#start-stop). |
 | 배너 모델과 응답 모델이 다름 | 업데이트 전의 오래된 데몬이 살아 있음 | `pkill -f "geode serve"`로 전부 내리고 `geode`를 다시 실행합니다. |
 | 동작이 들쭉날쭉, 소켓 충돌 | 데몬 여러 개가 `~/.geode/cli.sock`을 두고 경합 | `pgrep -f "geode serve"`로 개수를 확인하고 전부 종료 후 하나만 띄웁니다. |
 | /model을 바꿔도 데몬이 옛 모델 유지 | 데몬 환경에 모델 env가 박제됨 (구버전 잔재) | 데몬은 시작 시 모델 계열 env 키를 버리는 것이 기본입니다. 데몬을 재시작하고, 그래도 안 되면 `geode config explain model`을 봅니다. |
@@ -1795,7 +1774,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/skills.md
 | 계층 | 위치 | 성격 |
 | --- | --- | --- |
 | builtin | `<package>/.geode/skills/` (wheel과 함께 배포) | 코드와 같이 버전 관리 |
-| project | `.geode/skills/` | 팀 공유, git에 커밋 |
+| project | `.geode/skills/` | 프로젝트 로컬. `.geode/`는 기본으로 gitignore됨 |
 | personal | `~/.geode/skills/` | 개인 로컬 전용 |
 
 로더(`core/skills/skills.py`)는 번들 → 개인 → 프로젝트 순서로 디렉터리를 걷고, 같은 이름이 충돌하면 나중 스코프가 이깁니다. 프로젝트 스킬이 최우선입니다. GEODE 개발 중 Claude Code와 Codex가 쓰는 scaffold 스킬은 이 런타임 레지스트리와 별개입니다. 저장소는 `.agents/skills/`를 단일 정본으로 공개하고, `.claude/skills/`는 같은 바이트를 가리키는 상대 symlink만 둡니다.
@@ -2968,11 +2947,15 @@ receiver는 플랫폼 payload 전체를 넘기지 않고 필요한 필드만 `ge
 
 ## 시작과 종료
 
-`geode serve`는 `gateway_enabled`가 꺼져도 CLI IPC와 스케줄러를 시작합니다. 외부 채널도 운영하려면`~/.geode/.env`에 `GEODE_GATEWAY_ENABLED=true`를 추가합니다. 대화만 한다면 bare `geode`가 데몬을 자동으로 시작합니다.
+`geode serve`는 `gateway_enabled`가 꺼져도 CLI IPC와 스케줄러를 시작합니다. 외부 채널도 운영하려면 아래처럼 `~/.geode/config.toml`에서 게이트웨이를 켭니다. `GEODE_GATEWAY_ENABLED=true` export는 그 셸에서 띄운 serve에만 적용되는 세션 override입니다. 대화만 한다면 bare `geode`가 데몬을 자동으로 시작합니다.
 
 ```
-# 게이트웨이 켜기
-echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
+# ~/.geode/config.toml
+[gateway]
+enabled = true
+```
+
+```
 geode serve            # 포그라운드, --poll은 poll 기반 receiver 주기
 
 # 살아 있는지 확인
@@ -2987,19 +2970,7 @@ geode serve &
 
 ## binding 설정
 
-어느 채널이 GEODE를 깨울 수 있는지는 binding 규칙이 결정합니다. 규칙 작성법은 [바인딩 설정 가이드](https://mangowhoiscloud.github.io/geode/docs/guides/binding.md)에서 다루고, 형식만 요약하면 이렇습니다.
-
-```
-# .geode/config.toml
-[gateway]
-pollers = ["slack"]          # 띄울 receiver 등록명
-time_budget_s = 120          # 메시지당 wall-clock 기본값
-
-[[gateway.bindings.rules]]
-channel = "slack"
-channel_id = "C0ABCDEF1"     # 필수. 비어 있으면 규칙이 건너뜀
-require_mention = true
-```
+어느 채널이 GEODE를 깨울 수 있는지는 binding 규칙이 결정합니다. 규칙 형식과 작성법은 [바인딩 설정 가이드](https://mangowhoiscloud.github.io/geode/docs/guides/binding.md)에 있습니다. 프로젝트 `.geode/config.toml`의 `[gateway]` 표는 [신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)에서만 읽습니다.
 
 ## 실환경 검증
 
@@ -3009,12 +2980,12 @@ require_mention = true
 
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
-| 외부 채널 메시지가 들어오지 않음 | `gateway_enabled` 꺼짐 | CLI IPC는 계속 동작합니다. 외부 채널도 쓰려면 `GEODE_GATEWAY_ENABLED=true`를 설정합니다. |
+| 외부 채널 메시지가 들어오지 않음 | `gateway_enabled` 꺼짐 | CLI IPC는 계속 동작합니다. 외부 채널도 쓰려면 `~/.geode/config.toml`에 `[gateway] enabled = true`를 설정하고 serve를 재시작합니다. |
 | 메시지에 반응이 없음 | binding 불일치, 앱 토큰 누락, 또는 채널 멤버십 없음 | `geode doctor slack`으로 점검하고, 출력된 링크의 채널에서 `/invite @geode`를 실행합니다. |
 | 배너 모델과 응답 모델이 다름 | 데몬이 둘 이상 떠서 소켓을 두고 경합 | `pkill -f "geode serve"`로 전부 내린 뒤 하나만 다시 띄웁니다. `ps aux | grep`은 경로가 잘려 빈 결과가 나오므로 `pgrep -f`를 씁니다. |
 | 같은 채널 요청이 밀림 | 같은 세션 키는 의도적으로 직렬화 | 정상 동작입니다. 다른 스레드나 채널로 보내면 병렬로 처리됩니다. |
 
-Receivers do not forward whole platform payloads. They select the required fields into a `geode.gateway.v1` `InboundMessage`. Content is capped at 64 KiB, JSON metadata at 32 KiB, and the platform message ID remains the correlation ID through response processing. Unknown upstream fields are ignored at this projection boundary.
+receiver는 플랫폼 payload 전체를 넘기지 않고 필요한 필드만 골라 `geode.gateway.v1` `InboundMessage`로 만듭니다. 본문은 64 KiB, JSON 메타데이터는 32 KiB로 제한되고, 플랫폼 메시지 ID는 응답 처리가 끝날 때까지 상관 ID로 유지됩니다. 이 경계에서 알 수 없는 상위 필드는 무시합니다.
 
 데몬 로그는 `~/.geode/logs/serve.log`에 10MB 단위 5개 파일로 로테이션됩니다 (`core/observability/logging_config.py`).
 
@@ -3051,18 +3022,8 @@ Slack 앱에서 Socket Mode를 켜고, `connections:write` 범위의 app-level t
 # 1) 두 토큰을 시크릿 레이어에 저장
 echo 'SLACK_BOT_TOKEN=xoxb-...' >> ~/.geode/.env
 echo 'SLACK_APP_TOKEN=xapp-...' >> ~/.geode/.env
-echo 'GEODE_GATEWAY_ENABLED=true' >> ~/.geode/.env
 
-# 2) binding 규칙 선언 (.geode/config.toml)
-#    channel_id가 없는 규칙은 안전상 건너뜁니다
-[gateway]
-pollers = ["slack"]
-allow_computer_use = false
-
-[[gateway.bindings.rules]]
-channel = "slack"
-channel_id = "C0ABCDEF1"
-require_mention = true
+# 2) 게이트웨이를 켜고 이 채널의 binding 규칙 선언 (아래 문서 참고)
 
 # 3) Slack 채널에서 /invite @geode 후 데몬 재시작
 pkill -f "geode serve"
@@ -3072,7 +3033,7 @@ geode serve &
 geode doctor slack
 ```
 
-binding 필드 각각의 의미와 검증 방법은 [바인딩 설정 가이드](https://mangowhoiscloud.github.io/geode/docs/guides/binding.md)에 있습니다. `geode doctor slack`은 앱 토큰, 봇 scope, 각 binding의 채널 멤버십과 클릭 가능한 채널 링크까지 검사합니다.
+게이트웨이 켜기는 [Serve와 게이트웨이](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md#start-stop)에, binding 규칙의 형식, 필드 의미, 검증 방법은 [바인딩 설정 가이드](https://mangowhoiscloud.github.io/geode/docs/guides/binding.md)에 있습니다. 프로젝트 `.geode/config.toml`의 `[gateway]` 표는 [신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)에서만 읽습니다. `geode doctor slack`은 앱 토큰, 봇 scope, 각 binding의 채널 멤버십과 클릭 가능한 채널 링크까지 검사합니다.
 
 ## 메시지가 실행되는 방식
 
@@ -3598,10 +3559,12 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md
 2. geode about                # EFFECTIVE 모델, 경로, 소켓, 마스킹 경고
 3. geode config explain model # 레이어별 후보와 WINNER
 4. pkill -f "geode serve"     # 오래된 데몬 정리 후 재진입
-5. geode setup -r             # 그래도 안 되면 설정을 처음부터
+5. geode setup -r             # ~/.geode/.env 삭제 후 설정 마법사 재실행
 ```
 
-`geode config explain`은 한 설정 키에 대해 os.environ, 프로젝트 .env, 전역 .env, 프로젝트 config.toml, 전역 config.toml, 코드 기본값 순서로 후보를 표로 보여주고 어느 레이어가 이기는지 표시합니다 (`core/config/explain.py`). 검증은 항상 실효값 기준이며 `geode about`에서 확인합니다.
+`geode config explain`은 한 설정 키의 레이어별 후보를 표로 보여주고 어느 레이어가 이기는지 표시합니다 (`core/config/explain.py`). 레이어 순서는 [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)에 있습니다. 검증은 항상 실효값 기준이며 `geode about`에서 확인합니다.
+
+5단계는 `~/.geode/.env`와 dry-run 마커만 지우고 설정 마법사를 다시 실행합니다. `~/.geode/auth.toml`의 API 키는 남고, `.env`에 둔 연동 토큰은 사라집니다.
 
 ## 증상, 원인, 해법
 
@@ -3612,7 +3575,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting.md
 | 응답이 비거나 인증 오류 | 자격 만료 또는 무효 | `geode doctor`가 키와 OAuth 유효성을 점검합니다. `/login`으로 갱신합니다. |
 | 응답이 비고 종료 이유가 `model_refusal` | 모델 안전 분류기가 거절 (HTTP 200, `stop_reason: refusal`) | 요청을 바꿔 다시 묻거나 `/model`로 다른 모델을 씁니다. 카테고리가 메시지에 표시됩니다. |
 | `context_exhausted`로 종료 | prune 후에도 컨텍스트 critical | `/compact` 또는 `/clear` 후 작업을 쪼갭니다. [장기 실행 안전](https://mangowhoiscloud.github.io/geode/docs/ops/long-running.md) 참고. |
-| MCP 도구가 안 보임 | MCP 서버 연결 실패 | `/mcp`로 서버 상태와 도구 목록을 확인합니다. `/status`에도 MCP 블록이 있습니다. |
+| MCP 도구가 안 보임 | MCP 서버 연결 실패, 또는 신뢰하지 않은 폴더라 프로젝트 서버를 건너뜀 | `/mcp`로 서버 상태와 도구 목록을 확인합니다. `/status`에도 MCP 블록이 있습니다. 프로젝트에 정의한 서버는 [신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)에서만 로드됩니다. |
 | `MCP_SERVER_FAILED` 로그가 반복됨 | serve 프로세스에서 MCP 명령(`npx`, `codex`, `uvx`)이나 필수 env를 못 찾음 | `~/.geode/logs/serve.log`에서 실패 서버 이름을 보고 PATH와 `.env`를 맞춥니다. 실패한 서버는 짧게 캐시되므로 수정 뒤에는 serve를 재시작합니다. |
 | 읽기 도구가 너무 자주 호출됨 | `read_document`, `grep_files`는 항상 로드되는 핵심 도구. tool cap에 숨은 것이 아님 | `session_events`의 tool call을 보고 질문에 파일 범위, 제외 경로, 원하는 깊이를 명시합니다. |
 | 메신저 무반응 | 게이트웨이 또는 binding 문제 | `geode doctor slack`과 [메신저 연동](https://mangowhoiscloud.github.io/geode/docs/run/messaging.md)의 실패 표를 따릅니다. |
@@ -5638,7 +5601,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/guides/binding.md
 
 ## 1\. config.toml에 바인딩을 선언합니다
 
-바인딩은 프로젝트의 `.geode/config.toml` `[gateway]` 섹션에서 선언합니다. `ChannelManager.load_bindings_from_config`(`core/messaging/binding.py`)이 이 형식을 읽습니다. 각 규칙은 `channel`과 `channel_id`가 필수입니다. `channel_id`가 비어 있으면 그 규칙은 건너뜁니다. 빈 ID는 모든 채널에 응답하는 위험한 catch-all이 되기 때문입니다.
+바인딩은 프로젝트의 `.geode/config.toml` `[gateway]` 섹션에서 선언합니다. 이 섹션은 [신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)에서만 읽고, 전역 `~/.geode/config.toml`의 `[gateway]`는 같은 형식이며 신뢰가 필요 없습니다. `ChannelManager.load_bindings_from_config`(`core/messaging/binding.py`)이 이 형식을 읽습니다. 각 규칙은 `channel`과 `channel_id`가 필수입니다. `channel_id`가 비어 있으면 그 규칙은 건너뜁니다. 빈 ID는 모든 채널에 응답하는 위험한 catch-all이 되기 때문입니다.
 
 ```
 # .geode/config.toml
@@ -5671,11 +5634,11 @@ time_budget_s = 90
 
 ```
 uv run python -c "
-import tomllib
-from pathlib import Path
 from core.messaging.binding import ChannelManager
+from core.wiring.adapters import _load_gateway_config
 
-cfg = tomllib.loads(Path('.geode/config.toml').read_text())
+cfg, sources = _load_gateway_config()  # global + trusted project, as serve reads it
+print('sources', sources)
 m = ChannelManager()
 n = m.load_bindings_from_config(cfg)
 print('loaded', n, 'bindings')
@@ -5739,20 +5702,21 @@ PY
 URL: https://mangowhoiscloud.github.io/geode/docs/config/basics
 Markdown: https://mangowhoiscloud.github.io/geode/docs/config/basics.md
 
-GEODE 설정의 규칙은 한 줄입니다. 시크릿은 `.env`에, 동작은 `config.toml`에 둡니다. 같은 키가 여러 층에 있으면 더 가까운 층이 이기고, 어느 층이 이겼는지는`geode config explain`이 보여줍니다.
+GEODE 설정의 규칙은 한 줄입니다. 자격 증명은 `auth.toml`(GEODE가 관리)이나 `.env`(직접 넣는 환경 변수)에, 동작은 `config.toml`에 둡니다. 같은 키가 여러 층에 있으면 더 가까운 층이 이기고, 어느 층이 이겼는지는`geode config explain`이 보여줍니다.
 
 ## 파일과 역할
 
 | 파일 | 역할 |
 | --- | --- |
-| `~/.geode/.env` | 전역 시크릿 층이자 권위를 갖는 시크릿 저장소. API 키와 자격 증명이 들어가고, 온보딩과 `/login`의 키 기록이 여기로 갑니다. |
-| 프로젝트 `.env` (cwd) | 프로젝트 시크릿 층. 전역에 없는 키만 채우며 전역 키를 덮지 못합니다 (Hermes, 2026-06-15). 시크릿은 전역에 두는 것이 기본입니다. |
+| `~/.geode/auth.toml` | `geode setup`, `/login`, `/key`가 저장하는 자격 증명. 자세한 내용은 [인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md)에 있습니다. |
+| `~/.geode/.env` | 선택 사항인 전역 env 층. 직접 넣는 환경 변수 자격 증명과 연동 시크릿을 둡니다. 같은 키는 프로젝트 `.env`보다 우선합니다. |
+| 프로젝트 `.env` (cwd) | 프로젝트 시크릿 층. 신뢰한 폴더에서만 읽습니다. 전역에 없는 키만 채우며 전역 키를 덮지 못합니다 (Hermes, 2026-06-15). 시크릿은 전역에 두는 것이 기본입니다. |
 | `~/.geode/config.toml` | 전역 동작 설정. `[self_improving_loop.*]` 섹션도 이 파일에 삽니다. |
-| `.geode/config.toml` | 프로젝트 동작 설정. 전역 toml을 덮습니다. `/model`의 기본 저장 위치입니다. |
+| `.geode/config.toml` | 프로젝트 동작 설정. 전역 toml을 덮습니다. 권한을 넓히는 키는 신뢰한 폴더에서만 적용됩니다. `/model`의 기본 저장 위치입니다. 프로젝트 `.geode/`는 로컬 폴더이며 GEODE가 작업 공간의 `.gitignore`에 추가합니다. |
 | `core/config/routing.toml` | 출하되는 라우팅 매니페스트. 모델 기본값, provider prefix, 자격 패턴. `~/.geode/routing.toml`이 섹션 단위로 덮습니다. |
 | `~/.geode/extension-policy.json` | 서드파티 훅·LLM 어댑터·스킬·MCP 서버가 실행 코드를 로드하기 전에 적용하는 운영자 신뢰 정책입니다. |
 
-시크릿 전용 `.env`는 도구가 지키는 계약입니다.`/model`은 더 이상 `GEODE_MODEL`을`.env`에 쓰지 않고 `config.toml`에만 기록합니다. 과거 릴리스가 남긴 `.env`의 모델 줄은 피커가 toml을 쓴 직후 자동으로 지우고 알림을 출력합니다 (`core/config/env_io.py`의 `remove_env`). toml 매핑이 없는 env 전용 키 (`GEODE_GATEWAY_ENABLED` 등)를 손으로`.env`에 적는 것은 여전히 유효한 운영 방법입니다.
+시크릿 전용 `.env`는 도구가 지키는 계약입니다.`/model`은 더 이상 `GEODE_MODEL`을`.env`에 쓰지 않고 `config.toml`에만 기록합니다. 과거 릴리스가 남긴 `.env`의 모델 줄은 피커가 toml을 쓴 직후 자동으로 지우고 알림을 출력합니다 (`core/config/env_io.py`의 `remove_env`). env 전용 키는 `core/config/__init__.py`의 `_TOML_ENV_ONLY_FIELDS`에 있는 API 키 필드뿐이고, 나머지 필드는 모두 config.toml 키가 있습니다. 예를 들어 게이트웨이는 `~/.geode/config.toml`의 `[gateway] enabled = true`로 켜고, `GEODE_GATEWAY_ENABLED` export는 세션 한정 override로 남습니다.
 
 ## 확장 신뢰 정책
 
@@ -5791,6 +5755,18 @@ GEODE 설정의 규칙은 한 줄입니다. 시크릿은 `.env`에, 동작은 `c
 
 `trusted`는 신뢰한 Python 코드를 같은 프로세스에서 실행하는 API 경계이지 샌드박스가 아닙니다. `brokered`MCP는 지원되는 OS 샌드박스가 있을 때만 정확한 환경과 격리된 임시 디렉터리로 시작하며, 샌드박스를 만들 수 없으면`DEGRADED` 상태로 남고 실행되지 않습니다. 다른 정책을 쓰려면 `GEODE_EXTENSION_POLICY_OVERRIDE`에 정책 파일 경로를 지정합니다. override는 strict하므로 파일 누락이나 잘못된 JSON이면 시작이 실패합니다. 결정은 시작 snapshot으로 고정되고 runtime health의 `extensions`에서 확인됩니다.
 
+## 프로젝트 신뢰
+
+저장소는 `.geode/config.toml`, `.env`,`.claude/mcp_servers.json`을 함께 담아 올 수 있습니다. GEODE는 폴더를 신뢰하기 전까지 권한을 넓히는 프로젝트 설정을 적용하지 않습니다. 프로젝트 `.env`, 프로젝트 MCP 서버와 게이트웨이 설정, 샌드박스·computer use·웹훅·알림·저장 경로 같은 키가 여기에 해당합니다. 모델 선택처럼 권한과 무관한 키와`[policy.org] denied_tools` 같은 제한은 바로 적용됩니다.
+
+```
+geode config trust              # 현재 폴더 신뢰
+geode config trust --list       # 신뢰한 폴더 목록
+geode config trust PATH --revoke
+```
+
+신뢰 기록은 Codex처럼 전역 `~/.geode/config.toml`의`[projects."경로"]` 표에만 남고 프로젝트의 config.toml은 참조하지 않으므로, 저장소가 스스로를 신뢰할 수 없습니다.`hitl.dangerously_skip_permissions`와`computer_use.helper_path`는 신뢰한 폴더에서도 프로젝트 설정으로 읽지 않습니다. 무시된 항목은 경고 로그와`geode config explain`에 표시됩니다.
+
 ## 해석 사다리
 
 모든 Settings 필드는 같은 사다리를 탑니다. 위가 이깁니다 (`core/config/explain.py`의 `LAYERS`).
@@ -5798,8 +5774,8 @@ GEODE 설정의 규칙은 한 줄입니다. 시크릿은 `.env`에, 동작은 `c
 ```
 1. os.environ            셸 export. 세션 한정 수동 override
 2. 전역 .env             ~/.geode/.env (시크릿 권위)
-3. 프로젝트 .env          cwd의 .env (전역에 없는 키만 채움)
-4. 프로젝트 config.toml   .geode/config.toml
+3. 프로젝트 .env          cwd의 .env (신뢰한 폴더만. 전역에 없는 키만 채움)
+4. 프로젝트 config.toml   .geode/config.toml (권한 키는 신뢰한 폴더만)
 5. 전역 config.toml      ~/.geode/config.toml
 6. 코드 기본값
 ```
@@ -5836,7 +5812,7 @@ GEODE_AGENTIC_EFFORT
 GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE
 ```
 
-데몬의 모델을 env로 일부러 고정하고 싶다면`GEODE_SERVE_KEEP_MODEL_ENV=1`을 켭니다. C-4부터 이 플래그는 프로세스 env뿐 아니라 양쪽 `.env` 파일에서도 읽힙니다. 승격 우선순위는 수동 export > 전역 `.env`\> 프로젝트 `.env`이고 (전역이 권위, 프로젝트는 전역에 없는 키만 채움), 파일은 이미 존재하는 프로세스 env를 덮지 않으며 빈 값도 덮지 않습니다.
+데몬의 모델을 env로 일부러 고정하고 싶다면`GEODE_SERVE_KEEP_MODEL_ENV=1`을 켭니다. C-4부터 이 플래그는 프로세스 env와 전역 `.env`, 신뢰한 폴더라면 프로젝트 `.env`에서도 읽힙니다. 승격 우선순위는 수동 export > 전역 `.env`\> 프로젝트 `.env`이고 (전역이 권위, 프로젝트는 전역에 없는 키만 채움), 파일은 이미 존재하는 프로세스 env를 덮지 않으며 빈 값도 덮지 않습니다.
 
 ## 실패 모드
 
@@ -5846,12 +5822,13 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE
 | thin CLI는 새 모델, 데몬만 옛 모델 | `GEODE_SERVE_KEEP_MODEL_ENV=1`이 켜져 있거나 C-3 이전 데몬 | 플래그를 끄거나 데몬을 재시작합니다. `pkill -f "geode serve"` 후 재진입. |
 | `~/.geode/routing.toml`을 고쳤는데 반영 안 됨 | 부트 시점 복사본을 든 모듈 경로 | 세션 리로드로 매니페스트 독자는 갱신됩니다. 그래도 남으면 프로세스를 재시작합니다. |
 | 프로젝트 `.env`에 둔 시크릿이 안 먹고 전역 값이 이김 | 전역 `~/.geode/.env`가 같은 키를 가짐. 전역이 권위입니다 (Hermes, 2026-06-15) | 의도된 동작입니다. 시크릿은 전역에 두고, 프로젝트는 전역에 없는 키만 채웁니다. `geode config explain <KEY>`로 WINNER 층을 확인하세요. |
+| 프로젝트 `.env`, MCP 서버, 샌드박스 설정이 적용되지 않음 | 신뢰하지 않은 폴더. 시작할 때 "until you run \`geode config trust\`" 경고가 남습니다 | 저장소 내용을 확인한 뒤 그 폴더에서 `geode config trust`를 실행하고 새 세션을 엽니다. |
 | 대체 전역 경로에서 `/model` 선택이 남지 않음 | 구 버전 피커가 기본 전역 파일에 기록 | 업그레이드하고 저장 확인 화면의 경로와 `geode config explain`의 전역 경로를 비교합니다. |
 
 ## 다음
 
 -   [config.toml 레퍼런스](https://mangowhoiscloud.github.io/geode/docs/config/reference.md). 전체 키 목록입니다.
--   [인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md). 시크릿 층에 무엇이 들어가는지 다룹니다.
+-   [인증과 OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth.md). 자격 증명 저장과 로그인을 다룹니다.
 -   [LLM 라우팅](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers.md). routing.toml이 소비되는 곳입니다.
 
 ---
@@ -5861,7 +5838,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE
 URL: https://mangowhoiscloud.github.io/geode/docs/config/reference
 Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
-이 페이지는 설정 키의 단일 목록입니다. 키가 어디서 어떤 순서로 읽히는지는 [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)가 다룹니다. 키는 세 무리로 나뉩니다. Settings 필드 (`core/config/_settings.py`), 라우팅 매니페스트 (`core/config/routing.toml`), self-improving 루프 섹션(`core/config/self_improving.py`).
+이 페이지는 설정 키의 단일 목록입니다. 키가 어디서 어떤 순서로 읽히는지는 [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)가 다룹니다. 키는 세 무리로 나뉩니다. Settings 필드 (`core/config/_settings.py`), 라우팅 매니페스트 (`core/config/routing.toml`), self-improving 루프 섹션(`evals/config.py`).
 
 모든 Settings 필드는 `GEODE_` 접두사를 붙인 env 변수로 덮을 수 있습니다. `model`은`GEODE_MODEL`, `agentic_effort`는`GEODE_AGENTIC_EFFORT`가 됩니다. toml 키 열이 비어 있으면 그 필드는 env 또는 코드 기본값으로만 설정합니다. toml 매핑의 SoT는 `core/config/__init__.py`의`_TOML_TO_SETTINGS`이고, 매핑에 없는 toml 키는 조용히 무시됩니다.
 
@@ -5871,19 +5848,27 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 
 | 필드 | toml 키 | 타입 / 기본값 | 용도 |
 | --- | --- | --- | --- |
-| `model` | `llm.primary_model` | str = `"claude-opus-4-8"` | 기본 모델. 기본값은 routing.toml의 anthropic 기본값을 따라갑니다. |
+| `model` | `llm.primary_model` | str = `"claude-opus-5-5"` | 기본 모델. 기본값은 routing.toml의 anthropic 기본값을 따라갑니다. |
+| `model_policy_path` | `llm.model_policy_path` | str = `""` | 필수 모델 정책 파일의 절대 경로. 비우면 선택적 프로젝트 정책을 유지합니다. |
 | `act_model` | `llm.act_model` | str = `""` | 액션 루프 모델. 비우면 `model`로 폴백합니다. |
 | `judge_model` | `llm.judge_model` | str = `""` | 턴 단위 verify judge 모델. 비우면 `model`로 폴백합니다. |
 | `learning_extract_model` | `llm.learning_extract_model` | str = `"glm-4.7-flash"` | learning 추출 훅용 무료 티어 GLM 모델. |
 | `anthropic_credential_source` | `llm.anthropic_credential_source` | str = `"auto"` | Anthropic 자격 경로. `CredentialSource` 값 + `oauth` 별칭 + `none`. |
 | `openai_credential_source` | `llm.openai_credential_source` | str = `"auto"` | OpenAI 자격 경로. 같은 검증을 거칩니다. |
+| `anthropic_native_web_tools` | `llm.anthropic_native_web_tools` | bool = false | Anthropic이 서버에서 실행하는 web\_search/web\_fetch 도구 옵트인. 끄면 GEODE 자체 웹 도구를 씁니다. |
+| `tool_search_defer` | `llm.tool_search_defer` | bool = true | 호스팅 tool search를 쓰는 지연 도구 로딩(Anthropic, OpenAI API). 끄는 스위치입니다. |
+| `tool_search_defer_codex` | `llm.tool_search_defer_codex` | bool = true | Codex 백엔드의 같은 지연 도구 로딩. |
+| `prompt_cache_extended_ttl` | `llm.prompt_cache_extended_ttl` | bool = true | Anthropic 정적 프롬프트 prefix의 1시간 캐시 TTL. false면 공급자 기본값 5분을 씁니다. |
+| `prompt_cache_key_enabled` | `llm.prompt_cache_key_enabled` | bool = true | OpenAI API 키·Codex 경로에 `prompt_cache_key` 캐시 라우팅 힌트를 보냅니다. 끄는 스위치입니다. |
+| `glm_reasoning_effort` | `llm.glm_reasoning_effort` | str = `""` | effort를 지정하지 않은 GLM 요청의 reasoning effort. 비우면 공급자 기본값을 씁니다. |
+
+프로젝트 `.geode/config.toml`의 `llm.model_policy_path`는 신뢰한 폴더에서만 적용됩니다([프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)).
 
 ### \[agentic\]
 
 | 필드 | toml 키 | 타입 / 기본값 | 용도 |
 | --- | --- | --- | --- |
 | `agentic_effort` | `agentic.effort` | str = `"high"` | 허용 값은 선택한 모델의 공통 스펙과 `/model` 선택 화면을 따릅니다. Anthropic `output_config.effort`, OpenAI `reasoning.effort`, GLM `reasoning_effort`에 같은 값을 전달하며, 지원하지 않는 조합은 호출 전에 거절합니다. |
-| `agentic_loop_time_budget` | `agentic.time_budget` | float = 0.0 | 벽시계 초 단위 예산. 0이면 무제한. |
 | `agentic_thinking_budget` | `agentic.thinking_budget` | int = 0 | 레거시 thinking 토큰 예산. 0이면 비활성. |
 
 ### \[replan\]
@@ -5893,9 +5878,12 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | `replan_enabled` | `replan.enabled` | bool = true | 리플랜 활성화. |
 | `replan_max_attempts` | `replan.max_attempts` | int = 3 | 리플랜 시도 상한. |
 
-### \[judgment\] · Unreleased
+### \[judgment\]
 
-아래 판정 옵션과 상시 Reflection 정책은 소스 체크아웃에 추가된 기능이며 패키지 릴리스는 아직입니다.
+| 필드 | toml 키 | 타입 / 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `judgment_engine` | `judgment.engine` | str = `"llm"` | 판정 엔진. `llm` 또는 `jev`. |
+| `jev_provider` | `judgment.provider` | str = `"auto"` | Jev 공급자. `auto`, `typesafe`, `openrouter`. |
 
 `engine = "llm"`이 기본입니다. `engine = "jev"`로 선택하고 TypeSafe 또는 OpenRouter 키가 있을 때 Jev 판정을 사용합니다. `provider = "auto"`는 TypeSafe 키를 먼저 확인하며 `typesafe`나 `openrouter`로 고정할 수 있습니다. 키가 없으면 LLM 경로를 유지합니다. `/model judgment` 선택창과 `/model judgment llm|jev|typesafe|openrouter`가 같은 설정을 저장하며, 상위 환경변수·프로젝트 설정이 가리면 변경을 거부하고 해당 층을 표시합니다.
 
@@ -5908,7 +5896,8 @@ TypeSafe는 `TYPESAFE_API_KEY` 환경 입력을 사용합니다. OpenRouter는 `
 | `cognitive_reflection_enabled` | `cognitive.reflection_enabled` | bool = true | 퇴역 예정 호환 필드. false도 true로 정규화하며 매 도구 결과 라운드와 최종 응답 전 판정합니다. |
 | `cognitive_reflection_model` | `cognitive.reflection_model` | str = `""` | 비워두면 현재 agentic loop 모델/소스를 상속하고, 값이 있으면 별도 reflection 모델로 사용한다. |
 | `cognitive_reflection_max_tokens` | `cognitive.reflection_max_tokens` | int = 512 | 리플렉션 출력 토큰 상한. |
-| `cognitive_reflection_interval` | `cognitive.reflection_interval` | int = 1 | 퇴역 예정: 1로 정규화합니다. reflection\_adaptive도 false로 고정합니다. |
+| `cognitive_reflection_interval` | `cognitive.reflection_interval` | int = 1 | 퇴역 예정: 1로 정규화합니다. |
+| `cognitive_reflection_adaptive` | `cognitive.reflection_adaptive` | bool = false | 퇴역 예정: false로 정규화합니다. |
 
 ### \[sandbox\]
 
@@ -5926,117 +5915,126 @@ TypeSafe는 `TYPESAFE_API_KEY` 환경 입력을 사용합니다. OpenRouter는 `
 | --- | --- | --- | --- |
 | `verbose` | `output.verbose` | bool = false | 상세 출력. `/verbose`로 세션 중 토글합니다. |
 
-## Settings: env 전용 필드
+## Settings: 그 밖의 필드
 
-아래 무리는 toml 매핑이 없습니다. `GEODE_*` env 변수나 `.env`로만 설정합니다.
+아래 필드도 config.toml 키가 있습니다. env 전용은 API 키 필드 (`_TOML_ENV_ONLY_FIELDS`)뿐이며, 환경 변수나 `.env`로만 설정합니다.
 
 ### 시크릿과 프로바이더
 
-| 필드 | 타입 / 기본값 | 용도 |
-| --- | --- | --- |
-| `anthropic_api_key` / `openai_api_key` / `zai_api_key` | str = `""` | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `ZAI_API_KEY`로 별칭됩니다. 외부 환경 입력이며, `/login`으로 등록한 키는 `auth.toml`에 별도로 저장됩니다. |
-| `ensemble_mode` | str = `"single"` | `single` 또는 `cross` 멀티 LLM 모드. |
-| `forced_login_method` | dict = {} | 프로바이더별 인증 방식 강제(`{"openai": "apikey"}`). 기본은 구독 우선. |
+| 필드 | toml 키 | 타입 / 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `anthropic_api_key` / `openai_api_key` / `openrouter_api_key` / `typesafe_api_key` / `zai_api_key` |  | str = `""` | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` / `TYPESAFE_API_KEY` / `ZAI_API_KEY`로 별칭됩니다. 외부 환경 입력이며, `/login`으로 등록한 키는 `auth.toml`에 별도로 저장됩니다. |
+| `ensemble_mode` | `ensemble.mode` | str = `"single"` | `single` 또는 `cross` 멀티 LLM 모드. |
+| `forced_login_method` | `llm.forced_login_method` | dict = {} | 프로바이더별 인증 방식 강제(`{"openai": "apikey"}`). 기본은 구독 우선. |
 
 ### Temperature (0.0-2.0)
 
-| 필드 | 기본값 | 용도 |
-| --- | --- | --- |
-| `temperature_agent_loop` | 1.0 | 에이전트 루프 호출. |
-| `temperature_reflection` | 1.0 | 리플렉션 호출. |
-| `temperature_verification` | 0.0 | verify 호출. cross-LLM 합의를 위한 결정성. |
-| `temperature_commentary` | 1.0 | 커멘터리 호출. |
-| `temperature_self_improving_mutation` | 1.0 | 변이 제안 호출. |
+| 필드 | toml 키 | 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `temperature_agent_loop` | `temperature.agent_loop` | 1.0 | 에이전트 루프 호출. |
+| `temperature_reflection` | `temperature.reflection` | 1.0 | 리플렉션 호출. |
+| `temperature_self_improving_mutation` | `temperature.self_improving_mutation` | 1.0 | 변이 제안 호출. |
 
 ### 서브에이전트
 
-| 필드 | 기본값 | 용도 |
-| --- | --- | --- |
-| `max_subagent_depth` | 1 | 중첩 위임 깊이 상한. |
-| `max_total_subagents` | 15 | 총 서브에이전트 상한. |
-| `subagent_max_rounds` | 0 | 서브에이전트 라운드 상한. 0이면 무제한. |
-| `subagent_max_tokens` | 32768 | 서브에이전트 출력 토큰 상한. |
+| 필드 | toml 키 | 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `max_subagent_depth` | `subagent.max_depth` | 1 | 중첩 위임 깊이 상한. |
+| `max_total_subagents` | `subagent.max_total` | 15 | 총 서브에이전트 상한. |
+| `subagent_max_tokens` | `subagent.max_tokens` | 32768 | 서브에이전트 출력 토큰 상한. |
 
 ### 토큰 가드와 오프로딩
 
-| 필드 | 기본값 | 용도 |
-| --- | --- | --- |
-| `max_tool_result_tokens` | 25000 | 도구 결과 토큰 상한. 0이면 무제한. |
-| `tool_offload_threshold` | 15000 | 이 토큰을 넘는 결과는 디스크로 오프로드됩니다. 0이면 비활성. |
-| `tool_offload_ttl_hours` | 4.0 | 오프로드 보관 시간. |
-| `observation_mask_keep_rounds` | 3 | 관측 마스킹 전 유지 라운드. |
-| `compact_keep_recent` | 10 | 컴팩션 시 보존할 최근 메시지 수. |
+| 필드 | toml 키 | 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `max_tool_result_tokens` | `subagent.max_tool_result_tokens` | 25000 | 도구 결과 토큰 상한. 0이면 무제한. |
+| `tool_offload_threshold` | `tool_offload.threshold` | 15000 | 이 토큰을 넘는 결과는 디스크로 오프로드됩니다. 0이면 비활성. |
+| `tool_offload_ttl_hours` | `tool_offload.ttl_hours` | 4.0 | 오프로드 보관 시간. |
+| `observation_mask_keep_rounds` | `observation.mask_keep_rounds` | 3 | 관측 마스킹 전 유지 라운드. |
+| `compact_keep_recent` | `compact.keep_recent` | 10 | 컴팩션 시 보존할 최근 메시지 수. |
 
 ### 스케줄러와 트리거
 
-| 필드 | 기본값 | 용도 |
-| --- | --- | --- |
-| `trigger_scheduler_interval_s` | 60.0 | 트리거 스케줄러 폴 간격. |
-| `scheduler_interval_s` | 1.0 | 스케줄러 틱 간격. |
-| `scheduler_auto_start` | true | serve와 함께 스케줄러 자동 시작. |
-| `scheduler_jitter_enabled` | true | 예약 실행에 지터 적용. |
-| `scheduler_max_jitter_ms` | 900000.0 | 지터 상한. 15분입니다. |
+| 필드 | toml 키 | 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `trigger_scheduler_interval_s` | `scheduler.trigger_interval_s` | 60.0 | 트리거 스케줄러 폴 간격. |
+| `scheduler_interval_s` | `scheduler.interval_s` | 1.0 | 스케줄러 틱 간격. |
+| `scheduler_auto_start` | `scheduler.auto_start` | true | serve와 함께 스케줄러 자동 시작. |
+| `scheduler_jitter_enabled` | `scheduler.jitter_enabled` | true | 예약 실행에 지터 적용. |
+| `scheduler_max_jitter_ms` | `scheduler.max_jitter_ms` | 900000.0 | 지터 상한. 15분입니다. |
+
+프로젝트 `.geode/config.toml`의 `scheduler.auto_start`는 신뢰한 폴더에서만 적용됩니다([프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)).
 
 ### 메모리와 세션
 
-| 필드 | 기본값 | 용도 |
-| --- | --- | --- |
-| `session_ttl_hours` | 4.0 | 세션 보존 시간. |
-| `session_storage_dir` | `""` | 세션 저장 디렉터리. 비우면 인메모리. |
-| `organization_fixture_dir` | `""` | 조직 메모리 픽스처 경로. |
-| `user_profile_dir` | `""` | 비우면 `~/.geode/user_profile`. |
-| `checkpoint_db` | `"geode_checkpoints.db"` | 체크포인트 DB 파일명. |
+| 필드 | toml 키 | 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `session_ttl_hours` | `session.ttl_hours` | 4.0 | 세션 보존 시간. |
+| `session_storage_dir` | `session.storage_dir` | `""` | 세션 저장 디렉터리. 비우면 인메모리. |
+| `organization_fixture_dir` | `paths.organization_fixture_dir` | `""` | 조직 메모리 픽스처 경로. |
+| `user_profile_dir` | `paths.user_profile_dir` | `""` | 비우면 `~/.geode/user_profile`. |
+
+프로젝트 `.geode/config.toml`의 `session.storage_dir`, `paths.organization_fixture_dir`, `paths.user_profile_dir`는 신뢰한 폴더에서만 적용됩니다([프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)).
 
 ### 게이트웨이, 알림, 웹훅
 
-| 필드 | 기본값 | 용도 |
-| --- | --- | --- |
-| `gateway_enabled` | false | 메신저와 webhook 등 외부 채널 활성화. CLI IPC는 이 값과 무관합니다. |
-| `gateway_poll_interval_s` | 3.0 | 게이트웨이 폴 간격. |
-| `gateway_max_concurrent` | 4 | 동시 처리 상한. |
-| `gateway_allow_computer_use` | false | 바운드 채널의 원격 desktop control 명시적 옵트인. |
-| `notification_channel` | `"slack"` | 알림 채널 종류. |
-| `notification_recipient` | `"#geode-alerts"` | 알림 수신처. |
-| `webhook_enabled` | false | gateway 활성 시 웹훅 HTTP 엔드포인트. |
-| `webhook_port` | 8765 | 웹훅 포트. |
+| 필드 | toml 키 | 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `gateway_enabled` | `gateway.enabled` | false | 메신저와 webhook 등 외부 채널 활성화. CLI IPC는 이 값과 무관합니다. |
+| `gateway_poll_interval_s` | `gateway.poll_interval_s` | 3.0 | 게이트웨이 폴 간격. |
+| `gateway_max_concurrent` | `gateway.max_concurrent` | 4 | 동시 처리 상한. |
+| `gateway_allow_computer_use` | `gateway.allow_computer_use` | false | 바운드 채널의 원격 desktop control 명시적 옵트인. |
+| `notification_channel` | `notification.channel` | `"slack"` | 알림 채널 종류. |
+| `notification_recipient` | `notification.recipient` | `"#geode-alerts"` | 알림 수신처. |
+| `webhook_enabled` | `webhook.enabled` | false | gateway 활성 시 웹훅 HTTP 엔드포인트. |
+| `webhook_port` | `webhook.port` | 8765 | 웹훅 포트. |
 
-### HITL, 플랜, 비용, 데스크탑
+프로젝트 `.geode/config.toml`에서는 이 표의 키(`gateway.*`, `notification.*`, `webhook.*`)가 모두 신뢰한 폴더에서만 적용됩니다([프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)).
 
-| 필드 | 기본값 | 용도 |
-| --- | --- | --- |
-| `hitl_level` | 2 | 2면 모두 확인, 1이면 쓰기만 확인, 0이면 자율. |
-| `cost_limit_usd` | 0.0 | 비용 상한. 0이면 무제한, 80%에서 경고. |
-| `computer_use_enabled` | true | 데스크탑 자동화 도구. |
+### HITL, 샌드박스, 비용, 데스크탑
+
+| 필드 | toml 키 | 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `hitl_level` | `hitl.level` | 2 | 2면 모두 확인, 1이면 쓰기만 확인, 0이면 자율. |
+| `dangerously_skip_permissions` | `hitl.dangerously_skip_permissions` | false | 도구 승인 프롬프트를 건너뜁니다(hitl\_level을 0으로 강제). `geode --dangerously-skip-permissions`로도 켭니다. |
+| `cost_limit_usd` | `cost.limit_usd` | 0.0 | 비용 상한. 0이면 무제한, 80%에서 경고. |
+| `computer_use_enabled` | `computer_use.enabled` | true | 데스크탑 자동화 도구. |
+| `computer_use_driver` | `computer_use.driver` | `"auto"` | `auto`는 설치된 서명 helper를 쓰고 없으면 pyautogui, `python`은 프로세스 안의 pyautogui, `helper`는 macOS helper가 없으면 실패합니다. |
+| `computer_use_helper_path` | `computer_use.helper_path` | `""` | helper 실행 파일 경로. 비우면 `geode setup`이 빌드한 helper, 다음으로 PATH의 `geode-computer-helper`를 찾습니다. |
+| `bash_sandbox` | `bash_sandbox.mode` | `"off"` | `run_bash`의 OS 샌드박스. `off`, `on`(샌드박스가 없으면 경고 후 그대로 실행), `strict`(없으면 실패). |
+| `package_install_guard` | `tools.package_install_guard` | true | PyPI·npm에 없는 패키지의 bash 설치를 막습니다. 확실한 404일 때만 막습니다. |
+
+프로젝트 `.geode/config.toml`의 `cost.limit_usd`, `computer_use.enabled`, `computer_use.driver`, `bash_sandbox.mode`, `tools.package_install_guard`는 신뢰한 폴더에서만 적용되고, `hitl.dangerously_skip_permissions`와 `computer_use.helper_path`는 프로젝트에서 읽지 않습니다([프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)).
 
 ### LLM 커넥션 풀
 
-| 필드 | 기본값 | 용도 |
-| --- | --- | --- |
-| `llm_max_connections` | 20 | 최대 연결 수. |
-| `llm_max_keepalive_connections` | 5 | keepalive 연결 상한. |
-| `llm_keepalive_expiry` | 30.0 | keepalive 만료 초. |
-| `llm_connect_timeout` | 5.0 | 연결 타임아웃. |
-| `llm_read_timeout` | 300.0 | 읽기 타임아웃. |
-| `llm_write_timeout` | 30.0 | 쓰기 타임아웃. |
-| `llm_pool_timeout` | 10.0 | 풀 대기 타임아웃. |
-| `llm_retry_base_delay` | 2.0 | 재시도 기본 지연. |
-| `llm_retry_max_delay` | 30.0 | 재시도 최대 지연. |
-| `llm_max_retries` | 3 | 최초 호출을 포함한 모델별 총 시도 횟수. 메인 루프·보조 호출·scaffold-search mutator가 공유합니다. |
-| `llm_max_fallback_cost_ratio` | 0.0 | 폴백 비용 비율 상한. 0이면 무제한. |
+| 필드 | toml 키 | 기본값 | 용도 |
+| --- | --- | --- | --- |
+| `llm_max_connections` | `llm.max_connections` | 20 | 최대 연결 수. |
+| `llm_max_keepalive_connections` | `llm.max_keepalive_connections` | 5 | keepalive 연결 상한. |
+| `llm_keepalive_expiry` | `llm.keepalive_expiry` | 30.0 | keepalive 만료 초. |
+| `llm_connect_timeout` | `llm.connect_timeout` | 5.0 | 연결 타임아웃. |
+| `llm_read_timeout` | `llm.read_timeout` | 300.0 | 읽기 타임아웃. |
+| `llm_write_timeout` | `llm.write_timeout` | 30.0 | 쓰기 타임아웃. |
+| `llm_pool_timeout` | `llm.pool_timeout` | 10.0 | 풀 대기 타임아웃. |
+| `llm_retry_base_delay` | `llm.retry_base_delay` | 2.0 | 재시도 기본 지연. |
+| `llm_retry_max_delay` | `llm.retry_max_delay` | 30.0 | 재시도 최대 지연. |
+| `llm_max_retries` | `llm.max_retries` | 3 | 최초 호출을 포함한 모델별 총 시도 횟수. 메인 루프·보조 호출·scaffold-search mutator가 공유합니다. |
+| `llm_max_fallback_cost_ratio` | `llm.max_fallback_cost_ratio` | 0.0 | 폴백 비용 비율 상한. 0이면 무제한. |
 
 ## routing.toml
 
-출하본은 `core/config/routing.toml`이고, 사용자 override `~/.geode/routing.toml`이 섹션 단위로 병합됩니다(`core/config/routing_manifest.py`).
+출하본은 `core/config/routing.toml`이고, 사용자 override `~/.geode/routing.toml`이 섹션 단위로 병합됩니다(`core/config/routing_manifest.py`). 현재 기본 모델과 프로바이더별 라우팅 규칙은 [프로바이더 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers.md)에 있습니다.
 
 | 섹션 | 키 | 내용 |
 | --- | --- | --- |
-| `[model.defaults]` | `anthropic`, `anthropic_secondary`, `anthropic_budget`, `openai`, `codex`, `glm` | `claude-opus-4-8` / `claude-sonnet-4-6` / `claude-haiku-4-5-20251001` / `gpt-5.5` / `gpt-5.5` / `glm-5.2`. `core.config.ANTHROPIC_PRIMARY` 등으로 export됩니다. |
+| `[model.defaults]` | `anthropic`, `anthropic_secondary`, `anthropic_budget`, `openai`, `codex`, `glm` | 프로바이더별 기본 모델 id. `core.config.ANTHROPIC_PRIMARY` 등으로 export됩니다. |
 | `[model.fallbacks]` | 프로바이더별 리스트 4개 | 기본은 전부 빈 리스트입니다. 같은 프로바이더 묵시적 폴백 체인은 출하되지 않고, 기본 모델 실패는 예외를 던지며 사용자가 `/model`로 고릅니다. 폴백은 `~/.geode/routing.toml`에서 옵트인합니다. |
-| `[routing.prefixes]` | `claude-`, `glm-`, `gpt-`, `o3-`, `o3`, `o4-`, `o4-mini` | 모델 id 접두사를 프로바이더로 매핑합니다(내장 어댑터가 있는 anthropic / openai / glm만). 첫 매치가 이깁니다. 매치되는 접두사가 없는 계열(gemini-, deepseek-, llama-, qwen- 등)은 모델당 한 번 경고를 남기고 `fallback_provider`(OpenAI 호환 엔드포인트)로 흘러갑니다. 해당 id를 서빙하는 OpenAI 호환 프록시에는 정상 경로입니다. |
+| `[routing.prefixes]` | 모델 id 접두사 | 모델 id 접두사를 프로바이더로 매핑합니다. 첫 매치가 이깁니다. 매치되는 접두사가 없는 계열(gemini-, deepseek-, llama-, qwen- 등)은 모델당 한 번 경고를 남기고 `fallback_provider`(OpenAI 호환 엔드포인트)로 흘러갑니다. 해당 id를 서빙하는 OpenAI 호환 프록시에는 정상 경로입니다. |
 | `[routing]` | `codex_only_models`, `codex_suffixes`, `fallback_provider` | Codex 전용 모델 목록은 현재 비어 있습니다. `gpt-5.5`/`gpt-5.5-pro`도 선택한 API-key 또는 구독 source를 따릅니다. `-codex`/`-codex-max`/`-codex-mini` 접미사는 `openai-codex`로 라우팅하고, 미해석 ID는 `openai`로 분류합니다. 모델 퇴역은 provider 분류와 별도로 실제 source에 적용합니다. |
-| `[nodes]` | `analyst`, `evaluator`, `scoring`, `synthesizer` | 파이프라인 노드 모델. 전부 `claude-opus-4-8` 고정이라 노드가 REPL 모델을 상속하지 않습니다. 조회 순서는 프로젝트 `.geode/routing.toml`, 매니페스트, 없으면 `settings.model`. |
-| `[credentials.patterns]` | `sk-ant-`, `sk-proj-`, `sk-` | 키 모양에서 프로바이더를 추정합니다. GLM 키({id}.{secret} 모양)는 `core.config.env_io.is_glm_key`가 감지합니다. |
-| `[credentials.env_vars]` | 3개 | anthropic은 `ANTHROPIC_API_KEY`, openai는 `OPENAI_API_KEY`, glm은 `ZAI_API_KEY`. |
+| `[nodes]` | `analyst`, `evaluator`, `scoring`, `synthesizer` | 파이프라인 노드 모델. 출하 매니페스트가 네 노드 모두 Anthropic 기본 모델로 고정하므로 노드가 REPL 모델을 상속하지 않습니다. 조회 순서는 프로젝트 `.geode/routing.toml`, 매니페스트, 없으면 `settings.model`. |
+| `[credentials.patterns]` | API 키 정규식 | 키 모양에서 프로바이더를 추정합니다. 첫 매치가 이깁니다. GLM 키({id}.{secret} 모양)는 `core.config.env_io.is_glm_key`가 감지합니다. |
+| `[credentials.env_vars]` | 프로바이더 이름 | 프로바이더별 API 키 환경 변수 이름. |
 
 ## \[self\_improving\_loop.\*\]
 
@@ -6426,7 +6424,9 @@ manager는 기존 호출 경로를 유지하는 facade입니다. 설정·env는`
 | 2 | `~/.geode/config.toml`의 `[mcp.servers]` | 전역 사용자 설정. |
 | 3 | `.claude/mcp_servers.json` | 레거시 폴백 겸 설치 타깃. 앞 두 층에 없는 이름만 추가됩니다. |
 
-서버 env의 `${VAR}` 참조는 os.environ을 먼저 보고, 없으면 `.env` 값(전역이 프로젝트를 덮음) 으로 확장됩니다. 필수 env가 빈 값으로 해석된 서버는 연결을 시도하지 않고 건너뜁니다. 연결과 실패는`MCP_SERVER_CONNECTED` /`MCP_SERVER_FAILED` 훅으로 관측됩니다. 전송은 stdio입니다(`core/mcp/stdio_client.py`).
+프로젝트 소스인 1번과 3번은 [신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics.md#project-trust)에서만 읽습니다.
+
+서버 env의 `${VAR}` 참조는 os.environ을 먼저 보고, 없으면 `.env` 값(전역이 프로젝트를 덮고, 프로젝트 `.env`는 신뢰한 폴더에서만 읽음)으로 확장됩니다. 필수 env가 빈 값으로 해석된 서버는 연결을 시도하지 않고 건너뜁니다. 연결과 실패는`MCP_SERVER_CONNECTED` /`MCP_SERVER_FAILED` 훅으로 관측됩니다. 전송은 stdio입니다(`core/mcp/stdio_client.py`).
 
 stdio 서버 연결이 실패하면 같은 서버는 짧은 시간 동안 실패로 기억됩니다. 도구 목록을 다시 만들 때 같은 프로세스를 즉시 재시도해 `MCP_SERVER_FAILED` 로그를 반복해서 쌓지 않기 위한 장치입니다. 운영자가 설정을 고쳤거나 서버를 강제로 재시작하는 경우에는 헬스 체크와 서버 재등록 경로가 이 실패 캐시를 비우고 다시 연결을 시도합니다.
 
@@ -6461,7 +6461,7 @@ LOG_LEVEL = "warning"
 -   **시크릿 마스킹.** 결과의 텍스트 필드는 반환 전에`redact_secrets`를 통과합니다.
 -   **결과 크기 가드.** 모든 도구 결과는`settings.max_tool_result_tokens`(기본 25000)를 넘으면 요약을 보존한 채 잘립니다 (`core/agent/tool_executor/result_token_guard.py`). MCP 결과도 예외가 아닙니다. 200K 미만 컨텍스트 모델은 창의 5%로 한 번 더 조여집니다.
 
-세션 안에서는 `/mcp`로 서버 상태, 도구 목록, 추가를 관리합니다.
+세션 안에서는 `/mcp`로 서버 상태, 도구 목록, 추가를 관리합니다. `/mcp add`는 프로젝트 `.claude/mcp_servers.json`의 기존 항목에 새 항목만 더해 저장합니다(권한 0600). 신뢰하지 않은 폴더에서는 `geode config trust` 전까지 로드되지 않는다고 안내하며, 실행하려면 `~/.geode/extension-policy.json`의 `mcp:<name>` 승인도 필요합니다.
 
 ## 서버: geode-mcp
 
@@ -6947,7 +6947,7 @@ picker 키 계약(`core/cli/effort_picker.py`): Tab이 역할 탭(Primary, Refle
 | 증상 | 원인 | 해법 |
 | --- | --- | --- |
 | `geode "..."`가 No such command | 원샷 미지원 | bare `geode`로 REPL에 들어가 자유 텍스트를 입력합니다. |
-| 외부 채널 메시지가 들어오지 않음 | `gateway_enabled` 꺼짐 | 로컬 REPL은 그대로 동작합니다. Slack/Discord/Telegram도 쓰려면 `~/.geode/.env`에 `GEODE_GATEWAY_ENABLED=true`를 추가합니다. |
+| 외부 채널 메시지가 들어오지 않음 | `gateway_enabled` 꺼짐 | 로컬 REPL은 그대로 동작합니다. Slack/Discord/Telegram도 쓰려면 [게이트웨이를 켭니다](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md#start-stop). |
 | 배너 모델과 응답 모델 불일치 | 오래된 데몬 둘 이상이 소켓을 두고 경합 | `pkill -f "geode serve"` 후 재진입합니다. `ps aux | grep`은 긴 경로가 잘려 못 잡습니다. |
 | `geode seeds assemble`이 exit 2 | wheel 설치에는 `scripts/`가 없음 | repo 체크아웃에서 실행합니다. |
 
@@ -7368,8 +7368,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 599 |
-| 테스트 Python 파일 | 765 |
+| 프로덕션 Python 파일 | 600 |
+| 테스트 Python 파일 | 768 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 84 / 84 / 84 / 84 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

@@ -24,6 +24,8 @@ def config_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, P
     project_toml.parent.mkdir()
     monkeypatch.setenv("GEODE_CONFIG_TOML", str(global_toml))
     monkeypatch.setattr("core.paths.PROJECT_CONFIG_TOML", project_toml)
+    # The overlay semantics below are those of a trusted project folder.
+    monkeypatch.setattr("core.config.project_trust.is_project_trusted", lambda root=None: True)
     return {"global": global_toml, "project": project_toml}
 
 

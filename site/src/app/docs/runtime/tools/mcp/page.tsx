@@ -45,9 +45,15 @@ export default function Page() {
               </tbody>
             </table>
             <p>
+              프로젝트 소스인 1번과 3번은{" "}
+              <a href="/geode/docs/config/basics#project-trust">신뢰한 폴더</a>에서만
+              읽습니다.
+            </p>
+            <p>
               서버 env의 <code>${`{VAR}`}</code> 참조는 os.environ을 먼저
-              보고, 없으면 <code>.env</code> 값(전역이 프로젝트를 덮음)
-              으로 확장됩니다. 필수 env가 빈 값으로 해석된 서버는 연결을
+              보고, 없으면 <code>.env</code> 값(전역이 프로젝트를 덮고,
+              프로젝트 <code>.env</code>는 신뢰한 폴더에서만 읽음)으로
+              확장됩니다. 필수 env가 빈 값으로 해석된 서버는 연결을
               시도하지 않고 건너뜁니다. 연결과 실패는
               <code>MCP_SERVER_CONNECTED</code> /
               <code>MCP_SERVER_FAILED</code> 훅으로 관측됩니다. 전송은
@@ -122,7 +128,12 @@ LOG_LEVEL = "warning"`}</pre>
             </ul>
             <p>
               세션 안에서는 <code>/mcp</code>로 서버 상태, 도구 목록, 추가를
-              관리합니다.
+              관리합니다. <code>/mcp add</code>는 프로젝트{" "}
+              <code>.claude/mcp_servers.json</code>의 기존 항목에 새 항목만
+              더해 저장합니다(권한 0600). 신뢰하지 않은 폴더에서는{" "}
+              <code>geode config trust</code> 전까지 로드되지 않는다고
+              안내하며, 실행하려면 <code>~/.geode/extension-policy.json</code>의{" "}
+              <code>mcp:&lt;name&gt;</code> 승인도 필요합니다.
             </p>
 
             <h2>서버: geode-mcp</h2>
@@ -252,9 +263,14 @@ LOG_LEVEL = "warning"`}</pre>
               </tbody>
             </table>
             <p>
+              The project sources, layers 1 and 3, load only in a{" "}
+              <a href="/geode/docs/config/basics#project-trust">trusted folder</a>.
+            </p>
+            <p>
               <code>${`{VAR}`}</code> references in a server&apos;s env are
               expanded against os.environ first, then <code>.env</code> values
-              (global authoritative over project). A server whose required env
+              (global authoritative over project; a project <code>.env</code> is
+              read only in a trusted folder). A server whose required env
               resolves empty is skipped without a connection attempt.
               Connections and failures are observable through the
               <code>MCP_SERVER_CONNECTED</code> /
@@ -329,7 +345,13 @@ LOG_LEVEL = "warning"`}</pre>
             </ul>
             <p>
               In-session, <code>/mcp</code> manages server status, tool
-              listings, and additions.
+              listings, and additions. <code>/mcp add</code> adds just the new
+              entry to the entries already in the project{" "}
+              <code>.claude/mcp_servers.json</code> (mode 0600). In an
+              untrusted folder it notes that the server loads only after{" "}
+              <code>geode config trust</code>; to run, the server also needs an{" "}
+              <code>mcp:&lt;name&gt;</code> grant in{" "}
+              <code>~/.geode/extension-policy.json</code>.
             </p>
 
             <h2>Server: geode-mcp</h2>

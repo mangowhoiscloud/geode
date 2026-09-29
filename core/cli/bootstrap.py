@@ -85,13 +85,16 @@ def load_daemon_env() -> None:
     from dotenv import dotenv_values
 
     from core.config.env_io import BEHAVIOR_ENV_KEYS, load_env_files
+    from core.config.project_trust import is_project_trusted
     from core.paths import GLOBAL_ENV_FILE
 
     keep_model_env = os.environ.get("GEODE_SERVE_KEEP_MODEL_ENV") == "1"
     if not keep_model_env:
         # The escape hatch may live in a .env file rather than the spawning
-        # shell — check both files BEFORE dropping anything.
-        for env_file in (GLOBAL_ENV_FILE, Path(".env")):
+        # shell — check both files BEFORE dropping anything. A workspace .env
+        # counts only for a trusted folder.
+        env_files = (GLOBAL_ENV_FILE, Path(".env")) if is_project_trusted() else (GLOBAL_ENV_FILE,)
+        for env_file in env_files:
             if (
                 env_file.exists()
                 and dotenv_values(str(env_file)).get("GEODE_SERVE_KEEP_MODEL_ENV") == "1"

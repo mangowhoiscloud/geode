@@ -20,12 +20,6 @@ The `.geode/` directory is the project-local persistent store for the agent. It 
 │   ├── anime-ip.md          # Pattern: *cowboy*, *ghost*, *evangelion*
 │   └── indie-steam.md       # Pattern: *satisfactory*, *factorio*
 │
-├── vault/                   # Permanent artifacts (never auto-deleted)
-│   ├── reports/             # Generated analysis reports (md/html/json)
-│   ├── research/            # Deep research outputs
-│   ├── profile/             # User career profile, resume
-│   └── applications/        # Job application tracking
-│
 ├── skills/                  # Runtime Skills (20 domain-specific prompt injections)
 │   ├── arxiv-digest/        # Auto-search and summarize AI papers
 │   ├── daily-briefing/      # Morning news/trend summary
@@ -33,9 +27,12 @@ The `.geode/` directory is the project-local persistent store for the agent. It 
 │   ├── job-hunter/          # Job posting search + match analysis
 │   └── ...
 │
-├── result_cache/            # Pipeline result LRU cache (SHA-256 key, 24h TTL)
+├── scheduled_tasks.json     # Scheduler jobs (atomic JSON)
+├── scheduler_logs/          # Per-job scheduler run history (JSONL)
 └── user_profile/            # Tier 0.5: User identity + preferences
 ```
+
+MCP servers, gateway bindings and capability-widening keys in `config.toml` apply only after `geode config trust` in that folder; see [project trust](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust).
 
 ## Context Hierarchy
 
@@ -85,10 +82,10 @@ When the explicit facade exceeds its budget, `ContextAssembler.compress()` alloc
 |-------|-------|-----|----------|---------------|
 | `memory/PROJECT.md` | Project | Permanent | Max 50 entries, LRU evict | Pipeline completion |
 | `rules/` | Project | Permanent | Manual | Agent auto-generates from repeated patterns |
-| `vault/` | Project | Permanent | Never deleted | Report generation, research completion |
-| `result_cache/` | Project | 24h | SHA-256 dedup, TTL evict | Pipeline completion |
+| `~/.geode/vault/{profile,research,applications,general}/` | Global | Permanent | Never deleted | Report generation, research completion |
+| `~/.geode/projects/<id>/result_cache/` | Project (user-private) | None | In-memory LRU (8 subjects) | Pipeline completion |
 | `skills/` | Project | Permanent | Manual reload | User or agent creates |
-| `config.toml` | Project | Permanent | Hot-reload (chokidar 300ms debounce) | User edits |
+| `config.toml` | Project | Permanent | Gateway bindings hot-reload (polling, 300ms debounce) | User edits |
 
 ## Runtime Context Sources (beyond `.geode/`)
 
@@ -97,8 +94,7 @@ When the explicit facade exceeds its budget, `ContextAssembler.compress()` alloc
 | GEODE.md | Project root | T0 SOUL identity |
 | `~/.geode/user_profile/` | Global | T0.5 User preferences |
 | `~/.geode/.env` | Global | Authoritative file-based secrets; existing process exports take precedence |
-| `.env` | Project root | Fills keys absent from global secrets and process exports |
-| `~/.geode/scheduler/jobs.json` | Global | Scheduler state (atomic JSON) |
+| `.env` | Project root | Trusted folders only; fills keys absent from global secrets and process exports |
 | `~/.geode/cli.sock` | Global | IPC socket (serve daemon) |
 
 ## Context in the 4-Layer Stack

@@ -8,15 +8,16 @@ export default function Page() {
       slug="config/basics"
       title="Configuration basics"
       titleKo="설정 기초"
-      summary="File roles after the config unification: .env for secrets, config.toml for behavior, one resolution ladder, and geode config explain as the debugging flow."
-      summaryKo="config 통합 이후의 파일 역할입니다. .env는 시크릿, config.toml은 동작 설정, 해석 사다리는 하나, 디버깅은 geode config explain으로 합니다."
+      summary="File roles after the config unification: auth.toml and .env for credentials, config.toml for behavior, one resolution ladder, and geode config explain as the debugging flow."
+      summaryKo="config 통합 이후의 파일 역할입니다. 자격 증명은 auth.toml과 .env, 동작 설정은 config.toml, 해석 사다리는 하나, 디버깅은 geode config explain으로 합니다."
     >
       <Bi
         ko={
           <>
             <p>
-              GEODE 설정의 규칙은 한 줄입니다. 시크릿은 <code>.env</code>에,
-              동작은 <code>config.toml</code>에 둡니다. 같은 키가 여러 층에
+              GEODE 설정의 규칙은 한 줄입니다. 자격 증명은 <code>auth.toml</code>(GEODE가
+              관리)이나 <code>.env</code>(직접 넣는 환경 변수)에, 동작은 <code>config.toml</code>에
+              둡니다. 같은 키가 여러 층에
               있으면 더 가까운 층이 이기고, 어느 층이 이겼는지는
               <code>geode config explain</code>이 보여줍니다.
             </p>
@@ -28,12 +29,16 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
+                  <td><code>~/.geode/auth.toml</code></td>
+                  <td><code>geode setup</code>, <code>/login</code>, <code>/key</code>가 저장하는 자격 증명. 자세한 내용은 <a href="/geode/docs/runtime/auth">인증과 OAuth</a>에 있습니다.</td>
+                </tr>
+                <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>전역 시크릿 층이자 권위를 갖는 시크릿 저장소. API 키와 자격 증명이 들어가고, 온보딩과 <code>/login</code>의 키 기록이 여기로 갑니다.</td>
+                  <td>선택 사항인 전역 env 층. 직접 넣는 환경 변수 자격 증명과 연동 시크릿을 둡니다. 같은 키는 프로젝트 <code>.env</code>보다 우선합니다.</td>
                 </tr>
                 <tr>
                   <td>프로젝트 <code>.env</code> (cwd)</td>
-                  <td>프로젝트 시크릿 층. 전역에 없는 키만 채우며 전역 키를 덮지 못합니다 (Hermes, 2026-06-15). 시크릿은 전역에 두는 것이 기본입니다.</td>
+                  <td>프로젝트 시크릿 층. 신뢰한 폴더에서만 읽습니다. 전역에 없는 키만 채우며 전역 키를 덮지 못합니다 (Hermes, 2026-06-15). 시크릿은 전역에 두는 것이 기본입니다.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -41,7 +46,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td><code>.geode/config.toml</code></td>
-                  <td>프로젝트 동작 설정. 전역 toml을 덮습니다. <code>/model</code>의 기본 저장 위치입니다.</td>
+                  <td>프로젝트 동작 설정. 전역 toml을 덮습니다. 권한을 넓히는 키는 신뢰한 폴더에서만 적용됩니다. <code>/model</code>의 기본 저장 위치입니다. 프로젝트 <code>.geode/</code>는 로컬 폴더이며 GEODE가 작업 공간의 <code>.gitignore</code>에 추가합니다.</td>
                 </tr>
                 <tr>
                   <td><code>core/config/routing.toml</code></td>
@@ -60,9 +65,10 @@ export default function Page() {
               기록합니다. 과거 릴리스가 남긴 <code>.env</code>의 모델 줄은
               피커가 toml을 쓴 직후 자동으로 지우고 알림을 출력합니다
               (<code>core/config/env_io.py</code>의 <code>remove_env</code>).
-              toml 매핑이 없는 env 전용 키
-              (<code>GEODE_GATEWAY_ENABLED</code> 등)를 손으로
-              <code>.env</code>에 적는 것은 여전히 유효한 운영 방법입니다.
+              env 전용 키는 <code>core/config/__init__.py</code>의 <code>_TOML_ENV_ONLY_FIELDS</code>에 있는
+              API 키 필드뿐이고, 나머지 필드는 모두 config.toml 키가 있습니다. 예를 들어
+              게이트웨이는 <code>~/.geode/config.toml</code>의 <code>[gateway] enabled = true</code>로
+              켜고, <code>GEODE_GATEWAY_ENABLED</code> export는 세션 한정 override로 남습니다.
             </p>
 
             <h2>확장 신뢰 정책</h2>
@@ -113,6 +119,29 @@ export default function Page() {
               고정되고 runtime health의 <code>extensions</code>에서 확인됩니다.
             </p>
 
+            <h2 id="project-trust">프로젝트 신뢰</h2>
+            <p>
+              저장소는 <code>.geode/config.toml</code>, <code>.env</code>,
+              <code>.claude/mcp_servers.json</code>을 함께 담아 올 수 있습니다.
+              GEODE는 폴더를 신뢰하기 전까지 권한을 넓히는 프로젝트 설정을
+              적용하지 않습니다. 프로젝트 <code>.env</code>, 프로젝트 MCP 서버와
+              게이트웨이 설정, 샌드박스·computer use·웹훅·알림·저장 경로 같은
+              키가 여기에 해당합니다. 모델 선택처럼 권한과 무관한 키와
+              <code>[policy.org] denied_tools</code> 같은 제한은 바로 적용됩니다.
+            </p>
+            <pre>{`geode config trust              # 현재 폴더 신뢰
+geode config trust --list       # 신뢰한 폴더 목록
+geode config trust PATH --revoke`}</pre>
+            <p>
+              신뢰 기록은 Codex처럼 전역 <code>~/.geode/config.toml</code>의
+              <code>[projects.&quot;경로&quot;]</code> 표에만 남고 프로젝트의
+              config.toml은 참조하지 않으므로, 저장소가 스스로를 신뢰할 수 없습니다.
+              <code>hitl.dangerously_skip_permissions</code>와
+              <code>computer_use.helper_path</code>는 신뢰한 폴더에서도
+              프로젝트 설정으로 읽지 않습니다. 무시된 항목은 경고 로그와
+              <code>geode config explain</code>에 표시됩니다.
+            </p>
+
             <h2>해석 사다리</h2>
             <p>
               모든 Settings 필드는 같은 사다리를 탑니다. 위가 이깁니다
@@ -120,8 +149,8 @@ export default function Page() {
             </p>
             <pre>{`1. os.environ            셸 export. 세션 한정 수동 override
 2. 전역 .env             ~/.geode/.env (시크릿 권위)
-3. 프로젝트 .env          cwd의 .env (전역에 없는 키만 채움)
-4. 프로젝트 config.toml   .geode/config.toml
+3. 프로젝트 .env          cwd의 .env (신뢰한 폴더만. 전역에 없는 키만 채움)
+4. 프로젝트 config.toml   .geode/config.toml (권한 키는 신뢰한 폴더만)
 5. 전역 config.toml      ~/.geode/config.toml
 6. 코드 기본값`}</pre>
             <p>
@@ -203,7 +232,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
             <p>
               데몬의 모델을 env로 일부러 고정하고 싶다면
               <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code>을 켭니다. C-4부터 이
-              플래그는 프로세스 env뿐 아니라 양쪽 <code>.env</code> 파일에서도
+              플래그는 프로세스 env와 전역 <code>.env</code>, 신뢰한 폴더라면 프로젝트 <code>.env</code>에서도
               읽힙니다. 승격 우선순위는 수동 export &gt; 전역 <code>.env</code>
               &gt; 프로젝트 <code>.env</code>이고 (전역이 권위, 프로젝트는 전역에
               없는 키만 채움), 파일은 이미 존재하는 프로세스 env를 덮지 않으며
@@ -237,6 +266,11 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td>의도된 동작입니다. 시크릿은 전역에 두고, 프로젝트는 전역에 없는 키만 채웁니다. <code>geode config explain &lt;KEY&gt;</code>로 WINNER 층을 확인하세요.</td>
                 </tr>
                 <tr>
+                  <td>프로젝트 <code>.env</code>, MCP 서버, 샌드박스 설정이 적용되지 않음</td>
+                  <td>신뢰하지 않은 폴더. 시작할 때 &quot;until you run `geode config trust`&quot; 경고가 남습니다</td>
+                  <td>저장소 내용을 확인한 뒤 그 폴더에서 <code>geode config trust</code>를 실행하고 새 세션을 엽니다.</td>
+                </tr>
+                <tr>
                   <td>대체 전역 경로에서 <code>/model</code> 선택이 남지 않음</td>
                   <td>구 버전 피커가 기본 전역 파일에 기록</td>
                   <td>업그레이드하고 저장 확인 화면의 경로와 <code>geode config explain</code>의 전역 경로를 비교합니다.</td>
@@ -247,7 +281,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
             <h2>다음</h2>
             <ul>
               <li><a href="/geode/docs/config/reference">config.toml 레퍼런스</a>. 전체 키 목록입니다.</li>
-              <li><a href="/geode/docs/runtime/auth">인증과 OAuth</a>. 시크릿 층에 무엇이 들어가는지 다룹니다.</li>
+              <li><a href="/geode/docs/runtime/auth">인증과 OAuth</a>. 자격 증명 저장과 로그인을 다룹니다.</li>
               <li><a href="/geode/docs/runtime/llm/providers">LLM 라우팅</a>. routing.toml이 소비되는 곳입니다.</li>
             </ul>
           </>
@@ -255,8 +289,9 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
         en={
           <>
             <p>
-              GEODE configuration follows one rule. Secrets live in
-              <code>.env</code>, behavior lives in <code>config.toml</code>.
+              GEODE configuration follows one rule. Credentials live in <code>auth.toml</code>,
+              which GEODE manages, or in <code>.env</code> as env vars you set by hand.
+              Behavior lives in <code>config.toml</code>.
               When the same key exists in several layers, the closer layer
               wins, and <code>geode config explain</code> shows you which one
               won.
@@ -269,12 +304,16 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               </thead>
               <tbody>
                 <tr>
+                  <td><code>~/.geode/auth.toml</code></td>
+                  <td>Credentials stored by <code>geode setup</code>, <code>/login</code> and <code>/key</code>. See <a href="/geode/docs/runtime/auth">Auth and OAuth</a>.</td>
+                </tr>
+                <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>Global secrets layer, the authoritative secret store. API keys and credentials; onboarding and <code>/login</code> write keys here.</td>
+                  <td>Optional global env layer: env-var credentials and integration secrets you set by hand. For the same key it outranks the project <code>.env</code>.</td>
                 </tr>
                 <tr>
                   <td>Project <code>.env</code> (cwd)</td>
-                  <td>Project secrets layer. Fills only the keys the global file lacks; it never shadows a global key (Hermes, 2026-06-15). Keep secrets in the global file by default.</td>
+                  <td>Project secrets layer, read only in a trusted folder. Fills only the keys the global file lacks; it never shadows a global key (Hermes, 2026-06-15). Keep secrets in the global file by default.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -282,7 +321,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                 </tr>
                 <tr>
                   <td><code>.geode/config.toml</code></td>
-                  <td>Project behavior settings. Outranks the global toml. Default write target of <code>/model</code>.</td>
+                  <td>Project behavior settings. Outranks the global toml; keys that widen capability apply only in a trusted folder. Default write target of <code>/model</code>. The project <code>.geode/</code> folder is local; GEODE adds it to the workspace <code>.gitignore</code>.</td>
                 </tr>
                 <tr>
                   <td><code>core/config/routing.toml</code></td>
@@ -301,10 +340,11 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               <code>config.toml</code> only. Model lines left behind by older
               releases are auto-removed right after the picker&apos;s toml
               write, with a printed notice (<code>remove_env</code> in
-              <code>core/config/env_io.py</code>). Hand-writing env-only keys
-              that have no toml mapping (<code>GEODE_GATEWAY_ENABLED</code>
-              and friends) into <code>.env</code> remains a valid operator
-              move.
+              <code>core/config/env_io.py</code>). Only the API-key fields are env-only
+              (<code>_TOML_ENV_ONLY_FIELDS</code> in <code>core/config/__init__.py</code>);
+              every other field has a config.toml key. The gateway, for example, is
+              enabled with <code>[gateway] enabled = true</code> in <code>~/.geode/config.toml</code>,
+              and an exported <code>GEODE_GATEWAY_ENABLED</code> stays a session override.
             </p>
 
             <h2>Extension trust policy</h2>
@@ -356,6 +396,31 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               appear under <code>extensions</code> in runtime health.
             </p>
 
+            <h2 id="project-trust">Project trust</h2>
+            <p>
+              A repository can ship <code>.geode/config.toml</code>,
+              <code>.env</code> and <code>.claude/mcp_servers.json</code>. Until
+              you trust the folder, GEODE does not apply project settings that
+              widen what the agent may do: the project <code>.env</code>, project
+              MCP servers and gateway config, and keys such as the sandbox mode,
+              computer use, webhooks, notifications and storage paths. Keys that
+              grant nothing, such as the model choice, and restrictions such as
+              <code>[policy.org] denied_tools</code> apply immediately.
+            </p>
+            <pre>{`geode config trust              # trust the current folder
+geode config trust --list       # list trusted folders
+geode config trust PATH --revoke`}</pre>
+            <p>
+              As in Codex, trust is recorded only in the global
+              <code>~/.geode/config.toml</code> under
+              <code>[projects.&quot;path&quot;]</code>, and a project&apos;s own
+              config.toml is never consulted, so a repository cannot trust itself.
+              <code>hitl.dangerously_skip_permissions</code> and
+              <code>computer_use.helper_path</code> are never read from project
+              config, even in a trusted folder. Ignored entries appear in a
+              warning log and in <code>geode config explain</code>.
+            </p>
+
             <h2>The resolution ladder</h2>
             <p>
               Every Settings field rides the same ladder. Higher wins
@@ -363,8 +428,8 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
             </p>
             <pre>{`1. os.environ            shell exports. session-scoped manual override
 2. global .env           ~/.geode/.env (authoritative secrets)
-3. project .env          .env in the cwd (fills only keys global lacks)
-4. project config.toml   .geode/config.toml
+3. project .env          .env in the cwd (trusted folders only; fills only keys global lacks)
+4. project config.toml   .geode/config.toml (capability keys: trusted folders only)
 5. global config.toml    ~/.geode/config.toml
 6. code default`}</pre>
             <p>
@@ -381,7 +446,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
             </p>
             <p>
               Narrowed to model resolution, the same ladder reads: CLI args
-              &gt; env layer (os.environ plus both .env files) &gt; project
+              &gt; env layer (os.environ plus the .env files) &gt; project
               toml &gt; global toml &gt; routing default. Because the env
               layer outranks every toml, a single forgotten <code>.env</code>
               line masks all future toml edits. That is the classic trap this
@@ -453,8 +518,8 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
             <p>
               To pin the daemon&apos;s model via env on purpose, set
               <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code>. Since C-4 the flag is
-              honored from the process env or from either <code>.env</code>
-              file. Promotion precedence is manual exports &gt; global
+              honored from the process env, the global <code>.env</code>, or, in a trusted
+              folder, the project <code>.env</code>. Promotion precedence is manual exports &gt; global
               <code>.env</code> &gt; project <code>.env</code> (global is
               authoritative; the project file only fills keys global lacks);
               files never clobber pre-existing process env, and empty values
@@ -488,6 +553,11 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td>This is intended. Keep secrets in the global file; the project file only fills keys global lacks. Run <code>geode config explain &lt;KEY&gt;</code> to see the WINNER layer.</td>
                 </tr>
                 <tr>
+                  <td>The project <code>.env</code>, MCP servers or sandbox setting do not apply</td>
+                  <td>The folder is not trusted. Startup logs a warning ending in &quot;until you run `geode config trust`&quot;</td>
+                  <td>Review the repository, run <code>geode config trust</code> in that folder, and open a new session.</td>
+                </tr>
+                <tr>
                   <td>A global <code>/model</code> pick disappears with a redirected config</td>
                   <td>An older picker wrote to the default global file</td>
                   <td>Upgrade and compare the save-confirmation path with the global path in <code>geode config explain</code>.</td>
@@ -498,7 +568,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
             <h2>Next</h2>
             <ul>
               <li><a href="/geode/docs/config/reference">config.toml reference</a>. The full key inventory.</li>
-              <li><a href="/geode/docs/runtime/auth">Auth and OAuth</a>. What goes into the secrets layer.</li>
+              <li><a href="/geode/docs/runtime/auth">Auth and OAuth</a>. Credential storage and login.</li>
               <li><a href="/geode/docs/runtime/llm/providers">LLM routing</a>. Where routing.toml is consumed.</li>
             </ul>
           </>

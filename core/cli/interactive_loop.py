@@ -120,7 +120,14 @@ def _render_ipc_response(response: dict[str, Any], *, streamed: bool = False) ->
     from core.ipc_protocol import is_ipc_error
 
     if is_ipc_error(response):
-        message = response.get("message") or response.get("error") or response.get("termination")
+        # A failed turn (rate limit, context exhausted, ...) carries its
+        # diagnostic and next step in ``text``; the bare code explains nothing.
+        message = (
+            (rtype == "result" and response.get("text"))
+            or response.get("message")
+            or response.get("error")
+            or response.get("termination")
+        )
         console.print(f"\n  [error]{escape(str(message or 'Unknown error'))}[/error]\n")
         return
     if response.get("status") == "cancelled" or response.get("termination") == "user_cancelled":

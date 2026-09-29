@@ -511,7 +511,7 @@ def _build_user_context(profile: Any = None) -> str:
     Sources:
       ~/.geode/user_profile/profile.md   — role, expertise, bio
       ~/.geode/user_profile/preferences.json — language, output format
-      ~/.geode/identity/career.toml      — career summary
+      ~/.geode/user_profile/career.toml  — career summary
 
     IMPORTANT: This is the USER's profile, not GEODE's identity.
     GEODE's identity comes from GEODE.md (G1 layer).
