@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Changed\n\n- **One provider-reported cost rule.** `validate_reported_cost_usd` beside\n  `UsageSummary` in `core/llm/adapters/base.py` now owns the reported-cost check for\n  `UsageSummary`, `TokenTracker.record` and the TypeSafe adapter, replacing\n  three copies. `TokenTracker.record` now raises `TypeError` for a non-numeric\n  cost, matching `UsageSummary`."
+    "body": "### Changed\n\n- **One provider-reported cost rule.** `validate_reported_cost_usd` beside\n  `UsageSummary` in `core/llm/adapters/base.py` now owns the reported-cost check for\n  `UsageSummary`, `TokenTracker.record` and the TypeSafe adapter, replacing\n  three copies. `TokenTracker.record` now raises `TypeError` for a non-numeric\n  cost, matching `UsageSummary`.\n\n### Fixed\n\n- **Escaped runtime prompt sections.** A shared `render_prompt_section` helper\n  now frames caller-supplied session directives, memory-recall, tool-hint and\n  rubric-warning blocks, platform hints and model guidance, so stored text or a\n  tool error can no longer close its envelope or open a sibling section. Memory\n  layers and verification continuations use the same helper; authored model\n  card and identity text stay verbatim."
   },
   {
     "version": "1.0.31",
