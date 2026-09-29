@@ -90,8 +90,10 @@ export default function Page() {
 
             <h2>주입 경계와 현재 상태</h2>
             <p>
-              Unreleased: 프로필·프로젝트 기억·학습·저장 규칙의 데이터는
-              XML 문자로 이스케이프합니다. 후보 평가와 reflection도 작업·상태·관측을
+              Unreleased: 프로필·프로젝트 기억·학습·저장 규칙의 데이터와
+              호출자가 넘긴 세션 지시, 기억 회상·도구 실패 힌트·루브릭 경고 블록은
+              <code>core/llm/prompt_assembler.py</code>의 공용 렌더러가 XML 문자로
+              이스케이프합니다. 후보 평가와 reflection도 작업·상태·관측을
               별도 데이터 영역으로 전달합니다. 태그는 내용의 경계를 표현할 뿐,
               권한 검사나 프롬프트 주입 방어의 성공을 보장하지 않습니다.
             </p>
@@ -311,7 +313,10 @@ export default function Page() {
             <h2>Injection boundaries and current state</h2>
             <p>
               Unreleased: profile, project-memory, learning, and stored-rule
-              data are XML-escaped. Candidate selection and reflection also
+              data, caller-supplied session directives, and memory-recall,
+              tool-failure and rubric-warning blocks are XML-escaped by the
+              shared renderer in <code>core/llm/prompt_assembler.py</code>.
+              Candidate selection and reflection also
               separate task, state, and observations into data regions. Tags
               express content boundaries; they do not enforce authorization
               or establish resistance to prompt injection.
