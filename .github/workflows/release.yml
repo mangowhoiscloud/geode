@@ -139,6 +139,11 @@ jobs:
           verify_prompt_integrity(raise_on_drift=True)
           PY
 
+      - name: Install ffprobe for replay stream verification
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+
       - name: Official docs generation gate
         run: uv run python scripts/check_official_docs.py
 

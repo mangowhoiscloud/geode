@@ -56,6 +56,14 @@ functional change.
   layers and verification continuations use the same helper; authored model
   card and identity text stay verbatim.
 
+### Infrastructure
+
+- **Release validation installs ffprobe.** The release docs gate runs the full
+  site build, whose terminal-replay check needs `ffprobe`; `release.yml` now
+  installs it like `pages.yml`. The v1.0.31 release run failed at this step and
+  published nothing. A workflow contract test pins the order for every job that
+  builds the site.
+
 ## [1.0.31] - 2026-09-29
 
 This release applies a repository's own configuration only after you trust the
