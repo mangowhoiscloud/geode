@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
 import { marked } from "marked";
 import { notFound } from "next/navigation";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
+import { parseSeedMarkdown } from "@/lib/geode-docs/seed-frontmatter";
 
 const REPO_ROOT = path.join(process.cwd(), "..");
 const SEEDS_DIR = path.join(REPO_ROOT, "docs", "self-improving", "petri-bundle", "seeds");
@@ -95,7 +95,7 @@ function loadSeed(run_id: string, candidate_id: string): LoadedSeed | null {
   }
   if (!mdPath) return null;
   const raw = fs.readFileSync(mdPath, "utf-8");
-  const parsed = matter(raw);
+  const parsed = parseSeedMarkdown(raw);
   const body_html = marked.parse(parsed.content, { async: false }) as string;
   const raw_path =
     `${RAW_BUNDLE_URL}${run_id}/` +
@@ -147,7 +147,7 @@ function loadSeed(run_id: string, candidate_id: string): LoadedSeed | null {
     run_id,
     candidate_id,
     kind,
-    frontmatter: parsed.data as Record<string, unknown>,
+    frontmatter: parsed.data,
     body_html,
     raw_path,
     critic,

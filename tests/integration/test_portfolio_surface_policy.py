@@ -59,8 +59,8 @@ def test_current_routes_share_the_landing_without_restyling_archives() -> None:
     alias_layout = PORTFOLIO_PATH.with_name("layout.tsx").read_text(encoding="utf-8")
     for page in (root_page, alias_page):
         assert "<GeodeLanding />" in page
-        assert 'title: "GEODE | An agent runtime for tool-driven work"' in page
-    assert "An agent runtime for tool-driven work" not in alias_layout
+        assert 'title: "GEODE | Autonomous Agent Harness & Experimental Loop"' in page
+    assert "Autonomous Agent Harness & Experimental Loop" not in alias_layout
     assert '"@type": "SoftwareSourceCode"' in root_page
 
 
