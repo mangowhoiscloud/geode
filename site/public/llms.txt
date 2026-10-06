@@ -43,6 +43,7 @@ Version v1.0.32. Last sync 2026-09-29. Docs links point to clean markdown twins 
 
 ## Experimental Loop
 
+- [Harness, experiments, and evidence](https://mangowhoiscloud.github.io/geode/docs/research/overview.md): Scaffold Search, Seed Scenario Generation, SIL, and Jev: questions, design, observations, and limits. Compare SelfSearch and DGM without conflating methods.
 - [Scaffold search](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md): Mutate the scaffold, audit with Petri, and promote or revert using an uncertainty-aware fitness margin. Model weights remain unchanged.
 - [Seed Scenario Generation](https://mangowhoiscloud.github.io/geode/docs/capabilities/co-scientist.md): A nine-role generation loop that grows the evaluation scenario corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer.
 - [Seed pipeline](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline.md): Regenerate the seed corpus each generation: picker, orchestrator, manifest, cost preview, and frontier-band survivor selection.

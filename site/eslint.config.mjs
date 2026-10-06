@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Verified upstream distribution; its local patch has a dedicated contract test.
+    "vendor/eslint-plugin-next/dist/**",
   ]),
 ]);
 

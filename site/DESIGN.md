@@ -10,6 +10,52 @@
 
 ## Current landing and docs contract (2026-09-08)
 
+### Harness and research entry (2026-10-06)
+
+The landing leads with **Autonomous Agent Harness** and its separate
+**Experimental Loop**. Self-hosted describes deployment, not the product's
+whole identity. A solid runtime frame and dashed experimental frame show
+execution observations flowing into research. The caption explicitly separates
+search acceptance, independent validation, and release. This is a conceptual
+map, never an animated/live status display.
+
+Keep the existing `#0B0A10` substrate, `#14121B` surface, `#F2EEF5` ink,
+`#ABA4BC` secondary text, and `#F49BC4` identity accent. The current landing
+uses Outfit headings, Inter body, and Galmuri for the brand; preserve that
+hierarchy and the existing rose primary action. Do not reintroduce the
+historical full-rose choreography below. New sections add no automatic motion.
+Desktop pairs the proposition with the two-layer map; mobile stacks them with
+both layer names in the opening text. Research questions use flat rows rather
+than four identical feature cards. Explicit KO/EN controls retain deep links.
+
+Progressive disclosure is navigational: proposition → question → study →
+source. The new `research/overview` page sits in the existing Experimental Loop
+section, is directly linked from the docs index and the runtime/research reader
+area, and uses visible question/design/observation/limit sections. The sitemap
+still owns routes. Jev points to the existing frozen reader and matching
+language; no report, PDF, or historical result is rewritten. SIL is a Scaffold
+Search implementation flow, not a separately proven improvement result.
+
+Official references inspected on 2026-10-06 informed information hierarchy:
+
+- [LangGraph overview](https://docs.langchain.com/oss/python/langgraph/overview):
+  explains runtime/framework/harness responsibilities before deeper references.
+  GEODE adopts the explicit two-layer distinction.
+- [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/): a small
+  initial model, quickstart, then task-to-document routing. GEODE preserves an
+  install action and adds question-led research entry points.
+- [OpenHands introduction](https://docs.openhands.dev/overview/introduction):
+  maps components to responsibilities and source. GEODE separates implementation
+  links from the experimental verdicts they do and do not support.
+- [Hermes docs](https://hermes-agent.nousresearch.com/docs/): distinct starting,
+  usage, developer, and reference paths. GEODE retains its four shallow reader
+  areas and visible chapter lists instead of adding another navigation tree.
+
+These are information-design references, not copied brands or components.
+Scientific comparisons are separately sourced on the research page: SelfSearch
+uses no downstream reward during search; GEODE's evaluator-guided experiments
+are not retrospectively described as a reproduction or direct influence.
+
 The restored landing replaces the historical full-rose choreography below on
 `/` and `/portfolio/` only. Both routes share `landing-page.tsx`; the
 author/about/archive surfaces retain their existing design. Keep the GEODE

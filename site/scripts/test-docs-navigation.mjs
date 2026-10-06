@@ -56,7 +56,7 @@ const loop = DOCS_SITEMAP.find((section) => section.id === "04-self-improving");
 assert.equal(loop.title, "Experimental Loop");
 const chapters = docChapters(loop);
 assert.equal(chapters.length, 4);
-assert.deepEqual(chapters.map((chapter) => chapter.pages.length), [3, 5, 2, 2]);
+assert.deepEqual(chapters.map((chapter) => chapter.pages.length), [4, 5, 2, 2]);
 assert.equal(chapters.find((chapter) => chapter.id === "evaluation").pages[0].slug, "verification/evaluation", "Explain evaluation authority before Petri-specific execution");
 for (const section of DOCS_SITEMAP.filter((section) => section.chapters)) {
   assert.equal(new Set(section.chapters.map((chapter) => chapter.id)).size, section.chapters.length);
@@ -70,7 +70,7 @@ for (const query of ["Published evidence", "공개 결과"]) {
   assert.deepEqual(docChapters(filtered).map((chapter) => chapter.id), ["evidence"]);
   assert.equal(filtered.pages.length, 2);
 }
-assert.equal(loop.pages.filter((page) => matchesDocQuery(page, "Experimental Loop", loop)).length, 12);
+assert.equal(loop.pages.filter((page) => matchesDocQuery(page, "Experimental Loop", loop)).length, 13);
 assert.deepEqual(docChapters({ ...loop, pages: [] }), []);
 assert.equal(matchesDocPath("", ""), true);
 assert.equal(matchesDocPath("", "petri/seeds"), false);
@@ -168,3 +168,39 @@ for (const slug of ["verification/evaluation", "benchmarks/terminal-bench", "pet
 }
 
 console.log(`Docs navigation: ${pages.length} routes in ${DOCS_SITEMAP.length} topics across 4 tasks; chapter membership/filtering, current paths, locale links, and parser/adjacency parity passed.`);
+
+// Render the research entry in both locales to verify its actual deep links.
+for (const locale of ["ko", "en"]) {
+  const moduleCache = new Map();
+  const researchRequire = (id) => {
+    if (id === "next/link") return function LinkStub({ href, children, ...props }) { return createElement("a", { ...props, href }, children); };
+    if (id === "@/components/geode-docs/docs-shell") return { DocsShell: ({ children }) => children };
+    if (id === "@/components/geode/locale-context") return { useLocale: () => locale, t: (language, ko, en) => language === "ko" ? ko : en };
+    if (id.endsWith(".css")) return {};
+    if (id === "@/components/geode/loop-map") return loadResearchModule("components/geode/loop-map.tsx");
+    return require(id);
+  };
+  function loadResearchModule(file) {
+    if (moduleCache.has(file)) return moduleCache.get(file);
+    const exports = {};
+    const { outputText } = ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8"), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
+    });
+    new Function("require", "exports", outputText)(researchRequire, exports);
+    moduleCache.set(file, exports);
+    return exports;
+  }
+  const html = renderToStaticMarkup(createElement(loadResearchModule("app/docs/research/overview/page.tsx").default));
+  const anchors = new Set([...html.matchAll(/id="([^"]+)"/g)].map(match => match[1]));
+  for (const href of [...html.matchAll(/href="([^"]+)"/g)].map(match => match[1].replaceAll("&amp;", "&"))) {
+    if (href.startsWith("#")) assert(anchors.has(href.slice(1)), `Research anchor exists: ${href}`);
+    if (href.startsWith("/docs/")) {
+      const url = new URL(href, "https://docs.test");
+      assert(findPage(url.pathname.slice("/docs/".length)), `Research link resolves: ${url}`);
+      assert.equal(url.searchParams.get("lang"), locale, `Research link preserves ${locale}: ${url}`);
+    }
+  }
+  assert(html.includes(`/geode/resaerch/jev-system1-offloading/?lang=${locale}`), "Preserve the frozen Jev reader route and language");
+  for (const query of ["SIL", "Jev", "SelfSearch"]) assert(matchesDocQuery(findPage("research/overview").page, query), `Research is discoverable by ${query}`);
+}
+console.log("Research entry: bilingual route, anchor, frozen-reader and discoverability contracts passed.");

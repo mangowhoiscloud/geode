@@ -47,11 +47,31 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Harness and experimental research entry points.** The bilingual landing
+  and docs now introduce the Autonomous Agent Harness alongside its Experimental
+  Loop, with a two-layer map and question-led routes to Scaffold Search, Seed
+  Scenario Generation, SIL, and Jev. Research observations retain their source
+  pins and limits; local selection, independent validation, and release remain
+  distinct. The landing now exposes an explicit KO/EN control; Escape closes
+  mobile docs navigation even while its search field contains a query.
+
 ### Security
 
-- PyJWT is locked at 2.14.0, which fixes CVE-2026-102274. GEODE does not import
-  it directly; `mcp` and `supabase-auth` depend on it. The runtime dependency
-  audit in CI had failed on 2.13.0 for every code change.
+- PyJWT is locked at 2.15.1 and urllib3 at 2.8.0 to address the runtime
+  dependency audit findings. PyJWT is transitive through `mcp` and
+  `supabase-auth`; the update retains the earlier CVE-2026-102274 fix and
+  adds the inconsistent OKP key fix and token-padding compatibility repair.
+- Site dependencies use patched Next.js 16.3.8, KaTeX 0.18.2,
+  brace-expansion, and source-map-js. Remove the unused react-katex wrapper
+  and replace gray-matter's legacy YAML chain with a YAML 2.9.1 frontmatter
+  parser, preserving published seed metadata and bodies.
+- Remove the unpatched braces dependency from Next's ESLint plugin through a
+  source-pinned local root-directory glob replacement. Preserve upstream rules,
+  configuration severities and tested pattern/diagnostic behavior; reject
+  excessive brace nesting. Keep the audit gate and document the patch's source,
+  licenses, integrity checks and official-release removal procedure.
 
 ## [1.0.32] - 2026-09-29
 

@@ -1,0 +1,22 @@
+{
+  "name": "@next/eslint-plugin-next",
+  "version": "16.3.8-geode.1",
+  "private": true,
+  "description": "GEODE local patch of the official Next.js ESLint plugin; see README.geode.md.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "url": "vercel/next.js",
+    "directory": "packages/eslint-plugin-next"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@eslint-community/eslint-utils": "4.9.1",
+    "glob": "13.0.6",
+    "brace-expansion": "5.0.12",
+    "picomatch": "4.0.4"
+  }
+}

@@ -1,0 +1,267 @@
+{
+  "roots": [
+    [
+      "."
+    ],
+    [
+      "."
+    ],
+    [
+      "."
+    ],
+    [],
+    [
+      "apps/web"
+    ],
+    [
+      "apps/web"
+    ],
+    [
+      "apps/web"
+    ],
+    [
+      "apps/admin",
+      "apps/linked",
+      "apps/router",
+      "apps/web"
+    ],
+    [
+      "apps/admin",
+      "apps/admin/src",
+      "apps/admin/src/pages",
+      "apps/linked",
+      "apps/linked/pages",
+      "apps/router",
+      "apps/router/app",
+      "apps/router/app/account",
+      "apps/web",
+      "apps/web/pages"
+    ],
+    [
+      "apps/web"
+    ],
+    [
+      "apps/admin",
+      "apps/web"
+    ],
+    [
+      "apps/admin",
+      "apps/web"
+    ],
+    [
+      "apps/admin",
+      "apps/router",
+      "apps/web"
+    ],
+    [
+      "apps/admin",
+      "apps/web"
+    ],
+    [
+      "apps/.hidden",
+      "apps/linked",
+      "apps/router",
+      "apps/web"
+    ],
+    [
+      "apps/.hidden"
+    ],
+    [
+      "apps/.hidden"
+    ],
+    [],
+    [],
+    [
+      "apps/web"
+    ],
+    [
+      "packages/01",
+      "packages/02",
+      "packages/03"
+    ],
+    [
+      "steps/1",
+      "steps/3",
+      "steps/5"
+    ],
+    [],
+    [
+      "apps/admin",
+      "apps/web"
+    ],
+    [
+      "apps/admin",
+      "apps/linked",
+      "apps/router",
+      "apps/web"
+    ],
+    [
+      "apps/admin",
+      "apps/linked",
+      "apps/router",
+      "apps/web"
+    ],
+    [
+      "apps/web"
+    ],
+    [
+      "apps/linked"
+    ],
+    [
+      "apps/linked/pages"
+    ],
+    []
+  ],
+  "diagnostics": [
+    [
+      {
+        "ruleId": "@next/next/no-html-link-for-pages",
+        "severity": 2,
+        "message": "Do not use an `<a>` element to navigate to `/about/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages"
+      }
+    ],
+    [
+      {
+        "ruleId": "@next/next/no-html-link-for-pages",
+        "severity": 2,
+        "message": "Do not use an `<a>` element to navigate to `/dashboard/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages"
+      }
+    ],
+    [],
+    [
+      {
+        "ruleId": "@next/next/no-html-link-for-pages",
+        "severity": 2,
+        "message": "Do not use an `<a>` element to navigate to `/about/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages"
+      }
+    ],
+    [
+      {
+        "ruleId": "@next/next/no-html-link-for-pages",
+        "severity": 2,
+        "message": "Do not use an `<a>` element to navigate to `/two/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages"
+      }
+    ],
+    [
+      {
+        "ruleId": "@next/next/no-html-link-for-pages",
+        "severity": 2,
+        "message": "Do not use an `<a>` element to navigate to `/three/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages"
+      }
+    ],
+    [
+      {
+        "ruleId": "@next/next/no-html-link-for-pages",
+        "severity": 2,
+        "message": "Do not use an `<a>` element to navigate to `/about/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages"
+      }
+    ],
+    [],
+    [],
+    [],
+    [],
+    []
+  ],
+  "rules": [
+    "google-font-display",
+    "google-font-preconnect",
+    "inline-script-id",
+    "next-script-for-ga",
+    "no-assign-module-variable",
+    "no-async-client-component",
+    "no-before-interactive-script-outside-document",
+    "no-css-tags",
+    "no-document-import-in-page",
+    "no-duplicate-head",
+    "no-head-element",
+    "no-head-import-in-document",
+    "no-html-link-for-pages",
+    "no-img-element",
+    "no-location-assign-relative-destination",
+    "no-page-custom-font",
+    "no-script-component-in-head",
+    "no-styled-jsx-in-document",
+    "no-sync-scripts",
+    "no-title-in-document-head",
+    "no-typos",
+    "no-unwanted-polyfillio"
+  ],
+  "configs": {
+    "recommended-legacy": {
+      "@next/next/google-font-display": "warn",
+      "@next/next/google-font-preconnect": "warn",
+      "@next/next/next-script-for-ga": "warn",
+      "@next/next/no-async-client-component": "warn",
+      "@next/next/no-before-interactive-script-outside-document": "warn",
+      "@next/next/no-css-tags": "warn",
+      "@next/next/no-head-element": "warn",
+      "@next/next/no-html-link-for-pages": "warn",
+      "@next/next/no-img-element": "warn",
+      "@next/next/no-location-assign-relative-destination": "warn",
+      "@next/next/no-page-custom-font": "warn",
+      "@next/next/no-styled-jsx-in-document": "warn",
+      "@next/next/no-sync-scripts": "warn",
+      "@next/next/no-title-in-document-head": "warn",
+      "@next/next/no-typos": "warn",
+      "@next/next/no-unwanted-polyfillio": "warn",
+      "@next/next/inline-script-id": "error",
+      "@next/next/no-assign-module-variable": "error",
+      "@next/next/no-document-import-in-page": "error",
+      "@next/next/no-duplicate-head": "error",
+      "@next/next/no-head-import-in-document": "error",
+      "@next/next/no-script-component-in-head": "error"
+    },
+    "core-web-vitals-legacy": {
+      "@next/next/no-html-link-for-pages": "error",
+      "@next/next/no-sync-scripts": "error"
+    },
+    "recommended": {
+      "@next/next/google-font-display": "warn",
+      "@next/next/google-font-preconnect": "warn",
+      "@next/next/next-script-for-ga": "warn",
+      "@next/next/no-async-client-component": "warn",
+      "@next/next/no-before-interactive-script-outside-document": "warn",
+      "@next/next/no-css-tags": "warn",
+      "@next/next/no-head-element": "warn",
+      "@next/next/no-html-link-for-pages": "warn",
+      "@next/next/no-img-element": "warn",
+      "@next/next/no-location-assign-relative-destination": "warn",
+      "@next/next/no-page-custom-font": "warn",
+      "@next/next/no-styled-jsx-in-document": "warn",
+      "@next/next/no-sync-scripts": "warn",
+      "@next/next/no-title-in-document-head": "warn",
+      "@next/next/no-typos": "warn",
+      "@next/next/no-unwanted-polyfillio": "warn",
+      "@next/next/inline-script-id": "error",
+      "@next/next/no-assign-module-variable": "error",
+      "@next/next/no-document-import-in-page": "error",
+      "@next/next/no-duplicate-head": "error",
+      "@next/next/no-head-import-in-document": "error",
+      "@next/next/no-script-component-in-head": "error"
+    },
+    "core-web-vitals": {
+      "@next/next/google-font-display": "warn",
+      "@next/next/google-font-preconnect": "warn",
+      "@next/next/next-script-for-ga": "warn",
+      "@next/next/no-async-client-component": "warn",
+      "@next/next/no-before-interactive-script-outside-document": "warn",
+      "@next/next/no-css-tags": "warn",
+      "@next/next/no-head-element": "warn",
+      "@next/next/no-html-link-for-pages": "error",
+      "@next/next/no-img-element": "warn",
+      "@next/next/no-location-assign-relative-destination": "warn",
+      "@next/next/no-page-custom-font": "warn",
+      "@next/next/no-styled-jsx-in-document": "warn",
+      "@next/next/no-sync-scripts": "error",
+      "@next/next/no-title-in-document-head": "warn",
+      "@next/next/no-typos": "warn",
+      "@next/next/no-unwanted-polyfillio": "warn",
+      "@next/next/inline-script-id": "error",
+      "@next/next/no-assign-module-variable": "error",
+      "@next/next/no-document-import-in-page": "error",
+      "@next/next/no-duplicate-head": "error",
+      "@next/next/no-head-import-in-document": "error",
+      "@next/next/no-script-component-in-head": "error"
+    }
+  }
+}

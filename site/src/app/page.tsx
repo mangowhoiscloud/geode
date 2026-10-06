@@ -8,12 +8,12 @@ import { JsonLd } from "@/components/json-ld";
 import { GEODE_SOT } from "@/data/geode/sot";
 
 export const metadata: Metadata = {
-  title: "GEODE | An agent runtime for tool-driven work",
+  title: "GEODE | Autonomous Agent Harness & Experimental Loop",
   description:
-    "Run tasks with your models and tools. Inspect execution records and source-bound Harbor / Terminal-Bench comparisons against native Codex.",
+    "An autonomous agent harness with an outer Experimental Loop. Explore scaffold search, scenario generation, and source-bound evaluation evidence.",
   openGraph: {
-    title: "GEODE | An agent runtime for tool-driven work",
-    description: "Run the task. Inspect the result. A self-hosting runtime with public execution evidence.",
+    title: "GEODE | Autonomous Agent Harness & Experimental Loop",
+    description: "Autonomous task execution. Experimental scaffold search. Inspect the design, observations, and limits.",
     type: "website",
   },
   alternates: { canonical: "https://mangowhoiscloud.github.io/geode/" },
@@ -29,7 +29,7 @@ export default function Page() {
           "@id": "https://mangowhoiscloud.github.io/geode/#software",
           name: "GEODE",
           description:
-            "GEODE is an agent runtime for long-running tool work and evaluation-ready execution evidence.",
+            "GEODE is an autonomous agent harness with a separate Experimental Loop for scaffold search and evaluation.",
           version: GEODE_SOT.version,
           codeRepository: "https://github.com/mangowhoiscloud/geode",
           programmingLanguage: "Python",
