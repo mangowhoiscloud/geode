@@ -27,6 +27,9 @@ html:has(.geode-landing) { scroll-behavior: auto; }
 .landing-desktop-nav { display: flex; gap: 26px; align-items: center; }
 .landing-desktop-nav a, .landing-footer-links a { color: var(--ink-2); font-size: 14px; text-decoration: none; padding-block: 12px; }
 .landing-desktop-nav a:hover, .landing-footer-links a:hover { color: var(--acc-artifact); }
+.landing-locale { display: flex; gap: 2px; margin-left: auto; }
+.landing-locale button { min-width: 40px; min-height: 44px; cursor: pointer; color: var(--ink-2); font-size: 12px; border-radius: 4px; }
+.landing-locale button[aria-pressed="true"] { color: var(--ink); background: var(--paper-2); }
 .landing-mobile-menu { display: none; }
 .geode-landing .landing-header :is(a, button):focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; border-radius: 4px; }
 .landing-menu-dialog { position: fixed; inset: 12px 12px auto; width: calc(100% - 24px); max-width: 440px; margin: 0 0 0 auto; padding: 0; max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); color: var(--ink); }
@@ -96,6 +99,17 @@ html:has(.landing-menu-dialog[open]) { overflow: hidden; }
 .landing-evidence-limits { max-width: 76ch; margin-top: 32px; padding: 24px 0 0; border-top: 1px solid var(--rule-soft); color: var(--ink-2); font-size: 14px; line-height: 1.75; }
 .landing-evidence-limits h3 { color: var(--ink); font-size: 15px; font-weight: 500; }
 .landing-loop-section { padding-block: 52px 90px; }
+.landing-run-section { display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 68px; padding-block: 72px; border-top: 1px solid var(--rule); }
+.landing-run-section .landing-section-heading { margin-bottom: 0; }
+.landing-run-section .landing-text-link { margin-top: 20px; }
+.landing-research-list article { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 36px; padding-block: 30px; border-top: 1px solid var(--rule); }
+.landing-research-name { color: var(--acc-artifact); font-size: 15px; line-height: 1.6; }
+.landing-research-list h3 { font-size: 24px; line-height: 1.4; }
+.landing-research-list article > div > p { max-width: 65ch; color: var(--ink-2); margin-top: 12px; line-height: 1.75; }
+.landing-research-list .landing-text-link { margin-top: 12px; font-size: 14px; }
+.landing-research-context { display: flex; align-items: center; gap: 40px; padding-top: 28px; border-top: 1px solid var(--rule); color: var(--ink-2); font-size: 14px; line-height: 1.75; }
+.landing-research-context p { max-width: 70ch; }
+.landing-research-context a { flex-shrink: 0; }
 .landing-loop { padding: 36px 0 0; }
 .landing-loop-stages { display: grid; grid-template-columns: repeat(4, 1fr); list-style: none; margin: 0; padding: 0; }
 .landing-loop-stages li { display: flex; flex-direction: column; position: relative; padding-right: 35px; }
@@ -127,10 +141,14 @@ html:has(.landing-menu-dialog[open]) { overflow: hidden; }
 .landing-footer-brand > span { font: 700 22px var(--font-pixel), monospace; }
 .landing-footer-links { display: flex; flex-wrap: wrap; gap: 6px 26px; }
 @media (max-width: 1023px) {
+  .landing-desktop-nav { display: none; }
+  .landing-mobile-menu { min-height: 44px; display: inline-flex; gap: 8px; align-items: center; justify-content: center; padding: 8px; border: 0; border-radius: 4px; color: var(--ink-2); cursor: pointer; font-size: 14px; }
+
   .landing-container { width: calc(100% - 48px); }
   .landing-hero { gap: 28px; padding-block: 56px; }
   .landing-hero h1 { font-size: 46px; }
   .landing-desktop-nav { gap: 18px; }
+  .landing-run-section { gap: 28px; }
   .landing-record-body { padding-inline: 20px; }
   .landing-record-header, .landing-record-footer { padding-inline: 20px; }
   .landing-responsibilities { gap: 40px; }
@@ -139,9 +157,12 @@ html:has(.landing-menu-dialog[open]) { overflow: hidden; }
 @media (max-width: 767px) {
   .landing-container { width: calc(100% - 40px); }
   .landing-nav-row { min-height: 64px; }
-  .landing-desktop-nav { display: none; }
-  .landing-mobile-menu { min-height: 44px; display: inline-flex; gap: 8px; align-items: center; justify-content: center; padding: 8px; border: 0; border-radius: 4px; color: var(--ink-2); cursor: pointer; font-size: 14px; }
   .landing-hero { grid-template-columns: 1fr; gap: 44px; padding-block: 46px 34px; }
+  .landing-nav-row { gap: 12px; }
+  .landing-run-section { grid-template-columns: 1fr; gap: 28px; padding-block: 46px; }
+  .landing-research-list article { grid-template-columns: 1fr; gap: 12px; padding-block: 24px; }
+  .landing-research-list h3 { font-size: 22px; }
+  .landing-research-context { flex-direction: column; align-items: flex-start; gap: 12px; }
   .landing-hero h1 { font-size: clamp(36px, 9.7vw, 62px); }
   .landing-product-label { margin-bottom: 20px; font-size: 14px; }
   .landing-hero-description { font-size: 16px; margin-top: 22px; }
@@ -168,6 +189,12 @@ html:has(.landing-menu-dialog[open]) { overflow: hidden; }
   .landing-runtime-role h3 { font-size: 28px; }
   .landing-footer { flex-direction: column; padding-block: 34px; gap: 24px; }
   .landing-footer-links { gap: 8px 24px; }
+}
+@media (max-width: 359px) {
+  .landing-nav-row { gap: 6px; }
+  .landing-brand { gap: 8px; }
+  .landing-brand span { font-size: 18px; }
+  .landing-mobile-menu { gap: 4px; padding-inline: 4px; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .geode-landing *, .geode-landing *::before, .geode-landing *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

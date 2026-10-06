@@ -31,12 +31,12 @@ export const DOCS_NAV_GROUPS = [
   },
   {
     id: "reference",
-    title: "Internals and evidence",
-    titleKo: "내부 구조와 평가 근거",
-    summary: "Trace runtime contracts, inspect evaluations, and explore the codebase.",
-    summaryKo: "런타임 계약과 평가 근거를 읽고 코드베이스를 탐색합니다.",
+    title: "Runtime and research",
+    titleKo: "런타임과 연구",
+    summary: "Understand the harness, explore Experimental Loop studies, and inspect their evidence.",
+    summaryKo: "자율 수행 하네스와 Experimental Loop 연구의 설계·관측·근거를 확인합니다.",
     sectionIds: ["03-concepts", "04-self-improving", "06-benchmarks", "09-reference", "10-develop", "10-codebase-map"],
-    entrySlugs: ["architecture/agentic-loop", "benchmarks/terminal-bench", "develop/architecture"],
+    entrySlugs: ["architecture/agentic-loop", "research/overview", "benchmarks/terminal-bench"],
   },
 ] as const;
 

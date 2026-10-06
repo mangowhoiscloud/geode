@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Security\n\n- PyJWT is locked at 2.14.0, which fixes CVE-2026-102274. GEODE does not import\n  it directly; `mcp` and `supabase-auth` depend on it. The runtime dependency\n  audit in CI had failed on 2.13.0 for every code change."
+    "body": "### Changed\n\n- **Harness and experimental research entry points.** The bilingual landing\n  and docs now introduce the Autonomous Agent Harness alongside its Experimental\n  Loop, with a two-layer map and question-led routes to Scaffold Search, Seed\n  Scenario Generation, SIL, and Jev. Research observations retain their source\n  pins and limits; local selection, independent validation, and release remain\n  distinct. The landing now exposes an explicit KO/EN control; Escape closes\n  mobile docs navigation even while its search field contains a query.\n\n### Security\n\n- PyJWT is locked at 2.14.0, which fixes CVE-2026-102274. GEODE does not import\n  it directly; `mcp` and `supabase-auth` depend on it. The runtime dependency\n  audit in CI had failed on 2.13.0 for every code change."
   },
   {
     "version": "1.0.32",

@@ -47,6 +47,16 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Harness and experimental research entry points.** The bilingual landing
+  and docs now introduce the Autonomous Agent Harness alongside its Experimental
+  Loop, with a two-layer map and question-led routes to Scaffold Search, Seed
+  Scenario Generation, SIL, and Jev. Research observations retain their source
+  pins and limits; local selection, independent validation, and release remain
+  distinct. The landing now exposes an explicit KO/EN control; Escape closes
+  mobile docs navigation even while its search field contains a query.
+
 ### Security
 
 - PyJWT is locked at 2.14.0, which fixes CVE-2026-102274. GEODE does not import

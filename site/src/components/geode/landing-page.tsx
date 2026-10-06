@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRef } from "react";
 import { ArrowRight, Menu, Repeat2 } from "lucide-react";
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
-import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context";
+import { LocaleProvider, t, useLocale, useSetLocale } from "@/components/geode/locale-context";
+import { LoopMap } from "@/components/geode/loop-map";
 import { RecordedRun } from "@/components/geode/landing-run";
 import { BenchmarkComparison } from "@/components/geode/landing-benchmark";
 import { InstallCommands } from "@/components/geode/landing-install";
@@ -15,12 +16,13 @@ const repository = "https://github.com/mangowhoiscloud/geode";
 
 function LandingContent() {
   const locale = useLocale();
+  const setLocale = useSetLocale();
   const menuRef = useRef<HTMLDialogElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const navigation = [
     { id: "run", label: t(locale, "실행", "Run") },
     { id: "evidence", label: t(locale, "측정", "Evidence") },
-    { id: "features", label: t(locale, "기능", "Features") },
+    { id: "research", label: t(locale, "연구", "Research") },
     { id: "roadmap", label: t(locale, "로드맵", "Roadmap") },
     { id: "install", label: t(locale, "설치", "Install") },
   ];
@@ -44,6 +46,10 @@ function LandingContent() {
           <nav className="landing-desktop-nav" aria-label={t(locale, "주 메뉴", "Main navigation")}>
             {navigationLinks}
           </nav>
+          <div className="landing-locale" role="group" aria-label={t(locale, "언어", "Language")}>
+            <button type="button" aria-pressed={locale === "ko"} onClick={() => setLocale("ko")}>KO</button>
+            <button type="button" aria-pressed={locale === "en"} onClick={() => setLocale("en")}>EN</button>
+          </div>
           <button ref={menuButtonRef} className="landing-mobile-menu" type="button" aria-haspopup="dialog" aria-controls="landing-menu"
             onClick={() => menuRef.current?.showModal()}>
             <Menu size={18} strokeWidth={1.5} aria-hidden="true" />
@@ -71,18 +77,28 @@ function LandingContent() {
       <main id="main-content" tabIndex={-1}>
         <section id="hero" className="landing-container landing-hero">
           <div className="landing-hero-copy">
-            <p className="landing-product-label">{t(locale, "스스로 호스팅하는 에이전트 런타임", "A self-hosting agent runtime")}</p>
-            <h1>{t(locale, "작업을 맡기고,\n결과를 확인하세요.", "Run the task.\nInspect the result.")}</h1>
+            <p className="landing-product-label">{t(locale, "자율 수행 에이전트 하네스", "Autonomous Agent Harness")}</p>
+            <h1>{t(locale, "작업을 수행하고,\n더 나은 실행을\n탐구합니다.", "Execute the task.\nExplore a better\nway to run it.")}</h1>
             <p className="landing-hero-description">
               {t(locale,
-                "GEODE는 모델과 도구를 연결해 작업을 실행하고, 확인할 수 있는 실행 기록을 남깁니다.",
-                "GEODE connects models to your tools, runs the task, and keeps execution records you can inspect.",
+                "GEODE는 도구의 관측을 바탕으로 다음 행동을 선택합니다. 바깥의 Experimental Loop는 scaffold와 평가 시나리오를 탐색하고, 후보의 채택과 복원을 관리합니다.",
+                "GEODE chooses its next action from tool observations. An outer Experimental Loop searches scaffolds and evaluation scenarios, then manages candidate acceptance and reversion.",
               )}
             </p>
             <div className="landing-actions">
               <a className="landing-button landing-button-primary" href="#install">{t(locale, "GEODE 설치", "Install GEODE")}</a>
-              <a className="landing-button" href="#run">{t(locale, "실행 기록 보기", "Inspect a run")}</a>
+              <a className="landing-button" href="#research">{t(locale, "연구와 근거 보기", "Explore the research")}</a>
             </div>
+          </div>
+          <LoopMap locale={locale} />
+        </section>
+
+        <section className="landing-container landing-run-section" aria-label={t(locale, "실제 작업의 실행 기록", "A recorded task execution")}>
+          <div className="landing-section-heading">
+            <p className="landing-kicker">Autonomous Agent Harness</p>
+            <h2>{t(locale, "말한 결과에서, 확인할 수 있는 결과로.", "From a claimed result to an inspectable one.")}</h2>
+            <p>{t(locale, "TLS 인증서를 만드는 실제 기록으로 작업 요청, 도구 호출, verifier 결과를 따라갑니다. 실행 기록과 과제 성공의 판정을 구분합니다.", "Follow a recorded TLS certificate task from request to tool calls and verifier result. Execution records and the task's success verdict remain distinct.")}</p>
+            <Link className="landing-text-link" href={`/docs/architecture/agentic-loop?lang=${locale}`}>{t(locale, "자율 수행의 구조", "How autonomous execution works")}</Link>
           </div>
           <RecordedRun />
         </section>
@@ -118,6 +134,31 @@ function LandingContent() {
           <div className="landing-loop-notes">
             <p>{t(locale, "승인 정책, 실행 예산, 취소 신호가 실행을 제어합니다.", "Approval policies, execution budgets, and cancellation govern the run.")}</p>
             <Link className="landing-text-link" href={`/docs/architecture/agentic-loop?lang=${locale}`}>{t(locale, "런타임 살펴보기", "Explore the runtime")}</Link>
+          </div>
+        </section>
+
+        <section id="research" className="landing-container landing-section" aria-labelledby="research-title">
+          <div className="landing-section-heading">
+            <p className="landing-kicker">Experimental Loop</p>
+            <h2 id="research-title">{t(locale, "실행 밖에서, 다음 질문을 검증합니다.", "Beyond execution, test the next question.")}</h2>
+            <p>{t(locale, "Scaffold Search와 Seed Scenario Generation, SIL, Jev 연구는 서로 다른 질문을 다룹니다. 구현과 관측을 연결하되, 지속적 개선을 입증했다는 주장으로 묶지 않습니다.", "Scaffold Search, Seed Scenario Generation, SIL, and the Jev study address different questions. Connect their designs to observations without assuming sustained improvement.")}</p>
+          </div>
+          <div className="landing-research-list">
+            {[
+              ["Scaffold Search", t(locale, "모델을 고정하고 실행 방식을 바꿀 수 있을까?", "Can the scaffold change while model weights stay fixed?"), t(locale, "후보를 변형하고 평가한 뒤 채택하거나 복원합니다. 탐색 중 채택과 독립 검증의 판정은 별도로 남깁니다.", "Mutate, evaluate, then keep or revert. Search acceptance and independent validation retain separate verdicts."), "scaffold"],
+              ["Seed Scenario Generation", t(locale, "기존 평가가 놓친 행동을 어떻게 찾을까?", "What behavior do existing evaluations miss?"), t(locale, "시나리오를 생성·비평·pilot·선별합니다. 생성된 seed가 유효한 평가인지, 다음 세대로 이어졌는지 확인합니다.", "Generate, critique, pilot, and select scenarios. Inspect both their validity and what reaches the next generation."), "seeds"],
+              ["SIL", t(locale, "실행의 실패를 다음 실험에 연결할 수 있을까?", "Can a failed run inform the next experiment?"), t(locale, "Self-Improving Loop의 연결 경로와 저장된 기록을 살펴봅니다. 세션 기록만으로 변이나 승격을 입증하지 않습니다.", "Trace the Self-Improving Loop and its stored records. A session record alone does not establish a mutation or promotion."), "sil"],
+              ["Jev · System 1 offloading", t(locale, "작은 판정기로 완료 여부를 맡겨도 될까?", "Can a small judge decide when the work is done?"), t(locale, "판정 정확도, 호출 지연, 실제 과제 완료를 분리해 실험했습니다. 올바른 수리 후보를 보류한 실패도 공개합니다.", "Measure judgment accuracy, latency, and task completion separately—including correct repairs the judge refused to deliver."), "jev"],
+            ].map(([name, question, detail, anchor]) => <article key={anchor}>
+              <p className="landing-research-name">{name}</p>
+              <div><h3>{question}</h3><p>{detail}</p>
+                <Link className="landing-text-link" href={`/docs/research/overview?lang=${locale}#${anchor}`}>{t(locale, "설계·관측·한계 읽기", "Read the design, evidence, and limits")}</Link>
+              </div>
+            </article>)}
+          </div>
+          <div className="landing-research-context">
+            <p>{t(locale, "연구의 좌표: 평가 피드백을 쓰는 GEODE의 탐색을 DGM, 검색 중 downstream reward를 쓰지 않는 SelfSearch와 구분해 읽습니다.", "Research context: compare GEODE's evaluation-guided search with DGM. SelfSearch differs by excluding downstream rewards during search.")}</p>
+            <Link className="landing-text-link" href={`/docs/research/overview?lang=${locale}#related-work`}>{t(locale, "SelfSearch·DGM과의 관계", "Relation to SelfSearch and DGM")}</Link>
           </div>
         </section>
 
