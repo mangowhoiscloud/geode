@@ -1,0 +1,105 @@
+--- a/package.json
++++ b/package.json
+@@ -1,7 +1,8 @@
+ {
+   "name": "@next/eslint-plugin-next",
+-  "version": "16.3.8",
+-  "description": "ESLint plugin for Next.js.",
++  "version": "16.3.8-geode.1",
++  "private": true,
++  "description": "GEODE local patch of the official Next.js ESLint plugin; see README.geode.md.",
+   "main": "dist/index.js",
+   "types": "dist/index.d.ts",
+   "license": "MIT",
+@@ -14,16 +15,8 @@
+   ],
+   "dependencies": {
+     "@eslint-community/eslint-utils": "4.9.1",
+-    "fast-glob": "3.3.1"
+-  },
+-  "devDependencies": {
+-    "@types/eslint": "9.6.1",
+-    "@types/estree": "1.0.8",
+-    "eslint": "9.37.0"
+-  },
+-  "scripts": {
+-    "dev": "pnpm build",
+-    "build": "swc -d dist src && pnpm types",
+-    "types": "tsc --project tsconfig.json --skipLibCheck --declaration --emitDeclarationOnly --esModuleInterop --declarationDir dist"
++    "glob": "13.0.6",
++    "brace-expansion": "5.0.12",
++    "picomatch": "4.0.4"
+   }
+ }
+--- a/dist/utils/get-root-dirs.js
++++ b/dist/utils/get-root-dirs.js
+@@ -8,12 +8,66 @@
+         return getRootDirs;
+     }
+ });
+-var _fastglob = require("fast-glob");
++var _glob = require("glob");
++var _fs = require("node:fs");
++var _path = require("node:path");
++var _braceExpansion = require("brace-expansion");
++var _picomatch = require("picomatch");
+ /**
+  * Process a Next.js root directory glob.
+  */ var processRootDir = function(rootDir) {
+-    return (0, _fastglob.globSync)(rootDir.replace(/\\/g, '/'), {
+-        onlyDirectories: true
++    var pattern = rootDir.replace(/\\/g, '/');
++    // Bound parser nesting before passing config input to any glob library.
++    var depth = 0;
++    for (var character of pattern) {
++        if (character === '{' && ++depth > 100) {
++            throw new SyntaxError('Next rootDir brace depth exceeds 100');
++        }
++        if (character === '}') depth = Math.max(0, depth - 1);
++    }
++    // fast-glob expands braces before separating positive/negative patterns.
++    var expanded = (0, _braceExpansion.expand)(pattern);
++    var isNegative = function(value) { return value[0] === '!' && value[1] !== '('; };
++    var positive = expanded.filter(function(value) { return !isNegative(value); });
++    if (positive.length === 0) return [];
++    var normalize = function(value) {
++        return value.replace(/^(\.\/)+/, '').replace(/([^/])\/{2,}/g, '$1/')
++            .replace(/\/(?:\.\/)+/g, '/').replace(/\/$/, '') || '.';
++    };
++    var negative = expanded.filter(isNegative).flatMap(function(value) {
++        var excluded = normalize(value.slice(1));
++        return [excluded, excluded + '/**'];
++    });
++    var anchor = function(value) {
++        var scanned = _picomatch.scan(normalize(value));
++        return _path.resolve(scanned.base) + (scanned.glob ? '/' + scanned.glob : '');
++    };
++    var matches = _picomatch(positive.map(anchor), { dot: false });
++    var ignores = _picomatch(negative, { dot: true });
++    // A terminal globstar in fast-glob matches descendants, not its base.
++    var isDirectory = function(directory) {
++        return _fs.statSync(directory, { throwIfNoEntry: false })?.isDirectory();
++    };
++    // Preserve literal dot/parent segments (and symlink identity) as upstream does.
++    var literal = positive.filter(function(value) { return !_glob.hasMagic(value); }).filter(isDirectory);
++    var discovery = positive.filter(function(value) { return _glob.hasMagic(value); }).map(function(value) {
++        return value === '**' || value.endsWith('/**') ? value + '/*' : value;
++    });
++    var discovered = (0, _glob.globSync)(discovery, {
++        follow: true,
++        nocase: false,
++        dot: true,
++        ignore: negative
++    }).filter(function(directory) {
++        // glob already matched ordinary paths. Only reconcile hidden-directory
++        // semantics here; re-matching canonical paths would lose ../ segments.
++        var hidden = normalize(directory).split('/').some(function(part) {
++            return part[0] === '.' && part !== '.' && part !== '..';
++        });
++        return (!hidden || matches(_path.resolve(directory))) && isDirectory(directory);
++    });
++    return Array.from(new Set(literal.concat(discovered))).filter(function(directory) {
++        return !ignores(normalize(directory));
+     });
+ };
+ var getRootDirs = function(context) {

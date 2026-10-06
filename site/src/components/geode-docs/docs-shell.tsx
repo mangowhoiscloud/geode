@@ -230,6 +230,14 @@ export function DocsShell({
       </div>
       <dialog key={slug} ref={mobileNavRef} id="docs-mobile-dialog" className="docs-mobile-dialog"
         aria-labelledby="docs-mobile-title" onClose={() => mobileNavButton.current?.focus()}
+        onKeyDownCapture={event => {
+          if (event.nativeEvent.isComposing) return;
+          // A search input otherwise consumes the first Escape to clear itself.
+          if (event.key === "Escape") {
+            event.preventDefault();
+            closeMobileNav();
+          }
+        }}
         onClick={event => { if (event.target === event.currentTarget) closeMobileNav(); }}>
         <div className="docs-mobile-dialog-body">
           <div className="docs-mobile-heading"><h2 id="docs-mobile-title">{t(locale, "문서 탐색", "Browse docs")}</h2>

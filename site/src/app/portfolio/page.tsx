@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import { GeodeLanding } from "@/components/geode/landing-page";
 
 export const metadata: Metadata = {
-  title: "GEODE | An agent runtime for tool-driven work",
+  title: "GEODE | Autonomous Agent Harness & Experimental Loop",
   description:
-    "Run tasks with your models and tools. Inspect execution records and source-bound Harbor / Terminal-Bench comparisons against native Codex.",
+    "An autonomous agent harness with an outer Experimental Loop. Explore scaffold search, scenario generation, and source-bound evaluation evidence.",
   openGraph: {
-    title: "GEODE | An agent runtime for tool-driven work",
-    description: "Run the task. Inspect the result. A self-hosting runtime with public execution evidence.",
+    title: "GEODE | Autonomous Agent Harness & Experimental Loop",
+    description: "Autonomous task execution. Experimental scaffold search. Inspect the design, observations, and limits.",
     type: "website",
   },
 };

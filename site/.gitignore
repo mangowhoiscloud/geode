@@ -2,6 +2,10 @@
 
 # dependencies
 /node_modules
+/vendor/**/node_modules/
+
+# Reviewed upstream distribution required by the temporary ESLint patch.
+!/vendor/eslint-plugin-next/dist/
 /.pnp
 .pnp.*
 .yarn/*

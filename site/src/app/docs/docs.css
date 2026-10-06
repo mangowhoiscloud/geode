@@ -426,3 +426,27 @@ html:has(.docs-mobile-dialog[open]) { overflow: hidden; }
   .docs-header-actions > .docs-github-link { display: none; }
   .docs-brand { gap: 8px; font-size: 14px; }
 }
+
+/* Research entry: questions first; detailed contracts remain in their owners. */
+.docs-prose .research-contents { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 28px 0; padding: 16px 0; border-block: 1px solid var(--rule); }
+.docs-prose .research-contents a { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; }
+.docs-prose .research-study { margin-top: 52px; padding-top: 24px; border-top: 1px solid var(--rule); scroll-margin-top: 110px; }
+.docs-prose .research-study h2 { margin-top: 10px; }
+.docs-prose .research-state { font-size: 13px; color: var(--ink-2); margin-bottom: 0; }
+.docs-prose .research-question { font-size: 21px; color: var(--ink); line-height: 1.6; }
+.docs-prose .research-verdict-flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; padding: 0; margin: 24px 0; border: 1px solid var(--rule); border-radius: 6px; }
+.docs-prose .research-verdict-flow li { margin: 0; padding: 18px; }
+.docs-prose .research-verdict-flow li + li { border-left: 1px solid var(--rule); }
+.docs-prose .research-verdict-flow strong, .docs-prose .research-verdict-flow span { display: block; font-size: 14px; }
+.docs-prose .research-verdict-flow span { margin-top: 8px; color: var(--ink-2); }
+.docs-prose .research-limit { padding: 20px; background: var(--paper-2); border-radius: 6px; font-size: 14px; }
+.docs-prose .research-sources { font-size: 14px; }
+.docs-prose .research-comparison article { padding-block: 16px; border-bottom: 1px solid var(--rule); }
+.docs-prose .research-comparison h3 { margin-block: 0 10px; }
+.docs-prose .research-comparison p { margin: 0; }
+.docs-prose .docs-two-layers { padding-bottom: 32px; margin-bottom: 36px; border-bottom: 1px solid var(--rule); }
+.docs-prose .docs-two-layers h2 { margin-top: 0; }
+@media (max-width: 767px) {
+  .docs-prose .research-verdict-flow { grid-template-columns: 1fr; }
+  .docs-prose .research-verdict-flow li + li { border-left: 0; border-top: 1px solid var(--rule); }
+}
