@@ -59,6 +59,9 @@ functional change.
 
 ### Security
 
+- Lock the site's optional sharp dependency at 0.35.5 and its prebuilt libvips
+  packages at 1.3.4 to address GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889),
+  restoring the dependency audit without changing Next.js or the ESLint patch.
 - PyJWT is locked at 2.15.1 and urllib3 at 2.8.0 to address the runtime
   dependency audit findings. PyJWT is transitive through `mcp` and
   `supabase-auth`; the update retains the earlier CVE-2026-102274 fix and
