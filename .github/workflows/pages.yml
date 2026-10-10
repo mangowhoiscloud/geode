@@ -243,10 +243,18 @@ jobs:
       # hub surfaces (petri-bundle viewer, self-improving hub) plus 7 site-side
       # rots fixed in the same PR. Hub targets are excluded below; the hub has
       # its own validator (petri-publish.yml). Everything else now blocks.
-      - name: Broken-link check on built HTML (lychee)
+      # Transient-5xx recheck: lychee v0.24.2 re-requests a rejected status
+      # only for 429, so --max-retries never retries a 503/504. On 2026-10-10
+      # github.com answered 71 URLs with 503/504 at a SHA that passed on 10-08
+      # and 10-09. The first pass therefore only records its exit code; any
+      # non-zero result waits two minutes and reruns the same arguments as the
+      # blocking gate. .lycheecache keeps first-pass successes and never
+      # errors, so only links that did not pass are requested again.
+      - name: Broken-link check on built HTML (lychee, first pass)
+        id: lychee
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
-          args: >-
+          args: &lychee-args >-
             --root-dir ${{ github.workspace }}/_lc
             --fallback-extensions html
             --remap '^https://mangowhoiscloud\.github\.io/geode/(.*)/$ file://${{ github.workspace }}/_lc/geode/$1/index.html'
@@ -261,6 +269,19 @@ jobs:
             'site/out/docs/**/*.html'
             'site/out/portfolio/**/*.html'
             'site/out/resaerch/jev-system1-offloading/**/*.html'
+          fail: false
+          jobSummary: true
+          output: lychee-report.md
+
+      - name: Wait before rechecking failed links
+        if: steps.lychee.outputs.exit_code != '0'
+        run: sleep 120
+
+      - name: Recheck failed links on built HTML (lychee, blocking)
+        if: steps.lychee.outputs.exit_code != '0'
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: *lychee-args
           fail: true
           jobSummary: true
           output: lychee-report.md

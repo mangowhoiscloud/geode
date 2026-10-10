@@ -76,6 +76,18 @@ functional change.
   excessive brace nesting. Keep the audit gate and document the patch's source,
   licenses, integrity checks and official-release removal procedure.
 
+### Infrastructure
+
+- **Pages link check rechecks failed links once.** lychee 0.24.2 never retries
+  a rejected 503/504, so `--max-retries` could not absorb the github.com
+  503/504 answers that failed the 2026-10-10 scheduled run for 71 links which
+  passed at the same commit on 10-08 and 10-09. The first lychee pass now
+  records its result; a failure waits two minutes and reruns the same
+  arguments as the blocking gate, requesting only links that did not pass.
+  Persistent 5xx, 404 and broken local links still fail the build; accepted
+  statuses stay 200, 206, 403 and 429. A workflow test runs both passes of the
+  real binary against a local server.
+
 ## [1.0.32] - 2026-09-29
 
 1.0.31 was stamped but never published: its release run stopped in
