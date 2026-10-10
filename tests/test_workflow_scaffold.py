@@ -1,9 +1,15 @@
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
+import threading
+from collections import Counter
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -161,6 +167,113 @@ def test_required_pages_checks_have_no_pull_request_path_filter() -> None:
     assert "ready_for_review" in trigger["types"]
     assert workflow["jobs"]["lint"].get("if") is None
     assert workflow["jobs"]["build"].get("if") is None
+
+
+def _pages_link_checks() -> tuple[dict[str, Any], dict[str, Any]]:
+    build = yaml.safe_load(_read(".github/workflows/pages.yml"))["jobs"]["build"]
+    first, recheck = (
+        step
+        for step in build["steps"]
+        if str(step.get("uses", "")).startswith("lycheeverse/lychee-action@")
+    )
+    return first, recheck
+
+
+def test_pages_link_recheck_is_the_blocking_gate() -> None:
+    build = yaml.safe_load(_read(".github/workflows/pages.yml"))["jobs"]["build"]
+    first, recheck = _pages_link_checks()
+    # The first pass only records its exit code; any non-zero result is rechecked
+    # with the same arguments, and that recheck fails the job.
+    assert first["id"] == "lychee" and first["with"]["fail"] is False
+    assert recheck["if"] == "steps.lychee.outputs.exit_code != '0'"
+    assert recheck["with"]["fail"] is True
+    assert recheck["with"]["args"] == first["with"]["args"]
+    assert all("continue-on-error" not in step for step in (build, *build["steps"]))
+    args = shlex.split(first["with"]["args"])
+    assert "--cache" in args
+    # 403/429 are the explicit anti-bot allowance; no 5xx is ever accepted.
+    assert args[args.index("--accept") + 1] == "200,206,403,429"
+
+
+def _run_pages_lychee(
+    step: dict[str, Any], workspace: Path, links: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run a workflow lychee step's arguments with ``workspace/index.html`` as the only input."""
+    args = shlex.split(step["with"]["args"].replace("${{ github.workspace }}", str(workspace)))
+    inputs = next(i for i, arg in enumerate(args) if arg.startswith("site/out/"))
+    assert all(arg.startswith("site/out/") for arg in args[inputs:])
+    if links is not None:
+        (workspace / "_lc").mkdir(parents=True)
+        (workspace / "index.html").write_text(
+            f"<!doctype html><html><body>{links}</body></html>", encoding="utf-8"
+        )
+    return subprocess.run(  # noqa: S603 - pinned workflow arguments, loopback-only probe page
+        [str(shutil.which("lychee")), *args[:inputs], str(workspace / "index.html")],
+        cwd=workspace,  # both action steps run in the workspace root and share .lycheecache
+        env={"PATH": os.environ["PATH"]},
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+
+@pytest.mark.skipif(shutil.which("lychee") is None, reason="lychee binary not installed")
+def test_pages_link_recheck_recovers_5xx_burst_but_not_persistent_failures(
+    tmp_path: Path,
+) -> None:
+    hits: Counter[str] = Counter()
+    burst_over = threading.Event()
+
+    class Links(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            hits[self.path] += 1
+            status = {"/down": 503, "/gone": 404}.get(self.path, 200)
+            # Like 2026-10-10: 503/504 answers until the burst is over.
+            if self.path.startswith("/burst-") and not burst_over.is_set():
+                status = int(self.path.removeprefix("/burst-"))
+            self.send_response(status)
+            self.end_headers()
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Links)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    pages = {
+        "burst": "".join(
+            f'<a href="{base}{path}">x</a>' for path in ("/ok", "/burst-503", "/burst-504")
+        ),
+        "persistent": f'<a href="{base}/down">x</a><a href="{base}/gone">x</a>',
+        "local": '<a href="missing-page/">x</a>',
+    }
+    first_step, recheck_step = _pages_link_checks()
+    try:
+        first = {
+            name: _run_pages_lychee(first_step, tmp_path / name, links)
+            for name, links in pages.items()
+        }
+        burst_over.set()  # the cool-down step elapses
+        recheck = {name: _run_pages_lychee(recheck_step, tmp_path / name) for name in pages}
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    first_report = {name: run.stdout + run.stderr for name, run in first.items()}
+    report = {name: run.stdout + run.stderr for name, run in recheck.items()}
+    # lychee exit 2 is a link-check failure, not a configuration or runtime error.
+    assert {name: run.returncode for name, run in first.items()} == dict.fromkeys(pages, 2), (
+        first_report
+    )
+    assert {name: run.returncode for name, run in recheck.items()} == {
+        "burst": 0,
+        "persistent": 2,
+        "local": 2,
+    }, report
+    assert hits["/ok"] == 1  # the recheck reuses first-pass successes from .lycheecache
+    assert "/down" in report["persistent"] and "/gone" in report["persistent"]
+    assert "missing-page" in report["local"]
 
 
 @pytest.mark.parametrize(
