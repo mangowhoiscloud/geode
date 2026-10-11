@@ -155,6 +155,23 @@ function LandingContent() {
                 <Link className="landing-text-link" href={`/docs/research/overview?lang=${locale}#${anchor}`}>{t(locale, "설계·관측·한계 읽기", "Read the design, evidence, and limits")}</Link>
               </div>
             </article>)}
+            <article id="jevdb-paper-review">
+              <p className="landing-research-name">JEVDB · {t(locale, "논문 리뷰", "Paper review")}</p>
+              <div>
+                <h3><Link href={`/research/jevdb?lang=${locale}`}>Prune First, Decide Fast</Link></h3>
+                <div className="landing-inline-links">
+                  <Link href={`/research/jevdb?lang=${locale}`}>{t(locale, "논문 리뷰 읽기", "Read the paper review")}</Link>
+                  <a href="https://youtu.be/KKiEyGjGUIo">{t(locale, "논문 리뷰 영상", "Watch the paper review")}</a>
+                  <a href="/geode/research/jevdb-seminar-v25.pptx" download>{t(locale, "논문 리뷰 PPTX 다운로드", "Download the paper review PPTX")}</a>
+                  <a href="https://arxiv.org/abs/2610.02046v1">{t(locale, "원 논문 · Wang et al.", "Original paper · Wang et al.")}</a>
+                </div>
+                <p>{t(locale,
+                  "Semantic query의 후보 축소, typed decision, 재사용과 LLM escalation을 설명하고 논문이 보고한 성능의 비교 조건과 한계를 검토합니다.",
+                  "A review of candidate pruning, typed decisions, reuse, and LLM escalation in semantic queries, including the conditions and limits of the paper’s benchmark results.",
+                )}</p>
+                <p>{t(locale, "2026.10.11 · v25 · 영문 19장 · 한국어 발표자 메모 포함", "October 11, 2026 · v25 · 19 English slides · Korean speaker notes")}</p>
+              </div>
+            </article>
           </div>
           <div className="landing-research-context">
             <p>{t(locale, "연구의 좌표: 평가 피드백을 쓰는 GEODE의 탐색을 DGM, 검색 중 downstream reward를 쓰지 않는 SelfSearch와 구분해 읽습니다.", "Research context: compare GEODE's evaluation-guided search with DGM. SelfSearch differs by excluding downstream rewards during search.")}</p>
