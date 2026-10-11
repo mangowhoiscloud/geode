@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/test-jev-report-export.mjs && node scripts/test-seed-frontmatter.mjs && node scripts/verify-terminal-replay.mjs && next build",
+    "build": "node scripts/export-research-slides.mjs && node scripts/test-jev-report-export.mjs && node scripts/test-seed-frontmatter.mjs && node scripts/verify-terminal-replay.mjs && next build",
     "start": "next start",
     "lint": "node scripts/test-next-eslint-patch.mjs && eslint --max-warnings=0",
-    "sync-stats": "node scripts/sync-stats.mjs",
+    "sync-stats": "node scripts/export-research-slides.mjs && node scripts/sync-stats.mjs",
     "render-diagrams": "node scripts/render-diagrams.mjs",
     "build-layer-graph": "node scripts/build-layer-graph.mjs",
     "export-md": "node scripts/export-docs-md.mjs",
