@@ -2,6 +2,7 @@
 
 ## JEVDB
 
+[Read the paper review](https://mangowhoiscloud.github.io/geode/research/jevdb/) ·
 [Watch the paper review video](https://youtu.be/KKiEyGjGUIo) ·
 [Download the review slides (PPTX)](jevdb-seminar-v25.pptx)
 
