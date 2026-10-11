@@ -158,8 +158,9 @@ function LandingContent() {
             <article id="jevdb-paper-review">
               <p className="landing-research-name">JEVDB · {t(locale, "논문 리뷰", "Paper review")}</p>
               <div>
-                <h3>Prune First, Decide Fast</h3>
+                <h3><Link href={`/research/jevdb?lang=${locale}`}>Prune First, Decide Fast</Link></h3>
                 <div className="landing-inline-links">
+                  <Link href={`/research/jevdb?lang=${locale}`}>{t(locale, "논문 리뷰 읽기", "Read the paper review")}</Link>
                   <a href="https://youtu.be/KKiEyGjGUIo">{t(locale, "논문 리뷰 영상", "Watch the paper review")}</a>
                   <a href="/geode/research/jevdb-seminar-v25.pptx" download>{t(locale, "논문 리뷰 PPTX 다운로드", "Download the paper review PPTX")}</a>
                   <a href="https://arxiv.org/abs/2610.02046v1">{t(locale, "원 논문 · Wang et al.", "Original paper · Wang et al.")}</a>
