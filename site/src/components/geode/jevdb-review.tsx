@@ -32,7 +32,7 @@ function ReviewContent() {
     setIndex(next);
     setOverview(false);
     setTranscript(false);
-    window.history.pushState({}, "", `#${sceneId(next)}`);
+    window.history.pushState(window.history.state, "", `#${sceneId(next)}`);
     toc.current?.close();
     window.scrollTo({ top: 0, behavior: "instant" });
   }, []);
@@ -98,7 +98,7 @@ function ReviewContent() {
       <a className="jevdb-skip" href="#review-content">{t(locale, "본문으로 이동", "Skip to content")}</a>
       <header className="jevdb-header">
         <div className="jevdb-identity">
-          <Link className="jevdb-home" href={`/?lang=${locale}#research`}>GEODE</Link>
+          <Link className="jevdb-home" href={`/research/?lang=${locale}`}>GEODE / Research</Link>
           <div><h1>JEVDB: Prune First, Decide Fast</h1><p>{t(locale, "논문 리뷰 · 류지환 · v25", "Paper review · Jihwan Ryu · v25")}</p></div>
         </div>
         <div className="jevdb-actions">
@@ -146,7 +146,7 @@ function ReviewContent() {
               <p>{locale === "ko" ? scene.noteKo : scene.noteEn}</p>
               <p className="jevdb-scope">{locale === "ko" ? scene.scopeKo : scene.scopeEn}</p>
               <p className="jevdb-citation" lang="en">{scene.source}</p>
-              {index === 17 && <a className="jevdb-related" href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}#v3-e2e-injected`}>{t(locale, "별도 Decision Offloading 연구 보고서 ↗", "Separate Decision Offloading study ↗")}</a>}
+              {index === 17 && <a className="jevdb-related" href={`/geode/research/jev-system1-offloading/?lang=${locale}#v3-e2e-injected`}>{t(locale, "별도 Decision Offloading 연구 보고서 ↗", "Separate Decision Offloading study ↗")}</a>}
               <button className="jevdb-transcript-button" type="button" aria-expanded={transcript} aria-controls="slide-transcript" onClick={() => setTranscript(!transcript)}>{t(locale, "슬라이드 텍스트", "Slide text")} {transcript ? "−" : "+"}</button>
               <div id="slide-transcript" className="jevdb-transcript" lang="en" hidden={!transcript}>{scene.transcript.map((line, i) => <p key={i}>{line}</p>)}</div>
             </section>
@@ -155,7 +155,7 @@ function ReviewContent() {
           <footer className="jevdb-footer">
             <p>{t(locale, "원 논문 주장, 발표자 예시, 별도 GEODE 실험을 구분합니다. 언어 선택은 목차와 해설에 적용되며, 슬라이드와 PPT는 영문 v25 원본입니다.", "Paper claims, presenter examples, and the separate GEODE experiment remain distinct. Language selection changes navigation and notes; the slides and PPT preserve the original English v25 edition.")}</p>
             <button ref={sourceButton} type="button" aria-haspopup="dialog" aria-controls="reader-sources" onClick={() => {
-              window.history.pushState({}, "", "#readerSources");
+              window.history.pushState(window.history.state, "", "#readerSources");
               sources.current?.showModal();
             }}>{t(locale, "자료와 출처", "Materials and sources")}</button>
           </footer>
@@ -167,7 +167,7 @@ function ReviewContent() {
         {sceneList()}
       </dialog>
       <dialog id="reader-sources" ref={sources} className="jevdb-dialog jevdb-sources" aria-labelledby="sources-heading" onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close(); }} onClose={() => {
-        if (window.location.hash === "#readerSources") window.history.replaceState({}, "", `#${sceneId(index)}`);
+        if (window.location.hash === "#readerSources") window.history.replaceState(window.history.state, "", `#${sceneId(index)}`);
         sourceButton.current?.focus();
       }}>
         <div className="jevdb-dialog-heading"><h2 id="sources-heading">{t(locale, "자료와 출처", "Materials and sources")}</h2><button type="button" onClick={() => sources.current?.close()}>{t(locale, "닫기", "Close")}</button></div>
@@ -180,7 +180,7 @@ function ReviewContent() {
             <li><a href={`${assets}manifest.json`}><span>HASH</span> <span>{t(locale, "슬라이드 이미지·원본 PPT SHA-256", "Slide image and original PPT SHA-256")}</span></a></li>
           </ul></section>
           <section><h3>{t(locale, "별도 GEODE 연구 · 장면 18", "Separate GEODE study · scene 18")}</h3><ul>
-            <li><a href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}#v3-e2e-injected`}><span>STUDY</span> <span>Jev Decision Offloading · U8c</span></a></li>
+            <li><a href={`/geode/research/jev-system1-offloading/?lang=${locale}#v3-e2e-injected`}><span>STUDY</span> <span>Jev Decision Offloading · U8c</span></a></li>
             <li><a href={evidence}><span>DATA</span> <span>{t(locale, "고정된 연구 기록 · 3bcf4044", "Pinned study records · 3bcf4044")}</span></a></li>
           </ul><p>{t(locale, "U8c는 18 matched cases의 agent-loop 비교입니다. U3의 frozen-state 단일 판정이나 U8n의 사후 분석과 합치지 않습니다. 이 리뷰에서 새 실험을 실행하지 않았으며 JEVDB 재현 결과를 주장하지 않습니다.", "U8c compares agent loops across 18 matched cases. It is separate from U3 frozen-state single judgments and the U8n post-hoc analysis. This review runs no new experiment and claims no JEVDB reproduction.")}</p></section>
           <section><h3>{t(locale, "원본 보존", "Preserved originals")}</h3><p>{t(locale, "2026년 10월 11일 완성한 v25 PPT는 변경하지 않았습니다. 웹은 기존 v25 PDF 검수 이미지를 재사용하며 원본의 영문 텍스트도 제공합니다. 단계는 슬라이드당 1개이며, 별도의 모션이나 중간 build를 만들지 않았습니다.", "The v25 PPT completed on October 11, 2026 is unchanged. The reader reuses existing v25 PDF review images and provides the original English slide text. Each slide has one settled build; no motion or intermediate builds were added.")}</p></section>

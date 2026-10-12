@@ -200,7 +200,7 @@ for (const locale of ["ko", "en"]) {
       assert.equal(url.searchParams.get("lang"), locale, `Research link preserves ${locale}: ${url}`);
     }
   }
-  assert(html.includes(`/geode/resaerch/jev-system1-offloading/?lang=${locale}`), "Preserve the frozen Jev reader route and language");
+  assert(html.includes(`/geode/research/jev-system1-offloading/?lang=${locale}`), "Use the canonical Jev reader route and language");
   for (const query of ["SIL", "Jev", "SelfSearch"]) assert(matchesDocQuery(findPage("research/overview").page, query), `Research is discoverable by ${query}`);
 }
 console.log("Research entry: bilingual route, anchor, frozen-reader and discoverability contracts passed.");
