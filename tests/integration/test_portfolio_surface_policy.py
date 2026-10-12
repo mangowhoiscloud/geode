@@ -76,16 +76,20 @@ def test_landing_keeps_native_navigation_and_reduced_motion() -> None:
     css = LANDING_PATH.with_name("landing.css").read_text(encoding="utf-8")
     for anchor in ("hero", "install", "evidence", "lab"):
         assert f'id="{anchor}"' in landing
-    assert "<LandingHeader home />" in landing
+    assert "geode-landing geode-home" in landing
+    assert "ResearchEntries" not in landing and "ResearchSection" not in landing
+    assert "`/geode/research/?lang=${locale}`" in landing
+    research = LANDING_PATH.with_name("research-page.tsx").read_text(encoding="utf-8")
+    assert "geode-landing geode-research" in research
+    assert 'import "./research.css"' in research
+    assert '<LandingHeader current="research" />' in research
     assert "<LegacyResearchRedirect />" in landing
-    # Moved sections retain their submitted URL through the compatibility owner.
-    for anchor, destination in (
-        ("features", "overview/how-it-runs"),
-        ("distill", "capabilities/outer-loop"),
-        ("roadmap", "explanation/rsi-roadmap"),
-    ):
-        assert f'"#{anchor}": "/geode/docs/{destination}/"' in redirects
-        assert (REPO_ROOT / f"site/src/app/docs/{destination}/page.tsx").is_file()
+    # Restored sections navigate natively; removed publication previews redirect.
+    for anchor in ("features", "distill", "roadmap"):
+        assert f'id="{anchor}"' in landing
+        assert f'"#{anchor}":' not in redirects
+    for anchor in ("research", "research-geode", "research-jev", "jevdb-paper-review"):
+        assert f'"#{anchor}": "/geode/research/"' in redirects
     assert "window.location.replace(url.toString())" in redirects
     assert 'id="run"' in run
     assert 'href="#main-content"' in landing
@@ -97,6 +101,8 @@ def test_landing_keeps_native_navigation_and_reduced_motion() -> None:
     assert "onClose={() => menuButtonRef.current?.focus()}" in header
     assert 'event.target.closest("a")' in header
     assert "menuRef.current?.close();" in header
+    assert '<dialog ref={menuRef} id="landing-menu"' in landing
+    assert "onClose={() => menuButtonRef.current?.focus()}" in landing
     assert "focus-visible" in css
     assert "prefers-reduced-motion: reduce" in css
     assert "scroll-behavior: auto" in css
