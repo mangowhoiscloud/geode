@@ -9,6 +9,7 @@ import { LoopMap } from "@/components/geode/loop-map";
 import { RecordedRun } from "@/components/geode/landing-run";
 import { BenchmarkComparison } from "@/components/geode/landing-benchmark";
 import { InstallCommands } from "@/components/geode/landing-install";
+import { ResearchSection } from "@/components/geode/landing-research";
 import { galmuri } from "@/fonts/galmuri";
 import "./landing.css";
 
@@ -21,8 +22,8 @@ function LandingContent() {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const navigation = [
     { id: "run", label: t(locale, "실행", "Run") },
-    { id: "evidence", label: t(locale, "측정", "Evidence") },
     { id: "research", label: t(locale, "연구", "Research") },
+    { id: "evidence", label: t(locale, "측정", "Evidence") },
     { id: "roadmap", label: t(locale, "로드맵", "Roadmap") },
     { id: "install", label: t(locale, "설치", "Install") },
   ];
@@ -87,7 +88,7 @@ function LandingContent() {
             </p>
             <div className="landing-actions">
               <a className="landing-button landing-button-primary" href="#install">{t(locale, "GEODE 설치", "Install GEODE")}</a>
-              <a className="landing-button" href="#research">{t(locale, "연구와 근거 보기", "Explore the research")}</a>
+              <a className="landing-button" href="#research">{t(locale, "연구 살펴보기", "Explore the research")}</a>
             </div>
           </div>
           <LoopMap locale={locale} />
@@ -137,47 +138,7 @@ function LandingContent() {
           </div>
         </section>
 
-        <section id="research" className="landing-container landing-section" aria-labelledby="research-title">
-          <div className="landing-section-heading">
-            <p className="landing-kicker">Experimental Loop</p>
-            <h2 id="research-title">{t(locale, "실행 밖에서, 다음 질문을 검증합니다.", "Beyond execution, test the next question.")}</h2>
-            <p>{t(locale, "Scaffold Search와 Seed Scenario Generation, SIL, Jev 연구는 서로 다른 질문을 다룹니다. 구현과 관측을 연결하되, 지속적 개선을 입증했다는 주장으로 묶지 않습니다.", "Scaffold Search, Seed Scenario Generation, SIL, and the Jev study address different questions. Connect their designs to observations without assuming sustained improvement.")}</p>
-          </div>
-          <div className="landing-research-list">
-            {[
-              ["Scaffold Search", t(locale, "모델을 고정하고 실행 방식을 바꿀 수 있을까?", "Can the scaffold change while model weights stay fixed?"), t(locale, "후보를 변형하고 평가한 뒤 채택하거나 복원합니다. 탐색 중 채택과 독립 검증의 판정은 별도로 남깁니다.", "Mutate, evaluate, then keep or revert. Search acceptance and independent validation retain separate verdicts."), "scaffold"],
-              ["Seed Scenario Generation", t(locale, "기존 평가가 놓친 행동을 어떻게 찾을까?", "What behavior do existing evaluations miss?"), t(locale, "시나리오를 생성·비평·pilot·선별합니다. 생성된 seed가 유효한 평가인지, 다음 세대로 이어졌는지 확인합니다.", "Generate, critique, pilot, and select scenarios. Inspect both their validity and what reaches the next generation."), "seeds"],
-              ["SIL", t(locale, "실행의 실패를 다음 실험에 연결할 수 있을까?", "Can a failed run inform the next experiment?"), t(locale, "Self-Improving Loop의 연결 경로와 저장된 기록을 살펴봅니다. 세션 기록만으로 변이나 승격을 입증하지 않습니다.", "Trace the Self-Improving Loop and its stored records. A session record alone does not establish a mutation or promotion."), "sil"],
-              ["Jev · System 1 offloading", t(locale, "작은 판정기로 완료 여부를 맡겨도 될까?", "Can a small judge decide when the work is done?"), t(locale, "판정 정확도, 호출 지연, 실제 과제 완료를 분리해 실험했습니다. 올바른 수리 후보를 보류한 실패도 공개합니다.", "Measure judgment accuracy, latency, and task completion separately—including correct repairs the judge refused to deliver."), "jev"],
-            ].map(([name, question, detail, anchor]) => <article key={anchor}>
-              <p className="landing-research-name">{name}</p>
-              <div><h3>{question}</h3><p>{detail}</p>
-                <Link className="landing-text-link" href={`/docs/research/overview?lang=${locale}#${anchor}`}>{t(locale, "설계·관측·한계 읽기", "Read the design, evidence, and limits")}</Link>
-              </div>
-            </article>)}
-            <article id="jevdb-paper-review">
-              <p className="landing-research-name">JEVDB · {t(locale, "논문 리뷰", "Paper review")}</p>
-              <div>
-                <h3><Link href={`/research/jevdb?lang=${locale}`}>Prune First, Decide Fast</Link></h3>
-                <div className="landing-inline-links">
-                  <Link href={`/research/jevdb?lang=${locale}`}>{t(locale, "논문 리뷰 읽기", "Read the paper review")}</Link>
-                  <a href="https://youtu.be/KKiEyGjGUIo">{t(locale, "논문 리뷰 영상", "Watch the paper review")}</a>
-                  <a href="/geode/research/jevdb-seminar-v25.pptx" download>{t(locale, "논문 리뷰 PPTX 다운로드", "Download the paper review PPTX")}</a>
-                  <a href="https://arxiv.org/abs/2610.02046v1">{t(locale, "원 논문 · Wang et al.", "Original paper · Wang et al.")}</a>
-                </div>
-                <p>{t(locale,
-                  "Semantic query의 후보 축소, typed decision, 재사용과 LLM escalation을 설명하고 논문이 보고한 성능의 비교 조건과 한계를 검토합니다.",
-                  "A review of candidate pruning, typed decisions, reuse, and LLM escalation in semantic queries, including the conditions and limits of the paper’s benchmark results.",
-                )}</p>
-                <p>{t(locale, "2026.10.11 · v25 · 영문 19장 · 한국어 발표자 메모 포함", "October 11, 2026 · v25 · 19 English slides · Korean speaker notes")}</p>
-              </div>
-            </article>
-          </div>
-          <div className="landing-research-context">
-            <p>{t(locale, "연구의 좌표: 평가 피드백을 쓰는 GEODE의 탐색을 DGM, 검색 중 downstream reward를 쓰지 않는 SelfSearch와 구분해 읽습니다.", "Research context: compare GEODE's evaluation-guided search with DGM. SelfSearch differs by excluding downstream rewards during search.")}</p>
-            <Link className="landing-text-link" href={`/docs/research/overview?lang=${locale}#related-work`}>{t(locale, "SelfSearch·DGM과의 관계", "Relation to SelfSearch and DGM")}</Link>
-          </div>
-        </section>
+        <ResearchSection />
 
         <section id="evidence" className="landing-container landing-section" aria-labelledby="evidence-title">
           <div className="landing-section-heading">
