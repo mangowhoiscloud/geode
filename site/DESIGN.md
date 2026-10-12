@@ -10,6 +10,24 @@
 
 ## Current landing and docs contract (2026-09-08)
 
+### Research collection (operator-directed 2026-10-12)
+
+The existing `#research` entry is a visible Research collection. Its first
+level presents the Jev experimental study and the JEVDB external paper review;
+its second level retains Scaffold Search, Seed Scenario Generation, SIL, and
+related-work directions. Keep questions, observations or review scope, and
+limits beside each resource. Reports, PDFs, video, slides, and pinned evidence
+have explicit labels rather than one undifferentiated link row. Navigation
+order follows the page order. Original reader routes and assets stay intact.
+
+The design uses the existing dark substrate, typography, and color tokens.
+Use full-width resource entries with a question/observations/materials layout,
+not an equal-card navigation grid. Jev's rose identity label and surface mark
+GEODE's own experiment; the external review stays on the substrate with clear
+paper attribution. Below 768px the facts and links stack in reading order;
+all material links have at least 44px targets. No new font, library, theme,
+thumbnail, or automatic motion. Resource counts and dates are not decoration.
+
 ### Harness and research entry (2026-10-06)
 
 The landing leads with **Autonomous Agent Harness** and its separate

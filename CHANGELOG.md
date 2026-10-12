@@ -49,6 +49,11 @@ functional change.
 
 ### Changed
 
+- **Research landing collection.** Separate public experimental studies and paper
+  reviews from implementation topics. Jev and JEVDB now expose their readers,
+  reports, presentation materials, and pinned sources together, with language
+  matched links and mobile layouts.
+
 - **JEVDB paper review reader.** Present the 19 original v25 slides in the
   Decision Offloading reader layout, with bilingual notes, scene navigation,
   a source sheet, and early video/PPT access. The original PPT bytes and
