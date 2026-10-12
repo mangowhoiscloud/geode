@@ -12,6 +12,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "about",
     "portfolio",
     "research/jevdb",
+    "research/geode",
     "resaerch/jev-system1-offloading",
     "benchmarks/terminal-bench/replay",
     ...flattenSitemap().map((page) => `docs${page.slug ? `/${page.slug}` : ""}`),
