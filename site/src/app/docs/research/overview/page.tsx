@@ -82,7 +82,7 @@ export default function ResearchOverview() {
 
       <section id="jev" className="research-study">
         <p className="research-state">{ko ? "실험 결과 공개 / 과제별 한계" : "Published study / task-specific limits"}</p>
-        <h2>Jev · System 1 offloading</h2>
+        <h2>Jev Decision Offloading</h2>
         <p className="research-question">{t(locale, "작은 판정기에 어떤 결정을 맡길 수 있을까?", "Which decisions can be offloaded to a small judge?")}</p>
         <h3>{ko ? "설계" : "Design"}</h3>
         <p>{t(locale, "Jev 연구는 유한 선택지의 판단을 분리해 판정 정확도, 오류 선별, 호출 지연, 실제 과제 완료를 측정했습니다. 생성 모델의 결과, 내부 완료 판정, 외부 과제 verifier는 서로 다른 권한입니다.", "The Jev study isolates finite-choice judgments to measure accuracy, error selection, call latency, and actual task completion. Generation, internal completion judgment, and external task verification have different authorities.")}</p>
@@ -91,7 +91,7 @@ export default function ResearchOverview() {
         <p className="research-limit"><strong>{ko ? "해석의 한계. " : "Interpretation limits. "}</strong>{t(locale, "중단 뒤 선택한 표본에 대한 관측입니다. 일반화, 신뢰구간, 인과적 우열 주장을 붙이지 않습니다. v3 본실험과 이전 M4–M6 파일럿의 분모도 합치지 않습니다.", "This is an observation on a sample selected after the stop. It carries no generalization, confidence interval, or causal superiority claim. The v3 study and earlier M4–M6 pilots also retain separate denominators.")}</p>
         <ul className="research-sources">
           <li><Link href={`${doc("verification/evaluation")}#jev-v3-study`}>{ko ? "v3 결과·판정 기준·공개 근거" : "v3 results, judgment criteria, and evidence"}</Link></li>
-          <li><a href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}`}>{ko ? "Jev 연구 리더와 한국어 PDF" : "Jev research reader and English PDF"}</a></li>
+          <li><a href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}`}>{ko ? "Jev Decision Offloading 리더와 한국어 PDF" : "Jev Decision Offloading reader and English PDF"}</a></li>
           <li><a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/analyses/u8n-observed-pairs-20260928/README.md">E8 {ko ? "관측 해석" : "observed-pair analysis"}</a></li>
         </ul>
       </section>

@@ -36,7 +36,7 @@ export function ResearchSection() {
       links: [{ label: t(locale, "PDF 다운로드", "Download PDF"), href: `/geode/report${locale === "en" ? "-en" : ""}.pdf`, download: true }, { label: t(locale, "원본과 출처", "Originals and sources"), href: `/geode/research/geode/?lang=${locale}#readerSources` }],
     },
     {
-      name: t(locale, "Jev 실험", "Jev study"), title: "Decision Offloading", kind: t(locale, "GEODE 실험 연구", "GEODE experimental study"),
+      name: "Jev Decision Offloading", title: "Jev Decision Offloading", kind: t(locale, "GEODE 실험 연구", "GEODE experimental study"),
       image: `/geode/research/previews/jev-${locale}.webp`, width: 1600, height: 900,
       reader: `/geode/resaerch/jev-system1-offloading/?lang=${locale}#cover`,
       caption: t(locale, "2026.09.28 공개판 · 한국어 표지 · 57장면", "Published 2026.09.28 · English cover · 57 scenes"),

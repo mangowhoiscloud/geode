@@ -52,7 +52,8 @@ functional change.
 - **Research publication readers.** Replace framed text cards with source-cover
   previews and publication tabs. Add a bilingual 92-page GEODE reader and Jev
   focus/text views while preserving the original PDFs, scenes, measurement
-  conditions, and public links.
+  conditions, and public links. Use **Jev Decision Offloading** consistently
+  for publication labels in both languages.
 
 - **Research landing collection.** Separate public experimental studies and paper
   reviews from implementation topics. Jev and JEVDB now expose their readers,
