@@ -5,6 +5,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PORTFOLIO_PATH = REPO_ROOT / "site/src/app/portfolio/page.tsx"
 LANDING_PATH = REPO_ROOT / "site/src/components/geode/landing-page.tsx"
+HEADER_PATH = LANDING_PATH.with_name("landing-header.tsx")
+LEGACY_REDIRECT_PATH = LANDING_PATH.with_name("legacy-research-redirect.tsx")
 INSTALL_PATH = REPO_ROOT / "site/src/components/geode/landing-install.tsx"
 LOCALE_CONTEXT_PATH = REPO_ROOT / "site/src/components/geode/locale-context.tsx"
 NAV_PATH = REPO_ROOT / "site/src/components/geode/sections/nav.tsx"
@@ -18,7 +20,9 @@ def test_portfolio_language_and_report_follow_the_query_locale() -> None:
     assert '<LocaleProvider defaultLocale="en">' in portfolio
     assert "allowQueryOverride={false}" not in portfolio
     assert "LocaleToggle" not in portfolio
-    assert 'const lang = params.get("lang");' in locale_context
+    assert 'new URLSearchParams(window.location.search).get("lang")' in locale_context
+    assert 'window.addEventListener("popstate", readLocale)' in locale_context
+    assert 'window.removeEventListener("popstate", readLocale)' in locale_context
     assert "setQueryReady(true)" in locale_context
     for write in (
         'url.searchParams.delete("lang")',
@@ -66,20 +70,33 @@ def test_current_routes_share_the_landing_without_restyling_archives() -> None:
 
 def test_landing_keeps_native_navigation_and_reduced_motion() -> None:
     landing = LANDING_PATH.read_text(encoding="utf-8")
+    header = HEADER_PATH.read_text(encoding="utf-8")
+    redirects = LEGACY_REDIRECT_PATH.read_text(encoding="utf-8")
     run = LANDING_PATH.with_name("landing-run.tsx").read_text(encoding="utf-8")
     css = LANDING_PATH.with_name("landing.css").read_text(encoding="utf-8")
-    for anchor in ("hero", "install", "features", "distill", "lab"):
+    for anchor in ("hero", "install", "evidence", "lab"):
         assert f'id="{anchor}"' in landing
+    assert "<LandingHeader home />" in landing
+    assert "<LegacyResearchRedirect />" in landing
+    # Moved sections retain their submitted URL through the compatibility owner.
+    for anchor, destination in (
+        ("features", "overview/how-it-runs"),
+        ("distill", "capabilities/outer-loop"),
+        ("roadmap", "explanation/rsi-roadmap"),
+    ):
+        assert f'"#{anchor}": "/geode/docs/{destination}/"' in redirects
+        assert (REPO_ROOT / f"site/src/app/docs/{destination}/page.tsx").is_file()
+    assert "window.location.replace(url.toString())" in redirects
     assert 'id="run"' in run
     assert 'href="#main-content"' in landing
     assert "<details" not in landing
-    assert 'aria-haspopup="dialog" aria-controls="landing-menu"' in landing
-    assert '<dialog ref={menuRef} id="landing-menu"' in landing
-    assert 'aria-labelledby="landing-menu-title"' in landing
-    assert "menuRef.current?.showModal()" in landing
-    assert "onClose={() => menuButtonRef.current?.focus()}" in landing
-    assert 'event.target.closest("a")' in landing
-    assert "menuRef.current?.close();" in landing
+    assert 'aria-haspopup="dialog" aria-controls="landing-menu"' in header
+    assert '<dialog ref={menuRef} id="landing-menu"' in header
+    assert 'aria-labelledby="landing-menu-title"' in header
+    assert "menuRef.current?.showModal()" in header
+    assert "onClose={() => menuButtonRef.current?.focus()}" in header
+    assert 'event.target.closest("a")' in header
+    assert "menuRef.current?.close();" in header
     assert "focus-visible" in css
     assert "prefers-reduced-motion: reduce" in css
     assert "scroll-behavior: auto" in css
