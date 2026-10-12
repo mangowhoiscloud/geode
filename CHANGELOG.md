@@ -47,7 +47,20 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Research resource routes.** Add a standalone publication collection and
+  correct the Jev reader URL to `/research/jev-system1-offloading/`. Preserve
+  shared homepage anchors and legacy reader/download addresses, and restore
+  language and selected pages when navigating browser history.
+
 ### Changed
+
+- **Portfolio information architecture.** Use a white reading canvas and direct
+  publication entries on the main landing. Move repeated loop, package-role,
+  and roadmap explanations to their existing Docs destinations; keep measured
+  evidence and its caveats visible. Research owns the full publication selector,
+  and all three readers share a minimal return-to-Research header.
 
 - **Research publication readers.** Replace framed text cards with source-cover
   previews and publication tabs. Add a bilingual 92-page GEODE reader and Jev

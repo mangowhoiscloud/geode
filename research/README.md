@@ -1,5 +1,7 @@
 # Research publications
 
+[Browse the publication collection](https://mangowhoiscloud.github.io/geode/research/)
+
 ## GEODE technical report
 
 [Read the report](https://mangowhoiscloud.github.io/geode/research/geode/) ·
@@ -19,7 +21,7 @@ running a renderer. Page text is extracted from the PDFs, not rewritten.
 
 ## Jev Decision Offloading
 
-[Read the study](https://mangowhoiscloud.github.io/geode/resaerch/jev-system1-offloading/)
+[Read the study](https://mangowhoiscloud.github.io/geode/research/jev-system1-offloading/)
 
 The original 57-scene presentation and 81-build PDFs remain the source of
 truth. Focus view enlarges the existing canvas; text view exposes the full

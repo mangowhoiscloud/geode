@@ -10,6 +10,94 @@
 
 ## Current landing and docs contract (2026-09-08)
 
+### Landing information architecture and white canvas (operator-approved 2026-10-12)
+
+This supersedes the dark-token, rose-primary-action, and in-page Research
+selector rules for `/`, `/portfolio/`, and `/research/` in the sections below.
+Docs, About, archive, and the readers keep their own surfaces.
+
+**Order.** Identity (hero + the two-layer `LoopMap`) → the recorded TLS run →
+the representative Terminal-Bench comparison with its full caveat text and
+source links → direct entries to the three publications → install. The
+header follows that order and links About early (`만든 사람` / `About the
+author`, existing footer copy) instead of adding biographical text. Each
+publication entry links its own reader, PDF/PPT/video, and evidence; the
+collection and Docs links follow. No section repeats a full explanation that
+an existing Docs page owns, and no disclosure is nested.
+
+**Content movement.** Copy was moved, not rewritten. Each row names an
+existing destination that already states the same scope and caveats.
+
+| Old landing section | Destination |
+|---|---|
+| AgenticLoop four-step loop, "approval policies, execution budgets, cancellation" | `/docs/architecture/agentic-loop` (round guards, budgets, `user_cancelled`); the hero `LoopMap` keeps decide/act/observe |
+| Features: core / evals / evolve responsibilities and their links | `/docs/overview/how-it-runs` (same AgenticLoop for every entry), `/docs/architecture/overview`, `/docs/runtime/context`, `/docs/runtime/skills`, `/docs/benchmarks/terminal-bench`, `/docs/capabilities/outer-loop`; `/docs/explanation/rsi-roadmap#terms` (core executes, evals measures, evolve searches; KEEP is not a release) |
+| Roadmap · RSI (L1/L2 implemented, L3–L5 need evidence, whitepaper v2) | `/docs/explanation/rsi-roadmap` (level table, code-scope disclaimer, arXiv 2609.11873v2), linked from the landing Research entries |
+| Research tab selector, large cover, Further research topics | `/research/` (the same `publications()` copy and topic text) |
+
+The `Architecture` and `Read the evaluation method` links moved beside the
+recorded run and the benchmark. Legacy `#roadmap`, `#features`, and `#distill`
+fragments replace-navigate to the RSI roadmap, How it runs, and Outer Loop
+documents respectively, preserving the selected language.
+
+**Tokens.** Scoped in `landing.css` on `.geode-landing`; global tokens are
+unchanged. The values reuse the Jev reader film palette, so the landing,
+collection, and readers read as one surface without a new palette.
+
+| Token (landing scope) | Value | Source |
+|---|---|---|
+| `--paper` | `#FFFFFF` | TypeUI Codex surface |
+| `--paper-2` | `#F3F4F7` | Jev `--reader-paper` |
+| `--ink`, `--ink-1` | `#171B27` | Jev `--reader-ink` |
+| `--ink-2`, `--ink-3` | `#515C6A` | Jev `--reader-muted` (6.6:1 on white) |
+| `--rule` / `--rule-soft` | `#CBD1DC` / `#E2E6EE` | Jev `--reader-line` / `--reader-surface` |
+| `--acc-artifact` | `#B83C75` | deep-rose ink adjusted for AA on white and the map surface |
+
+Chrome is monochrome: ink-filled primary action, ink underlines, ink tab and
+focus indicators, gold/aqua removed from the install controls. Deep rose
+remains only where it carries meaning: the GEODE series of the benchmark bar
+and the `LoopMap` layer labels. The install command keeps the dark
+`--code-bg` block, the single filled surface. The recorded run is delimited by
+rules instead of a filled, shadowed card. Original covers, slides, PDFs, and the
+`GeodiSprite` palette render unfiltered.
+
+**TypeUI Codex reference** (`site/design-references/typeui-codex/`, pinned).
+Adopted: white edge-to-edge canvas, typography-led hierarchy, near-black as the
+only fill, no shadows, gradients, or decorative illustration, explicit states,
+WCAG 2.2 AA. Deliberate exceptions: installed Outfit/Inter/Galmuri instead of
+Open Sans/JetBrains Mono; 4–8px radii instead of pill controls (§7 radius
+limit); `#171B27` ink instead of `#000000`; original artifact color and the
+GEODE sprite instead of a photography-only color rule; no word or heading
+limits that would shorten preserved copy.
+
+**Collection behavior.** A tab click selects and pushes its fragment without
+scrolling. Incoming fragments select the same publication. Panel IDs are
+separate from selection hashes, preventing native fragment scrolling from
+hiding the selector under the sticky header; browser history retains its normal
+scroll restoration. Arrow/Home/End move focus; Enter/Space activate.
+
+**Reader return.** GEODE, Jev, and JEVDB headers label the return link
+`GEODE / Research` and point to the collection in the current language.
+
+### Research route ownership (2026-10-12)
+
+`/research/` is the standalone publication collection, using the same header
+as the landing. The landing links each reader directly and the collection holds
+the full publication selector (see the section above).
+Readers live at `/research/geode/`, `/research/jev-system1-offloading/`, and
+`/research/jevdb/`. Canonical metadata and the sitemap identify these resources.
+Language queries select a display language; fragments identify pages or scenes.
+The collection and readers default to Korean; the existing landing defaults to
+English. Compatibility navigation preserves that distinction.
+
+The old homepage Research hashes and `/resaerch/jev-system1-offloading/` use
+replacement navigation, preserving language and scene without a Back loop.
+The frozen Jev publication remains checked in at its historical location.
+`npm run build` runs `export-research-routes.mjs` after Next static export:
+it projects only routes/history and rebases file references to the old served
+asset addresses. No PDF, scene source, font, image, or video is regenerated.
+Validate canonical and compatibility behavior against `site/out`, not Next dev.
+
 ### Research publications (operator-directed 2026-10-12 revision)
 
 The Research landing is a media-led publication selector. The operator rejected
@@ -18,7 +106,8 @@ Use one real, uncropped publication canvas with three visible document tabs:
 GEODE report, Jev study, JEVDB review. Labels and a quiet selected underline
 identify the document; no card background, border frame, corner treatment,
 shadow, autoplay, or decorative illustration is added. The original artwork
-retains its own palette and diagrams. Keep the dark GEODE landing tokens.
+retains its own palette and diagrams. The surface uses the scoped white-canvas
+tokens above.
 
 The original cover opens that same first page or scene. A caption identifies
 the edition and language. Short copy distinguishes the historical GEODE
@@ -254,7 +343,10 @@ gold and aqua appear only where their meaning applies.
 
 **Single substrate.** Every page is dark by design. No light mode, no
 dark-panel-on-light-page. Character PNGs were authored on transparent
-backgrounds and sit naturally on this substrate.
+backgrounds and sit naturally on this substrate. Scoped exceptions: the
+research readers and, since 2026-10-12, the landing and `/research/`
+collection white canvas (see "Landing information architecture" above). These
+are fixed surfaces, not a theme toggle.
 
 **Petri-blue is scoped, not dead.** `--acc-si` keeps the hub's Bootstrap-blue
 identity on exactly two surfaces: the 04-self-improving docs section
