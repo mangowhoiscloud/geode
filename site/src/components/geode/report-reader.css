@@ -1,0 +1,33 @@
+/* The page artwork owns its colors; controls retain the Jev reading workspace. */
+.geode-report-reader .jevdb-canvas { outline: none; box-shadow: none; background: transparent; }
+.geode-report-reader .jevdb-languages { border: 0; padding: 0; }
+.geode-report-reader .jevdb-languages button[aria-pressed="true"] { box-shadow: none; background: transparent; text-decoration: underline; text-underline-offset: 8px; }
+.geode-report-reader .jevdb-counter { min-width: 80px; }
+.geode-report-reader .jevdb-toolbar { border: 0; }
+.geode-report-reader .jevdb-toolbar button[aria-pressed="true"] { border-color: transparent; }
+.geode-report-reader .jevdb-toc { border: 0; }
+.geode-report-reader .jevdb-overview img { border: 0; }
+.report-toc h2 { min-height: 48px; }
+.report-chapters { display: grid; flex-shrink: 0; }
+.report-chapters a { min-height: 44px; display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--reader-muted); }
+.report-chapters a span { font: 11px "Jev Reader Mono", monospace; }
+.report-chapters a[aria-current] { color: var(--reader-ink); font-weight: 700; }
+.report-search { display: grid; gap: 8px; margin: 20px 0 8px; font-size: 12px; flex-shrink: 0; }
+.report-search input { background: var(--reader-paper); width: 100%; padding: 10px; min-height: 44px; border: 0; border-bottom: 1px solid var(--reader-line); border-radius: 0; }
+.report-page-list { min-height: 100px; }
+.report-page-list a > span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.report-text { padding-bottom: 8px; }
+.report-text p, .report-no-results { color: var(--reader-muted); font-size: 13px; line-height: 1.6; }
+.report-text pre { white-space: pre-wrap; word-break: normal; overflow-wrap: anywhere; font: 14px/1.9 "Jev Reader", sans-serif; max-width: 88ch; padding: 24px 0; }
+.report-hash { display: block; overflow-wrap: anywhere; font-size: 12px; margin-top: 12px; }
+.report-focused .jevdb-workspace { max-width: 1600px; }
+.geode-report-reader .jevdb-toc-dialog .report-chapters, .geode-report-reader .jevdb-toc-dialog .report-search { margin-inline: 20px; }
+.geode-report-reader .jevdb-toc-dialog .report-chapters a { min-height: 44px; }
+.geode-report-reader .jevdb-toc-dialog .report-page-list { padding-inline: 16px; }
+@media (max-width: 767px) {
+  .geode-report-reader .report-focus-button { display: none; }
+  .geode-report-reader .jevdb-tools { justify-content: flex-start; }
+  .geode-report-reader .jevdb-canvas { margin-inline: -16px; }
+  .geode-report-reader .jevdb-toc-dialog .report-chapters { display: none; }
+  .report-text pre { font-size: 15px; line-height: 1.85; }
+}

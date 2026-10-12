@@ -1,4 +1,30 @@
-# Paper reviews
+# Research publications
+
+## GEODE technical report
+
+[Read the report](https://mangowhoiscloud.github.io/geode/research/geode/) ·
+[한국어 PDF](https://mangowhoiscloud.github.io/geode/report.pdf) ·
+[English PDF](https://mangowhoiscloud.github.io/geode/report-en.pdf)
+
+The reader preserves the existing public 92-page Korean and English editions.
+Runtime, state, authority, evaluation, and experiment pages retain their
+original figures, dates, conditions, and citations. This is a new reading
+surface, not a new benchmark or a revision of the report's historical claims.
+
+`site/scripts/export-geode-report.py` rasterizes the existing PDFs at their
+original 16:9 ratio, with a 1600px long edge and lossless WebP output. It uses
+Poppler and Pillow only during authoring. The public manifest binds all 184
+images to the source PDF digests; the build verifies those identities without
+running a renderer. Page text is extracted from the PDFs, not rewritten.
+
+## Jev Decision Offloading
+
+[Read the study](https://mangowhoiscloud.github.io/geode/resaerch/jev-system1-offloading/)
+
+The original 57-scene presentation and 81-build PDFs remain the source of
+truth. Focus view enlarges the existing canvas; text view exposes the full
+scene's source text for smaller screens. All slide sections, figures, replay
+assets, study conditions, and PDF bytes remain unchanged by the reader update.
 
 ## JEVDB
 

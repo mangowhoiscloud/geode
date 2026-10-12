@@ -10,23 +10,45 @@
 
 ## Current landing and docs contract (2026-09-08)
 
-### Research collection (operator-directed 2026-10-12)
+### Research publications (operator-directed 2026-10-12 revision)
 
-The existing `#research` entry is a visible Research collection. Its first
-level presents the Jev experimental study and the JEVDB external paper review;
-its second level retains Scaffold Search, Seed Scenario Generation, SIL, and
-related-work directions. Keep questions, observations or review scope, and
-limits beside each resource. Reports, PDFs, video, slides, and pinned evidence
-have explicit labels rather than one undifferentiated link row. Navigation
-order follows the page order. Original reader routes and assets stay intact.
+The Research landing is a media-led publication selector. The operator rejected
+large framed description boxes and question/observation/materials columns.
+Use one real, uncropped publication canvas with three visible document tabs:
+GEODE report, Jev study, JEVDB review. Labels and a quiet selected underline
+identify the document; no card background, border frame, corner treatment,
+shadow, autoplay, or decorative illustration is added. The original artwork
+retains its own palette and diagrams. Keep the dark GEODE landing tokens.
 
-The design uses the existing dark substrate, typography, and color tokens.
-Use full-width resource entries with a question/observations/materials layout,
-not an equal-card navigation grid. Jev's rose identity label and surface mark
-GEODE's own experiment; the external review stays on the substrate with clear
-paper attribution. Below 768px the facts and links stack in reading order;
-all material links have at least 44px targets. No new font, library, theme,
-thumbnail, or automatic motion. Resource counts and dates are not decoration.
+The original cover opens that same first page or scene. A caption identifies
+the edition and language. Short copy distinguishes the historical GEODE
+report, separate Jev measurements, and external JEVDB review. Inline links
+name actual reader/PDF/PPT/video/evidence destinations. Keep all three tab
+labels visible on mobile. Manual keyboard tab activation avoids changing the
+large image on every arrow press; Arrow keys and Home/End move tab focus.
+Scaffold, Seed, SIL, and related-work directions follow as unframed text.
+
+References inspected for this revision:
+
+- [Primer Brand MediaPlaylist](https://primer.github.io/brand/components/MediaPlaylist/):
+  visible media choices and a shared presentation area.
+- [Primer Brand River](https://primer.github.io/brand/components/River/):
+  concise explanation beside actual media and direct inline links.
+- [Carbon global header](https://www.carbondesignsystem.com/building-blocks/core/patterns/global-header):
+  consistent global document actions separated from local content navigation.
+
+These are interaction and composition references. No library package or new
+visual theme is installed. Native React and the existing typography implement
+the patterns. Unlike Primer's general preference against text-heavy imagery,
+these previews deliberately reproduce the requested source report covers.
+
+`/research/geode/` presents both existing 92-page PDFs in the Jev reading
+workspace. Language changes artwork, text, and PDF while preserving page.
+Chapter navigation, page search, full-size images, overview, extracted text,
+keyboard paging, focus view, and a native source sheet support reading.
+Original page claims are historical, not reevaluated or relabeled as current.
+The Jev reader retains all 57 scenes and 81 builds; focus view and full-scene
+text reveal the original content without redrawing figures or changing results.
 
 ### Harness and research entry (2026-10-06)
 

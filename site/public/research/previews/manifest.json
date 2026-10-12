@@ -1,0 +1,16 @@
+[
+  {
+    "path": "jev-ko.webp",
+    "source_pdf": "resaerch/jev-system1-offloading/report-ko.pdf",
+    "source_sha256": "37d1fca8d821eea0ad0febc081f1a97fbf4a25cad165e706361711ccbafe7dc2",
+    "page": 1,
+    "sha256": "5b9e2c184f17c78c0448224f79ce42bc854538846933cf20ff6a8aae8eba7ae6"
+  },
+  {
+    "path": "jev-en.webp",
+    "source_pdf": "resaerch/jev-system1-offloading/report-en.pdf",
+    "source_sha256": "da05703b5052dc029db7ccdab94643f2c20322aa1b639b88009b9fb08c17ce92",
+    "page": 1,
+    "sha256": "6edbddd1d663b8e577dfcae5c813279dbaa5bcebb223cf0893ce49630147ec58"
+  }
+]
