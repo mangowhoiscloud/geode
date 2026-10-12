@@ -7,9 +7,6 @@ const legacyPaths: Record<string, string> = {
   "#research-geode": "/geode/research/",
   "#research-jev": "/geode/research/",
   "#jevdb-paper-review": "/geode/research/",
-  "#roadmap": "/geode/docs/explanation/rsi-roadmap/",
-  "#features": "/geode/docs/overview/how-it-runs/",
-  "#distill": "/geode/docs/capabilities/outer-loop/",
 };
 
 /** Keep submitted homepage links working without adding a redirect history entry. */
@@ -22,7 +19,7 @@ export function LegacyResearchRedirect() {
       url.pathname = destination;
       // The landing defaults to English; the publication readers default to Korean.
       if (!url.searchParams.has("lang")) url.searchParams.set("lang", "en");
-      if (url.hash === "#research" || !destination.endsWith("/research/")) url.hash = "";
+      if (url.hash === "#research") url.hash = "";
       window.location.replace(url.toString());
     };
     redirect();
