@@ -91,7 +91,7 @@ export default function ResearchOverview() {
         <p className="research-limit"><strong>{ko ? "해석의 한계. " : "Interpretation limits. "}</strong>{t(locale, "중단 뒤 선택한 표본에 대한 관측입니다. 일반화, 신뢰구간, 인과적 우열 주장을 붙이지 않습니다. v3 본실험과 이전 M4–M6 파일럿의 분모도 합치지 않습니다.", "This is an observation on a sample selected after the stop. It carries no generalization, confidence interval, or causal superiority claim. The v3 study and earlier M4–M6 pilots also retain separate denominators.")}</p>
         <ul className="research-sources">
           <li><Link href={`${doc("verification/evaluation")}#jev-v3-study`}>{ko ? "v3 결과·판정 기준·공개 근거" : "v3 results, judgment criteria, and evidence"}</Link></li>
-          <li><a href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}`}>{ko ? "Jev Decision Offloading 리더와 한국어 PDF" : "Jev Decision Offloading reader and English PDF"}</a></li>
+          <li><a href={`/geode/research/jev-system1-offloading/?lang=${locale}`}>{ko ? "Jev Decision Offloading 리더와 한국어 PDF" : "Jev Decision Offloading reader and English PDF"}</a></li>
           <li><a href="https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/analyses/u8n-observed-pairs-20260928/README.md">E8 {ko ? "관측 해석" : "observed-pair analysis"}</a></li>
         </ul>
       </section>

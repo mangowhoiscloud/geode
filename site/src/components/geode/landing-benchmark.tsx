@@ -121,7 +121,7 @@ export function BenchmarkComparison() {
           <li key={url}>
             <a
               href={url}
-              className="inline-flex min-h-11 items-center text-[var(--acc-artifact)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--acc-artifact)]"
+              className="inline-flex min-h-11 items-center text-[var(--ink)] underline underline-offset-4 hover:text-[var(--ink-2)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--ink)]"
             >
               {label}
             </a>
