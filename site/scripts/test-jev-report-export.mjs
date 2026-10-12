@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EVIDENCE, PUBLIC_URL, approvedAssets, main, projectPreview, reusePdfs, safeRelative } from "./export-jev-report.mjs";
+import { EVIDENCE, PUBLIC_URL, approvedAssets, enhanceReader, main, projectPreview, reusePdfs, safeRelative } from "./export-jev-report.mjs";
 
 const sample = `<!doctype html><html><head><style>@font-face{src:url('assets/font.woff2')}</style></head><body data-film-edition="v20-final-candidate">
 <header><span>Research film / Revised 25 September 2026</span><div class="toolbar"><button id="contentsButton">목차</button><button id="overviewButton">전체</button><button id="notesButton">연출 노트</button></div></header>
@@ -41,6 +41,20 @@ test("rejects unapproved assets, local paths and unapproved video hosts", () => 
   assert.throws(() => projectPreview(sample, { ...settings, assets: new Map() }), /Unapproved/);
   assert.throws(() => projectPreview(sample.replace("Partial post-hoc analysis", "file:///private/result.json"), settings), /Private/);
   assert.throws(() => projectPreview(sample, { ...settings, videoUrl: "https://example.com/film.mp4" }), /approved public video/);
+});
+
+test("fresh exports add reading controls without rewriting source slide content", () => {
+  const publicSample = sample.replace('<a href="jev-update-plan.md">Production link</a>', '<span>Public context</span>');
+  const output = projectPreview(publicSample, settings);
+  for (const id of ["focusButton", "readerTextButton", "readerPlainText", "readerTextContent"]) {
+    assert.equal((output.match(new RegExp(`id="${id}"`, "g")) || []).length, 1, id);
+  }
+  const slideBody = html => html.match(/<section class="slide"[^>]*>([^]*?)<\/section>/)[1];
+  assert.equal(slideBody(output), slideBody(publicSample));
+  assert(output.includes("Text from all builds of this scene"));
+  assert(output.includes("createTreeWalker(slide,NodeFilter.SHOW_TEXT)"));
+  assert(output.includes("focusButton.onclick="));
+  assert.throws(() => enhanceReader(output), /already applied/);
 });
 
 test("sanitizes links that language switching restores from encoded markup", () => {
