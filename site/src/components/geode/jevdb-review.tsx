@@ -1,112 +1,191 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LocaleProvider, t, useLocale, useSetLocale } from "@/components/geode/locale-context";
+import scenes from "@/data/geode/jevdb-slides.json";
 import "./jevdb-review.css";
 
 const paper = "https://arxiv.org/abs/2610.02046v1";
 const slides = "/geode/research/jevdb-seminar-v25.pptx";
+const assets = "/geode/research/jevdb-slides-v25/";
+const evidence = "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927";
+const sceneId = (index: number) => `slide-${String(index + 1).padStart(2, "0")}`;
 
 function ReviewContent() {
   const locale = useLocale();
   const setLocale = useSetLocale();
+  const [index, setIndex] = useState(0);
+  const [overview, setOverview] = useState(false);
+  const [contents, setContents] = useState(true);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [transcript, setTranscript] = useState(false);
+  const toc = useRef<HTMLDialogElement>(null);
+  const sources = useRef<HTMLDialogElement>(null);
+  const sourceButton = useRef<HTMLButtonElement>(null);
+  const scene = scenes[index];
+  const title = locale === "ko" ? scene.titleKo : scene.title;
+
+  const selectScene = useCallback((next: number) => {
+    if (next < 0 || next >= scenes.length) return;
+    setIndex(next);
+    setOverview(false);
+    setTranscript(false);
+    window.history.pushState({}, "", `#${sceneId(next)}`);
+    toc.current?.close();
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
+
+  useEffect(() => {
+    const readHash = () => {
+      if (window.location.hash === "#readerSources") {
+        toc.current?.close();
+        if (!sources.current?.open) sources.current?.showModal();
+        return;
+      }
+      if (sources.current?.open) sources.current.close();
+      const match = /^#slide-(\d{2})$/.exec(window.location.hash);
+      if (!match && window.location.hash) return;
+      const next = match ? Number(match[1]) - 1 : 0;
+      if (next >= 0 && next < scenes.length) {
+        setIndex(next);
+        setOverview(false);
+        setTranscript(false);
+      }
+    };
+    const timer = window.setTimeout(readHash, 0);
+    window.addEventListener("hashchange", readHash);
+    window.addEventListener("popstate", readHash);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("hashchange", readHash);
+      window.removeEventListener("popstate", readHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (overview || toc.current?.open || sources.current?.open || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.target instanceof Element && event.target.closest("a, button, input, textarea, select, [contenteditable]")) return;
+      const target = { ArrowLeft: index - 1, ArrowRight: index + 1, PageUp: index - 1, PageDown: index + 1, Home: 0, End: scenes.length - 1 }[event.key];
+      if (target !== undefined) {
+        event.preventDefault();
+        selectScene(target);
+      }
+    };
+    const onResize = () => {
+      if (window.matchMedia("(min-width: 1024px)").matches) toc.current?.close();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [index, overview, selectScene]);
+
+  const sceneList = () => (
+    <nav className="jevdb-scene-list" aria-label={t(locale, "장면", "Scenes")}>
+      {scenes.map((item, i) => <a key={item.number} href={`#${sceneId(i)}`} aria-current={i === index ? "page" : undefined} onClick={event => { event.preventDefault(); selectScene(i); }}>
+        <span>{String(item.number).padStart(2, "0")}</span>{" "}<span>{locale === "ko" ? item.titleKo : item.title}</span>
+      </a>)}
+    </nav>
+  );
 
   return (
-    <div className="jevdb-review" lang={locale}>
+    <div className="jevdb-reader" lang={locale}>
       <a className="jevdb-skip" href="#review-content">{t(locale, "본문으로 이동", "Skip to content")}</a>
       <header className="jevdb-header">
-        <Link href={`/?lang=${locale}#research`}>GEODE / Research</Link>
-        <div className="jevdb-locale" role="group" aria-label={t(locale, "언어", "Language")}>
-          <button type="button" aria-pressed={locale === "ko"} onClick={() => setLocale("ko")}>KO</button>
-          <button type="button" aria-pressed={locale === "en"} onClick={() => setLocale("en")}>EN</button>
+        <div className="jevdb-identity">
+          <Link className="jevdb-home" href={`/?lang=${locale}#research`}>GEODE</Link>
+          <div><h1>JEVDB: Prune First, Decide Fast</h1><p>{t(locale, "논문 리뷰 · 류지환 · v25", "Paper review · Jihwan Ryu · v25")}</p></div>
+        </div>
+        <div className="jevdb-actions">
+          <div className="jevdb-languages" role="group" aria-label={t(locale, "언어", "Language")}>
+            <button type="button" aria-pressed={locale === "ko"} onClick={() => setLocale("ko")}>한국어</button>
+            <button type="button" aria-pressed={locale === "en"} onClick={() => setLocale("en")}>English</button>
+          </div>
+          <a className="jevdb-video" href="https://youtu.be/KKiEyGjGUIo">{t(locale, "발표 영상 ↗", "Watch the talk ↗")}</a>
+          <a className="jevdb-download" href={slides} download>{t(locale, "PPT 다운로드", "Download PPT")}</a>
         </div>
       </header>
-      <main id="review-content" tabIndex={-1}>
-        <article>
-          <header className="jevdb-intro">
-            <p className="jevdb-eyebrow">JEVDB · {t(locale, "논문 리뷰", "Paper review")}</p>
-            <h1>Prune First,<br />Decide Fast</h1>
-            <p className="jevdb-subtitle">Scalable Semantic Query Processing with JEVDB</p>
-            <p className="jevdb-byline">{t(locale, "리뷰·발표 류지환", "Reviewed and presented by Jihwan Ryu")} · <time dateTime="2026-10-11">2026.10.11</time></p>
-            <div className="jevdb-actions">
-              <a className="jevdb-watch" href="https://youtu.be/KKiEyGjGUIo">{t(locale, "논문 리뷰 영상 보기", "Watch the paper review")}</a>
-              <a href={slides} download>{t(locale, "발표 자료 다운로드 · PPTX", "Download the slides · PPTX")}</a>
+
+      <div className={`jevdb-workspace${contents ? "" : " jevdb-contents-hidden"}`}>
+        <aside id="reader-scene-list" className="jevdb-toc" aria-label={t(locale, "장면 목록", "Scene list")}>
+          <h2>{t(locale, "장면 목록", "Scenes")} <small>{scenes.length}</small></h2>
+          {sceneList()}
+        </aside>
+        <main id="review-content" className="jevdb-content" tabIndex={-1}>
+          <nav className="jevdb-toolbar" aria-label={t(locale, "발표 탐색", "Presentation navigation")}>
+            <div className="jevdb-tools">
+              <button type="button" className="jevdb-contents-desktop" aria-expanded={contents} aria-controls="reader-scene-list" onClick={() => setContents(!contents)}>{t(locale, "장면 목록", "Contents")}</button>
+              <button type="button" className="jevdb-contents-mobile" aria-haspopup="dialog" aria-expanded={tocOpen} aria-controls="reader-contents" onClick={() => { toc.current?.showModal(); setTocOpen(true); }}>{t(locale, "장면 목록", "Contents")}</button>
+              <button type="button" aria-pressed={overview} onClick={() => setOverview(!overview)}>{t(locale, "전체 장면", "All scenes")}</button>
+              <span className="jevdb-static-label">{t(locale, "영문 원본 슬라이드", "Original English slides")}</span>
             </div>
-            <p className="jevdb-caption">{t(locale, "v25 · 영문 19장 · 한국어 발표자 메모 포함", "v25 · 19 English slides · Korean speaker notes")}</p>
-            <p className="jevdb-lead">{t(locale,
-              "Semantic query가 필요한 것은 문장 전체가 아니라 확률, 범주, 점수일 수 있습니다. 이 리뷰는 JEVDB가 판단 하나의 생성 비용과 판단해야 할 후보 수를 함께 줄이는 방법을 설명하고, 보고된 성능을 비교 조건과 함께 읽습니다.",
-              "A semantic query may need a probability, category, or score rather than generated prose. This review explains how JEVDB reduces both generation per decision and the number of candidates, then reads the reported performance alongside its comparison conditions.",
-            )}</p>
-            <p className="jevdb-source">{t(locale, "원 논문", "Original paper")}: Zhengle Wang, Hanxu Yan, Fuheng Zhao, Chunwei Liu.<br /><a href={paper}>arXiv:2610.02046v1</a></p>
-          </header>
+            <div className="jevdb-pager">
+              <button type="button" disabled={index === 0} onClick={() => selectScene(index - 1)}>{t(locale, "이전", "Previous")}</button>
+              <span className="jevdb-counter" aria-live="polite">{t(locale, "장면", "Scene")} {index + 1} / {scenes.length} · {t(locale, "단계", "Build")} 1 / 1</span>
+              <button type="button" disabled={index === scenes.length - 1} onClick={() => selectScene(index + 1)}>{t(locale, "다음", "Next")}</button>
+            </div>
+          </nav>
 
-          <section aria-labelledby="decision-title">
-            <p className="jevdb-eyebrow">01 · Slides 3–6</p>
-            <h2 id="decision-title">{t(locale, "Query가 요구하는 판단부터 정합니다", "Start with the decision a query needs")}</h2>
-            <p>{t(locale,
-              "보고서와 공지를 semantic join할 때 모델이 판단할 것은 특정 공지가 보고된 결함을 다루는지입니다. 논문은 입력과 task, output space를 묶어 Noul의 확률, Choice의 범주, Score의 기대 점수를 DB operator에 연결합니다. DB는 반환값으로 filter, classification, ranking, join 결과를 구성합니다.",
-              "For a semantic join between reports and bulletins, the model judges whether a bulletin covers the reported defect. The paper binds input, task, and output space to Noul probabilities, Choice categories, and Score expected values. Database operators use those outputs to filter, classify, rank, and join rows.",
-            )}</p>
-            <p>{t(locale,
-              "출력 타입을 제한하면 답변을 생성하고 다시 파싱하는 작업을 줄일 수 있습니다. 다만 typed output은 정답 보장이 아닙니다. 판단당 비용이 작아져도 두 테이블의 전체 조합을 평가하면 후보 수 문제는 남습니다.",
-              "A constrained output can reduce answer generation and parsing, but a typed output does not guarantee a correct judgment. Even cheap decisions leave a candidate-count problem if the engine evaluates the full cross product of two tables.",
-            )}</p>
-          </section>
-
-          <section aria-labelledby="work-title">
-            <p className="jevdb-eyebrow">02 · Slides 7–12</p>
-            <h2 id="work-title">{t(locale, "판단할 작업을 먼저 줄입니다", "Reduce the work before judging")}</h2>
-            <p>{t(locale,
-              "JEVDB는 relational key와 등록된 necessary condition으로 후보를 먼저 걸러냅니다. 예를 들어 결함 부품이 일치해야 한다는 조건이 타당하면 battery 보고서와 display 공지의 조합을 제외할 수 있습니다. 알 수 없는 속성은 남겨야 하며, lossless pruning이라는 주장은 조건과 속성 추출이 모두 타당할 때 성립합니다. 발표의 보고서·공지 예시는 이 경계를 설명하기 위한 예시입니다.",
-              "JEVDB first screens candidates using relational keys and registered necessary conditions. If a sound condition requires compatible components, a battery report and a display bulletin can be excluded. Unknown attributes must remain eligible. Lossless pruning depends on both a sound condition and sound attribute extraction; the report–bulletin examples in the talk illustrate that boundary.",
-            )}</p>
-            <p>{t(locale,
-              "남은 입력에는 exact-input decision 재사용, batching, 반복 문서 공유를 적용합니다. 문서별 interpretation을 저장해 조합하는 경로도 제시하지만, 이는 모든 query 작업을 선형으로 만든다는 뜻은 아닙니다. Pair 관리와 escalation은 여전히 남습니다. Full JEVDB는 predicate별로 보정한 불확실 구간을 reasoning LLM에 넘기며, 확신을 가진 오판은 이 경로를 통과하지 않을 수 있습니다.",
-              "For surviving inputs, the paper uses exact-input decision reuse, batching, and shared repeated text. It also proposes combining stored document interpretations. That does not make all query work linear: pair management and escalation remain. Full JEVDB sends a predicate-calibrated uncertainty band to a reasoning LLM, while confidently wrong decisions can bypass escalation.",
-            )}</p>
-          </section>
-
-          <section aria-labelledby="results-title">
-            <p className="jevdb-eyebrow">03 · Slides 13–16</p>
-            <h2 id="results-title">{t(locale, "품질·시간·비용을 같은 조건에서 읽습니다", "Read quality, time, and cost together")}</h2>
-            <p>{t(locale,
-              "SemBench의 Flash 비교에서는 모델과 실행 전략이 함께 달라집니다. Flash 1회 실행과 baseline 5회 평균을 비교하며, query별 비율과 전체 시간 합계의 비율도 다른 집계입니다. 따라서 보고된 개선을 특정 구성요소 하나의 효과로 분해할 수는 없습니다.",
-              "The SemBench Flash comparison changes both the model and execution strategy. Flash is measured once against five-run baseline means, and per-query ratios differ from a ratio of total elapsed times. The reported gain therefore cannot be assigned to a single component.",
-            )}</p>
-            <p>{t(locale,
-              "Shelob에서는 완료한 query의 F1과 timeout 시점의 evaluated-pair progress를 구분해야 합니다. Full JEVDB가 Flash보다 높은 품질을 얻는 데 더 긴 시간이 필요한 경우도 있습니다. 리뷰는 index 구축 비용의 별도 처리, CPU embedding 조건, reference answer 생성·검수 절차의 불명확성을 함께 짚습니다. 수치와 표별 조건은 발표 자료에 원 논문의 절·표와 함께 표시했습니다.",
-              "On Shelob, F1 for completed queries must be distinguished from evaluated-pair progress at timeout. Full JEVDB can require more time than Flash to reach higher quality. The review also examines separately accounted index setup, CPU embedding conditions, and an unspecified reference-answer creation and checking procedure. The slides pair numerical results with the relevant paper sections, tables, and conditions.",
-            )}</p>
-          </section>
-
-          <section aria-labelledby="questions-title">
-            <p className="jevdb-eyebrow">04 · Slides 17–19</p>
-            <h2 id="questions-title">{t(locale, "계획과 재사용에 남는 질문", "Questions for planning and reuse")}</h2>
-            <p>{t(locale,
-              "어떤 screening 순서가 제거할 후보 수와 검사 비용을 함께 줄이는지, 문서가 바뀌면 어떤 interpretation과 종속 판단을 갱신해야 하는지가 다음 질문입니다. 논문의 semantic-aware query optimization과 reusable semantic state 방향을 이 두 관점에서 읽었습니다. 발표의 변경 예시는 연구 방향을 설명하며 새 실험 결과를 뜻하지 않습니다.",
-              "Which screening order balances the candidates removed against the cost of checking? When a document changes, which interpretations and dependent decisions need refreshing? These questions frame the paper’s directions for semantic-aware query optimization and reusable semantic state. The change examples in the talk illustrate research directions, not new experimental results.",
-            )}</p>
-            <p>{t(locale,
-              "마지막 장면은 별도의 GEODE completion-verifier 실험을 연결합니다. 실행·수리와 완료 판정의 역할을 나눠 verification 비용을 관찰한 사례이며, JEVDB의 벤치마크나 이 논문의 재현 결과가 아닙니다. 실험 단위와 측정 범위는 별도 연구 보고서에서 확인할 수 있습니다.",
-              "The closing research perspective connects a separate GEODE completion-verifier experiment. It observes verification cost by separating execution and repair from completion judgment. It is neither a JEVDB benchmark nor a reproduction of this paper. The separate research report records the experimental units and measurement boundaries.",
-            )}</p>
-            <a href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}`}>{t(locale, "별도 Jev Decision Offloading 연구 보고서", "Separate Jev Decision Offloading research report")}</a>
-          </section>
+          {overview ? <div className="jevdb-overview" aria-label={t(locale, "전체 장면", "All scenes")}>
+            {scenes.map((item, i) => <button key={item.number} type="button" onClick={() => selectScene(i)} aria-label={`${item.number}. ${locale === "ko" ? item.titleKo : item.title}`}>
+              <Image src={`${assets}${item.image}`} alt="" width={1585} height={891} />
+              <span>{String(item.number).padStart(2, "0")} · {locale === "ko" ? item.titleKo : item.title}</span>
+            </button>)}
+          </div> : <article className="jevdb-scene" aria-label={title} data-scene={index + 1}>
+            <a className="jevdb-canvas" href={`${assets}${scene.image}`} target="_blank" rel="noopener noreferrer" aria-label={t(locale, `${title}: 원본 이미지 크게 보기`, `${title}: open full-size slide`)}>
+              <Image src={`${assets}${scene.image}`} alt={scene.title} width={1585} height={891} priority={index === 0} />
+            </a>
+            <div className="jevdb-caption-row"><span>{t(locale, "v25 · 원본 슬라이드의 도표·출처·조건을 보존합니다.", "v25 · Original figures, sources, and conditions are preserved.")}</span><a href={`${assets}${scene.image}`} target="_blank" rel="noopener noreferrer">{t(locale, "크게 보기 ↗", "Full size ↗")}</a></div>
+            <section className="jevdb-reading-note" aria-labelledby="scene-title">
+              <div className="jevdb-note-heading"><h2 id="scene-title">{title}</h2><span>{String(scene.number).padStart(2, "0")} / 19</span></div>
+              <p>{locale === "ko" ? scene.noteKo : scene.noteEn}</p>
+              <p className="jevdb-scope">{locale === "ko" ? scene.scopeKo : scene.scopeEn}</p>
+              <p className="jevdb-citation" lang="en">{scene.source}</p>
+              {index === 17 && <a className="jevdb-related" href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}#v3-e2e-injected`}>{t(locale, "별도 Decision Offloading 연구 보고서 ↗", "Separate Decision Offloading study ↗")}</a>}
+              <button className="jevdb-transcript-button" type="button" aria-expanded={transcript} aria-controls="slide-transcript" onClick={() => setTranscript(!transcript)}>{t(locale, "슬라이드 텍스트", "Slide text")} {transcript ? "−" : "+"}</button>
+              <div id="slide-transcript" className="jevdb-transcript" lang="en" hidden={!transcript}>{scene.transcript.map((line, i) => <p key={i}>{line}</p>)}</div>
+            </section>
+          </article>}
 
           <footer className="jevdb-footer">
-            <h2>{t(locale, "자료와 출처", "Materials and sources")}</h2>
-            <p>{t(locale,
-              "이 페이지는 류지환의 논문 리뷰입니다. 원 논문의 저자와 리뷰 발표자를 구분하며, 논문 그림의 출처와 CC BY 4.0 표시는 슬라이드에 남아 있습니다. 공개 PPTX는 2026년 10월 11일 완성한 v25 원본입니다.",
-              "This page presents Jihwan Ryu’s paper review. The paper authors and review presenter are identified separately; original figure attribution and CC BY 4.0 notices remain in the slides. The public PPTX preserves the v25 file completed on October 11, 2026.",
-            )}</p>
-            <div className="jevdb-source-links">
-              <a href={paper}>{t(locale, "원 논문 v1", "Original paper v1")}</a>
-              <a href={slides} download>{t(locale, "v25 PPTX 다운로드", "Download v25 PPTX")}</a>
-              <a href="https://github.com/mangowhoiscloud/geode/tree/7e7a74dcef5412c7b9eab3a7c431496b36630614/research">{t(locale, "원본 파일과 SHA-256", "Source file and SHA-256")}</a>
-            </div>
+            <p>{t(locale, "원 논문 주장, 발표자 예시, 별도 GEODE 실험을 구분합니다. 언어 선택은 목차와 해설에 적용되며, 슬라이드와 PPT는 영문 v25 원본입니다.", "Paper claims, presenter examples, and the separate GEODE experiment remain distinct. Language selection changes navigation and notes; the slides and PPT preserve the original English v25 edition.")}</p>
+            <button ref={sourceButton} type="button" aria-haspopup="dialog" aria-controls="reader-sources" onClick={() => {
+              window.history.pushState({}, "", "#readerSources");
+              sources.current?.showModal();
+            }}>{t(locale, "자료와 출처", "Materials and sources")}</button>
           </footer>
-        </article>
-      </main>
+        </main>
+      </div>
+
+      <dialog id="reader-contents" ref={toc} className="jevdb-dialog jevdb-toc-dialog" aria-labelledby="toc-heading" onClose={() => setTocOpen(false)} onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close(); }}>
+        <div className="jevdb-dialog-heading"><h2 id="toc-heading">{t(locale, "장면 목록", "Scenes")} <small>19</small></h2><button type="button" onClick={() => toc.current?.close()}>{t(locale, "닫기", "Close")}</button></div>
+        {sceneList()}
+      </dialog>
+      <dialog id="reader-sources" ref={sources} className="jevdb-dialog jevdb-sources" aria-labelledby="sources-heading" onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close(); }} onClose={() => {
+        if (window.location.hash === "#readerSources") window.history.replaceState({}, "", `#${sceneId(index)}`);
+        sourceButton.current?.focus();
+      }}>
+        <div className="jevdb-dialog-heading"><h2 id="sources-heading">{t(locale, "자료와 출처", "Materials and sources")}</h2><button type="button" onClick={() => sources.current?.close()}>{t(locale, "닫기", "Close")}</button></div>
+        <div className="jevdb-sources-body">
+          <p>{t(locale, "리뷰·발표: 류지환. 원 논문: Zhengle Wang, Hanxu Yan, Fuheng Zhao, Chunwei Liu. 원 논문 그림의 CC BY 4.0 표시는 슬라이드에 남아 있습니다.", "Reviewed and presented by Jihwan Ryu. Original paper by Zhengle Wang, Hanxu Yan, Fuheng Zhao, and Chunwei Liu. Original figure attribution and CC BY 4.0 notices remain in the slides.")}</p>
+          <section><h3>{t(locale, "원 논문과 발표 자료", "Paper and presentation")}</h3><ul>
+            <li><a href={paper}><span>PAPER</span> <span>Prune First, Decide Fast · arXiv:2610.02046v1</span></a></li>
+            <li><a href="https://youtu.be/KKiEyGjGUIo"><span>VIDEO</span> <span>{t(locale, "논문 리뷰 발표 영상", "Paper review recording")}</span></a></li>
+            <li><a href={slides} download><span>PPT</span> <span>{t(locale, "v25 · 영문 19장 · 한국어 발표자 메모", "v25 · 19 English slides · Korean speaker notes")}</span></a></li>
+            <li><a href={`${assets}manifest.json`}><span>HASH</span> <span>{t(locale, "슬라이드 이미지·원본 PPT SHA-256", "Slide image and original PPT SHA-256")}</span></a></li>
+          </ul></section>
+          <section><h3>{t(locale, "별도 GEODE 연구 · 장면 18", "Separate GEODE study · scene 18")}</h3><ul>
+            <li><a href={`/geode/resaerch/jev-system1-offloading/?lang=${locale}#v3-e2e-injected`}><span>STUDY</span> <span>Jev Decision Offloading · U8c</span></a></li>
+            <li><a href={evidence}><span>DATA</span> <span>{t(locale, "고정된 연구 기록 · 3bcf4044", "Pinned study records · 3bcf4044")}</span></a></li>
+          </ul><p>{t(locale, "U8c는 18 matched cases의 agent-loop 비교입니다. U3의 frozen-state 단일 판정이나 U8n의 사후 분석과 합치지 않습니다. 이 리뷰에서 새 실험을 실행하지 않았으며 JEVDB 재현 결과를 주장하지 않습니다.", "U8c compares agent loops across 18 matched cases. It is separate from U3 frozen-state single judgments and the U8n post-hoc analysis. This review runs no new experiment and claims no JEVDB reproduction.")}</p></section>
+          <section><h3>{t(locale, "원본 보존", "Preserved originals")}</h3><p>{t(locale, "2026년 10월 11일 완성한 v25 PPT는 변경하지 않았습니다. 웹은 기존 v25 PDF 검수 이미지를 재사용하며 원본의 영문 텍스트도 제공합니다. 단계는 슬라이드당 1개이며, 별도의 모션이나 중간 build를 만들지 않았습니다.", "The v25 PPT completed on October 11, 2026 is unchanged. The reader reuses existing v25 PDF review images and provides the original English slide text. Each slide has one settled build; no motion or intermediate builds were added.")}</p></section>
+        </div>
+      </dialog>
     </div>
   );
 }
