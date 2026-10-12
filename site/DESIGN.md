@@ -98,6 +98,20 @@ deployment proof.
 
 ## 1. Visual Theme & Atmosphere
 
+### JEVDB paper review reader (operator-approved 2026-10-12)
+
+`/research/jevdb/` reuses the Decision Offloading reader described below:
+its cool light workspace, 224px flat scene list, compact header/toolbar,
+large slide canvas, native mobile contents dialog, and right source sheet.
+Reuse the existing Pretendard/mono assets and film tokens, scoped to this
+route. The 19 v25 slide images and original PPT remain unchanged. KO/EN
+controls translate navigation and reading notes; they do not claim a second
+slide edition. The video and PPT stay in the opening header. Every slide has
+one settled build, without artificial animation or a nonfunctional motion
+control. Provide full-size images and original slide text for small screens.
+Paper measurements, schematic examples, future directions, and the separate
+GEODE U8c study keep their own conditions and sources beside the canvas.
+
 ### Jev research artifact exception (operator-approved 2026-09-28)
 
 `/resaerch/jev-system1-offloading/` (the operator's literal path) preserves the

@@ -27,3 +27,24 @@ benchmark reproduction.
 Only the reviewed PPTX is exported to the website. The build copies this file
 to `/geode/research/jevdb-seminar-v25.pptx`; internal review records and other
 submission materials are not included. The source file remains unchanged.
+
+### v25 web reader
+
+The JEVDB review uses the Decision Offloading reader's light workspace, scene
+list, canvas navigation, and source sheet. The 19 English slide images under
+`site/public/research/jevdb-slides-v25/` are unchanged existing v25 PDF review
+rasters, extracted from the completed slide-and-script preview. No PDF, slide,
+or video was rerendered for this presentation change. The public manifest
+records each image digest, the preview HTML/PDF identities, and the unchanged
+canonical PPTX digest. The images were also compared byte-for-byte with the
+reviewed PDF page rasters. The earlier PDF rendering receipt identifies a
+pre-final-note PPTX hash; it is not relabeled as a render of the final PPTX bytes.
+
+`site/src/data/geode/jevdb-slides.json` contains original English slide text
+extracted from the published PPTX slide XML, plus bilingual reading notes and
+source/condition captions. No speaker notes or private production discussion
+are copied into the web reader. Language selection changes navigation and
+reading notes, not the original slide art. Each image represents one settled
+build; there are no invented intermediate builds or motion controls. Scene 18
+retains the separate U8c agent-loop comparison and its limits, distinct from
+JEVDB paper results, U3 single judgments, and U8n post-hoc analysis.

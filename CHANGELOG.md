@@ -49,6 +49,11 @@ functional change.
 
 ### Changed
 
+- **JEVDB paper review reader.** Present the 19 original v25 slides in the
+  Decision Offloading reader layout, with bilingual notes, scene navigation,
+  a source sheet, and early video/PPT access. The original PPT bytes and
+  distinctions between paper results, examples, and GEODE evidence remain intact.
+
 - **Harness and experimental research entry points.** The bilingual landing
   and docs now introduce the Autonomous Agent Harness alongside its Experimental
   Loop, with a two-layer map and question-led routes to Scaffold Search, Seed
