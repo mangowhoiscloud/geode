@@ -56,11 +56,10 @@ functional change.
 
 ### Changed
 
-- **Portfolio information architecture.** Use a white reading canvas and direct
-  publication entries on the main landing. Move repeated loop, package-role,
-  and roadmap explanations to their existing Docs destinations; keep measured
-  evidence and its caveats visible. Research owns the full publication selector,
-  and all three readers share a minimal return-to-Research header.
+- **Main landing restoration.** Restore the pre-TypeUI dark design and controls,
+  remove publication lists and previews from the main body, and keep Research
+  navigation pointed at the standalone collection. Isolate the two stylesheets
+  so the Research collection and readers retain their current appearance.
 
 - **Research publication readers.** Replace framed text cards with source-cover
   previews and publication tabs. Add a bilingual 92-page GEODE reader and Jev

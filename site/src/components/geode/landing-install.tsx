@@ -73,7 +73,7 @@ export function InstallCommands() {
           <Tabs.Trigger
             key={item.id}
             value={item.id}
-            className="min-h-11 min-w-11 touch-manipulation rounded-md px-4 py-2 font-mono text-sm text-[var(--ink-2)] transition-colors hover:bg-[var(--paper-2)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)] data-[state=active]:bg-[var(--paper-2)] data-[state=active]:text-[var(--ink)] motion-reduce:transition-none"
+            className="min-h-11 min-w-11 touch-manipulation rounded-md px-4 py-2 font-mono text-sm text-[var(--ink-2)] transition-colors hover:bg-[var(--paper-2)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--acc-artifact)] data-[state=active]:bg-[var(--paper-2)] data-[state=active]:text-[var(--acc-artifact)] motion-reduce:transition-none"
           >
             {t(locale, item.labelKo, item.labelEn)}
           </Tabs.Trigger>
@@ -83,7 +83,7 @@ export function InstallCommands() {
         <Tabs.Content
           key={item.id}
           value={item.id}
-          className="min-w-0 pt-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--ink)]"
+          className="min-w-0 pt-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--acc-artifact)]"
         >
           <p className="text-base leading-relaxed text-[var(--ink-2)]">
             {t(locale, item.noteKo, item.noteEn)}
@@ -91,7 +91,7 @@ export function InstallCommands() {
           <pre
             tabIndex={0}
             aria-label={t(locale, "설치 명령", "Install command")}
-            className="mt-4 max-w-full overflow-x-auto rounded-md border border-[var(--rule)] bg-[var(--code-bg)] p-5 font-mono text-sm leading-relaxed text-[var(--code-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)]"
+            className="mt-4 max-w-full overflow-x-auto rounded-md border border-[var(--rule)] bg-[var(--code-bg)] p-5 font-mono text-sm leading-relaxed text-[var(--code-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--acc-artifact)]"
           >
             <code translate="no" className="select-all">{item.copy}</code>
           </pre>
@@ -102,7 +102,7 @@ export function InstallCommands() {
           type="button"
           onClick={copyCommand}
           disabled={copyStatus === "copying"}
-          className="min-h-11 min-w-11 shrink-0 touch-manipulation rounded-md border border-[var(--ink)] px-4 py-2 text-sm font-medium text-[var(--ink)] transition-colors hover:bg-[var(--ink)] hover:text-[var(--paper)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)] disabled:cursor-wait motion-reduce:transition-none"
+          className="min-h-11 min-w-11 shrink-0 touch-manipulation rounded-md border border-[var(--acc-line)] px-4 py-2 text-sm font-medium text-[var(--acc-line)] transition-colors hover:bg-[var(--acc-line)] hover:text-[var(--paper)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--acc-line)] disabled:cursor-wait motion-reduce:transition-none"
         >
           {copyStatus === "copying"
             ? t(locale, "복사 중…", "Copying…")
@@ -131,7 +131,7 @@ export function InstallCommands() {
         {t(locale, "으로 자격 증명을 확인합니다. ", " to review credentials. ")}
         <Link
           href={locale === "ko" ? "/docs/run/pick-path?lang=ko" : "/docs/run/pick-path?lang=en"}
-          className="inline-flex min-h-11 items-center text-[var(--ink)] underline underline-offset-4 hover:text-[var(--ink-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)]"
+          className="inline-flex min-h-11 items-center text-[var(--acc-aqua)] underline underline-offset-4 hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--acc-aqua)]"
         >
           {t(locale, "인증 방법 선택", "Choose an authentication path")}
         </Link>
