@@ -1933,7 +1933,7 @@ SIL은 Scaffold Search를 연결하는 구현 흐름입니다. SelfImprovingLoop
 
 실험 결과 공개 / 과제별 한계
 
-## Jev · System 1 offloading
+## Jev Decision Offloading
 
 작은 판정기에 어떤 결정을 맡길 수 있을까?
 
@@ -1948,7 +1948,7 @@ E8 사후 분석의 4개 원천·완성된 11쌍에서, Jev Noul 판정 arm의 �
 **해석의 한계.** 중단 뒤 선택한 표본에 대한 관측입니다. 일반화, 신뢰구간, 인과적 우열 주장을 붙이지 않습니다. v3 본실험과 이전 M4–M6 파일럿의 분모도 합치지 않습니다.
 
 -   [v3 결과·판정 기준·공개 근거](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation/?lang=ko#jev-v3-study)
--   [Jev 연구 리더와 한국어 PDF](https://mangowhoiscloud.github.io/geode/resaerch/jev-system1-offloading/?lang=ko)
+-   [Jev Decision Offloading 리더와 한국어 PDF](https://mangowhoiscloud.github.io/geode/resaerch/jev-system1-offloading/?lang=ko)
 -   [E8 관측 해석](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/analyses/u8n-observed-pairs-20260928/README.md)
 
 ## Self-search의 연구 좌표
