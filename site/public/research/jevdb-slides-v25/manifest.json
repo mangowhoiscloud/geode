@@ -1,0 +1,143 @@
+{
+  "edition": "v25",
+  "slide_language": "en",
+  "pptx_sha256": "83d9b2ca13bc7af604927b885b0cce3ba6a43ca96e86b657f4771ae69ac51d8c",
+  "preview_html_sha256": "314f1179ae254058491721985ea3494f33d3de6fca4a754c7a1fd3de43255e79",
+  "preview_pdf_sha256": "78b88fe730c11ad20f52b81bba97a7f6033d10e82ae56e4d2662bba83671b211",
+  "method": "Existing v25 preview images, extracted without re-rendering. Exact matches to the reviewed PDF page rasters. Transcript extracted from the published PPTX slide XML; speaker notes are not exported.",
+  "slides": [
+    {
+      "number": 1,
+      "title": "Prune first. Decide fast.",
+      "image": "01.png",
+      "sha256": "f293f5bcc4f35bf2387036df1e1d9b245b9107ebcb70612174e6c31e19dd98cc",
+      "bytes": 83932
+    },
+    {
+      "number": 2,
+      "title": "Seminar overview",
+      "image": "02.png",
+      "sha256": "cd1f1fa3c3d746c9f9ff8a1b9c673e9dbd1c366cd93e67e96fbef8f54d7d6ecf",
+      "bytes": 96230
+    },
+    {
+      "number": 3,
+      "title": "Jev: probabilities, categories, and scores",
+      "image": "03.png",
+      "sha256": "ab59c76fd7353de08be42aae248911669527f4e1f2492ad50b2048972eb58989",
+      "bytes": 116692
+    },
+    {
+      "number": 4,
+      "title": "Decisions without text generation",
+      "image": "04.png",
+      "sha256": "4ce7a49ef71839bec07bdf0b22b7627da4707868f1a3d1609c6550b3b843f1df",
+      "bytes": 109532
+    },
+    {
+      "number": 5,
+      "title": "The adaptive three-tier engine",
+      "image": "05.png",
+      "sha256": "5d9c8e78226ad70979dab48d30e2a21a10df299738ba750ac4afcb0037fa7a9c",
+      "bytes": 317598
+    },
+    {
+      "number": 6,
+      "title": "Map semantic operators to Jev",
+      "image": "06.png",
+      "sha256": "4bef8b8f5edefff7d143747de0a83555ef0840198b8c5939663edc1d848d16a4",
+      "bytes": 104963
+    },
+    {
+      "number": 7,
+      "title": "Prune with relational structure",
+      "image": "07.png",
+      "sha256": "d5a926e27d66d0f109fad441dc9bb12f69a4d44419261d6ab01c78ecb1918fa3",
+      "bytes": 222749
+    },
+    {
+      "number": 8,
+      "title": "Screen pairs with necessary conditions",
+      "image": "08.png",
+      "sha256": "9e540c7076b66eb5f1be993773397e6e69de864859f61bb39ea4414a1690ef8c",
+      "bytes": 155799
+    },
+    {
+      "number": 9,
+      "title": "Reuse judgments, preserve result rows",
+      "image": "09.png",
+      "sha256": "025e7621ec7137fe145172b81fcead25e6f717d26ee43ab963e6bf28af64ad90",
+      "bytes": 190751
+    },
+    {
+      "number": 10,
+      "title": "Batch requests, share repeated text",
+      "image": "10.png",
+      "sha256": "bfcc6fe85b727a639a3dd22669ad90cf0372efbff97919e81c3f5f483288b80f",
+      "bytes": 175474
+    },
+    {
+      "number": 11,
+      "title": "LLM escalation for uncertain pairs",
+      "image": "11.png",
+      "sha256": "86a3cf6689e9af3f0efb27a5f35c7c4623f456fa07c65dee971f76225960f7ec",
+      "bytes": 104518
+    },
+    {
+      "number": 12,
+      "title": "Reuse each document’s interpretation",
+      "image": "12.png",
+      "sha256": "2ad472dda36dd0d1bb5fe1d1d1b6722e0d9eb79cfde4f980aa0dbc1c0a41785f",
+      "bytes": 102682
+    },
+    {
+      "number": 13,
+      "title": "SemBench and Shelob: data and queries",
+      "image": "13.png",
+      "sha256": "2b5571ecb06e177c8e7448cfd6df9b02895ac0d899d395598c837f09771086c7",
+      "bytes": 86471
+    },
+    {
+      "number": 14,
+      "title": "SemBench: a combined model and system gain",
+      "image": "14.png",
+      "sha256": "39e7f0cc72738c58d25419c3301eef2537808fd8d538bf2c385fb40bd6422aea",
+      "bytes": 166414
+    },
+    {
+      "number": 15,
+      "title": "Shelob: 87.4% fewer candidate pairs",
+      "image": "15.png",
+      "sha256": "1f33849b51f2540da1de0c4b0ca1f69eab09fed292dc5d22103533f2530438ab",
+      "bytes": 133125
+    },
+    {
+      "number": 16,
+      "title": "Shelob Q4: quality costs time",
+      "image": "16.png",
+      "sha256": "4c62c51965ad06f41f918df7403551d0d52bcdbb6da94a5d1be60f9984f7a8ac",
+      "bytes": 97199
+    },
+    {
+      "number": 17,
+      "title": "Future work: planning and reuse",
+      "image": "17.png",
+      "sha256": "a9f58851356f411f478b5b50faf6ebb38ff7fd20d3909c416aaef04cb1078e43",
+      "bytes": 103302
+    },
+    {
+      "number": 18,
+      "title": "Research perspective: verification costs",
+      "image": "18.png",
+      "sha256": "6aa37e8bcdcd1051ececfd589a46fb78b999557a2171ee2d0dd3d227eee0a61d",
+      "bytes": 113104
+    },
+    {
+      "number": 19,
+      "title": "JEVDB reduces the work of inference",
+      "image": "19.png",
+      "sha256": "8686f3e5d8519e99d3700f8090f6235ba283dc0b19fc521b8d5bbb062e67344a",
+      "bytes": 85762
+    }
+  ]
+}
