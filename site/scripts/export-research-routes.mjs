@@ -9,18 +9,6 @@ export const readerPath = "/geode/research/jev-system1-offloading/";
 const origin = "https://mangowhoiscloud.github.io";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-function readerTheme() {
-  const globals = readFileSync(join(root, "src/app/globals.css"), "utf8");
-  const tokens = ["paper", "paper-2", "paper-deep", "ink", "ink-2", "rule", "acc-artifact", "acc-soft"];
-  const aliases = tokens.map(name => {
-    const match = globals.match(new RegExp(`^\\s*--${name}:\\s*([^;]+);`, "m"));
-    assert(match, `Missing GEODE color token: ${name}`);
-    return `--geode-${name}:${match[1].trim()};`;
-  }).join("");
-  const css = readFileSync(join(root, "src/components/geode/jev-reader-theme.css"), "utf8");
-  return `<style id="geode-reader-theme">:root{${aliases}}\n${css}</style>`;
-}
-
 function replaceRequired(html, before, after) {
   assert(html.includes(before), `Frozen reader routing contract changed: ${before}`);
   return html.replaceAll(before, after);
@@ -31,12 +19,10 @@ export function projectReader(source) {
   // Rebase only file references, leaving scene and language URLs at the new resource.
   html = html.replace(/(["'])(assets\/[^"']+|report-(?:ko|en)\.pdf)\1/g,
     (_, quote, file) => `${quote}${legacyPath}${file}${quote}`);
-  html = replaceRequired(html, 'class="reader-home" href="/geode/" aria-label="GEODE home">GEODE<', 'class="reader-home" href="/geode/research/">GEODE / Research<');
+  html = replaceRequired(html, 'class="reader-home" href="/geode/" aria-label="GEODE home">GEODE<', 'class="reader-home" href="/geode/research/#research-jev">GEODE / Research<');
   html = replaceRequired(html, '.reader-home{font-weight:700;', '.reader-home{white-space:nowrap;flex-shrink:0;font-weight:700;');
-  html = replaceRequired(html, "href='/geode/?lang='", "href='/geode/research/?lang='");
+  html = replaceRequired(html, "href='/geode/?lang='+(english?'en':'ko');", "href='/geode/research/?lang='+(english?'en':'ko')+'#research-jev';");
   html = replaceRequired(html, "jump(s.id);history.replaceState(null,'','#'+s.id);", "jump(s.id);");
-  // Theme only the outer workspace; the frozen slide subtree stays identical.
-  html = replaceRequired(html, "</head>", `${readerTheme()}</head>`);
   // The frozen film's show() owns all scene navigation (TOC, keyboard, overview,
   // and pager). Project that boundary once; builds within a scene stay local.
   return html.replace("</script>", `

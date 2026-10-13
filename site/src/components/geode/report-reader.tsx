@@ -95,7 +95,7 @@ function ReportContent() {
   return <div className={`jevdb-reader geode-report-reader${focused ? " report-focused" : ""}`} lang={locale}>
     <a className="jevdb-skip" href="#report-content">{t(locale, "본문으로 이동", "Skip to content")}</a>
     <header className="jevdb-header">
-      <div className="jevdb-identity"><Link className="jevdb-home" href={`/research/?lang=${locale}`}>GEODE / Research</Link><div><h1>{t(locale, "GEODE 기술 리포트", "GEODE technical report")}</h1><p>{t(locale, "공개 기술 리포트 · 92쪽", "Published technical report · 92 pages")}</p></div></div>
+      <div className="jevdb-identity"><Link className="jevdb-home" href={`/research/?lang=${locale}#research-geode`}>GEODE / Research</Link><div><h1>{t(locale, "GEODE 기술 리포트", "GEODE technical report")}</h1><p>{t(locale, "공개 기술 리포트 · 92쪽", "Published technical report · 92 pages")}</p></div></div>
       <div className="jevdb-actions"><div className="jevdb-languages" role="group" aria-label={t(locale, "언어", "Language")}><button type="button" aria-pressed={locale === "ko"} onClick={() => setLocale("ko")}>한국어</button><button type="button" aria-pressed={locale === "en"} onClick={() => setLocale("en")}>English</button></div><a className="jevdb-download" href={edition.pdf} download>{t(locale, "PDF 다운로드", "Download PDF")}</a></div>
     </header>
     <div className={`jevdb-workspace${focused ? " jevdb-contents-hidden" : ""}`}>
