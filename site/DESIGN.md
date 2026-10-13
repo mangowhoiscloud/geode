@@ -73,6 +73,28 @@ status and author/study attribution next to the relevant evidence. Consolidate
 repeated defensive prose into the existing measurement or source sections;
 removing a disclaimer cannot imply measured superiority or a new experiment.
 
+### Reader touch navigation (2026-10-13)
+
+The artwork canvas accepts a single-finger horizontal swipe: left selects the
+next scene and right the previous scene, without wrapping at either boundary.
+GEODE/JEVDB use their existing selection functions; the Jev route projection
+uses `show()` for whole-scene swipes while its original pager keeps in-scene
+build navigation. The shared `src/lib/reader-swipe.mjs` owns recognition for
+all three readers. Frozen Jev source, PDFs, PPT and slide artwork stay intact.
+
+Start away from the outer 24px browser-navigation edges and move at least
+48–96 CSS pixels (12% of canvas width), within 650ms, with horizontal distance
+at least 1.5 times vertical distance. A vertical/diagonal onset, cancellation,
+second contact, scroll, selection or modal abandons the gesture. Only the
+artwork handles swipes; prose, controls, links within Jev scenes and overview
+thumbnails retain their native interactions. Tapping an image still opens it
+at full size. Swipes never add history at the first/last boundary.
+
+The canvas permits `pan-y pinch-zoom`; at a zoomed visual viewport it restores
+`auto` for panning. Do not disable selection, browser zoom or vertical scroll.
+No mouse drag or trackpad-wheel interception applies. Buttons, keyboard,
+language links and accessible scene announcements remain available.
+
 ### Research route ownership (2026-10-12)
 
 `/research/` is the standalone publication collection with its existing
@@ -95,7 +117,7 @@ The old homepage Research hashes and `/resaerch/jev-system1-offloading/` use
 replacement navigation, preserving language and scene without a Back loop.
 The frozen Jev publication remains checked in at its historical location.
 `npm run build` runs `export-research-routes.mjs` after Next static export:
-it projects only routes/history and rebases file references to the old served
+it projects routes/history and touch navigation, and rebases file references to the old served
 asset addresses. No PDF, scene source, font, image, or video is regenerated.
 Validate canonical and compatibility behavior against `site/out`, not Next dev.
 
