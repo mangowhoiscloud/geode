@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LocaleProvider, t, useLocale, useSetLocale } from "@/components/geode/locale-context";
+import { attachReaderSwipe } from "@/lib/reader-swipe.mjs";
 import scenes from "@/data/geode/jevdb-slides.json";
 import "./jevdb-review.css";
 
@@ -24,6 +25,7 @@ function ReviewContent() {
   const toc = useRef<HTMLDialogElement>(null);
   const sources = useRef<HTMLDialogElement>(null);
   const sourceButton = useRef<HTMLButtonElement>(null);
+  const canvas = useRef<HTMLAnchorElement>(null);
   const scene = scenes[index];
   const title = locale === "ko" ? scene.titleKo : scene.title;
 
@@ -36,6 +38,10 @@ function ReviewContent() {
     toc.current?.close();
     window.scrollTo({ top: 0, behavior: "instant" });
   }, []);
+
+  useEffect(() => {
+    if (!overview && canvas.current) return attachReaderSwipe(canvas.current, direction => selectScene(index + direction));
+  }, [index, locale, overview, selectScene]);
 
   useEffect(() => {
     const readHash = () => {
@@ -137,7 +143,7 @@ function ReviewContent() {
               <span>{String(item.number).padStart(2, "0")} · {locale === "ko" ? item.titleKo : item.title}</span>
             </button>)}
           </div> : <article className="jevdb-scene" aria-label={title} data-scene={index + 1}>
-            <a className="jevdb-canvas" href={`${assets}${scene.image}`} target="_blank" rel="noopener noreferrer" aria-label={t(locale, `${title}: 원본 이미지 크게 보기`, `${title}: open full-size slide`)}>
+            <a ref={canvas} className="jevdb-canvas" href={`${assets}${scene.image}`} target="_blank" rel="noopener noreferrer" aria-label={t(locale, `${title}: 원본 이미지 크게 보기`, `${title}: open full-size slide`)}>
               <Image src={`${assets}${scene.image}`} alt={scene.title} width={1585} height={891} priority={index === 0} />
             </a>
             <div className="jevdb-caption-row"><span>{t(locale, "v25 · 원본 슬라이드의 도표·출처·조건을 보존합니다.", "v25 · Original figures, sources, and conditions are preserved.")}</span><a href={`${assets}${scene.image}`} target="_blank" rel="noopener noreferrer">{t(locale, "크게 보기 ↗", "Full size ↗")}</a></div>
