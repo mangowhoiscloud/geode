@@ -1,0 +1,26 @@
+/* The exporter supplies --geode-* aliases from globals.css. Film tokens stay
+   local to reader controls, so the source slides and previews keep their ink. */
+html:has(body.jev-reader) { background: var(--geode-paper); scrollbar-color: var(--geode-ink-2) var(--geode-paper); }
+body.jev-reader { background: var(--geode-paper); color: var(--geode-ink); }
+.jev-reader :is(.reader-header, .reader-navigation, .reader-toc, .reader-footer, .reader-sources, .reader-plain-text) {
+  --film-ink: var(--geode-ink);
+  --film-muted: var(--geode-ink-2);
+  --film-paper: var(--geode-paper-2);
+  --film-line: var(--geode-rule);
+  --film-accent: var(--geode-acc-artifact);
+  --canvas: var(--geode-paper);
+  --surface-card: var(--geode-paper-2);
+  --muted-soft: var(--geode-ink-2);
+  --body-strong: var(--geode-ink);
+  color-scheme: dark;
+}
+.jev-reader .reader-header .reader-download { background: var(--geode-acc-artifact); color: var(--geode-paper); border-color: var(--geode-acc-artifact); }
+.jev-reader .reader-header .reader-download:hover { background: var(--geode-acc-soft); }
+.jev-reader .reader-navigation button:disabled { opacity: .6; }
+.jev-reader .reader-footer { border-color: var(--geode-rule); }
+.jev-reader :is(.reader-toc, .reader-sources)::backdrop { background: color-mix(in srgb, var(--geode-paper-deep) 75%, transparent); }
+.jev-reader :is(.reader-header, .reader-navigation, .reader-toc, .reader-footer, .reader-sources, .reader-plain-text) ::selection { background: var(--geode-rule); color: var(--geode-ink); }
+.jev-reader .reader-content > .overview .thumb { background: var(--geode-paper); color: var(--geode-ink); border-color: var(--geode-rule); }
+.jev-reader .reader-content > .overview .thumb.current { border-color: var(--geode-acc-artifact); }
+.jev-reader .reader-content > .overview .thumb:focus-visible { outline-color: var(--geode-acc-artifact); }
+.jev-reader .reader-scene-list a[aria-current="page"] { color: var(--geode-acc-artifact); }

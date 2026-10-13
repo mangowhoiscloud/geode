@@ -29,13 +29,6 @@ export function BenchmarkComparison() {
         )}
       </p>
 
-      <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--ink-2)]">
-        {t(locale,
-          "GEODE 측정군은 b549f3e의 thin AgenticLoop adapter로, custom system_prompt_override와 terminal_exec-only 도구 표면을 사용했습니다. 현재 native/full-runtime 구성의 성능으로 일반화하지 않습니다.",
-          "The GEODE arm used b549f3e's thin AgenticLoop adapter with a custom system_prompt_override and terminal_exec-only tools. This does not measure today's native/full-runtime configuration.",
-        )}
-      </p>
-
       <table className="mt-8 w-full border-collapse text-left">
         <caption className="caption-top pb-4 text-left text-sm leading-relaxed text-[var(--ink-2)]">
           <span className="block text-base tabular-nums text-[var(--ink)]">
@@ -91,15 +84,21 @@ export function BenchmarkComparison() {
       <p className="mt-3 max-w-3xl text-base leading-relaxed text-[var(--ink-2)]">
         {t(
           locale,
-          "사전 등록한 전체 지표는 측정 불가이며 결론은 미확정입니다. 구간이 0을 포함하므로 성능 우위를 입증하지 않습니다. 이 결과는 로컬 짝 비교 진단이며 공식 리더보드 점수가 아닙니다.",
-          "The preregistered full-suite primary is not measurable; the decision is inconclusive. The interval includes zero and does not establish superiority. This is a local paired-runtime diagnostic, not an official leaderboard score.",
+          "공통 유효 시행의 로컬 짝 비교 결과입니다. 95% 구간은 0을 포함하며, 전체 지표의 판정은 미확정입니다.",
+          "A local paired-runtime comparison over the common valid trials. The 95% interval includes zero; the full-suite decision is inconclusive.",
         )}
       </p>
 
       <section className="landing-evidence-limits">
         <h3>
-          {t(locale, "제외된 작업과 비교 한계", "Exclusions and comparison limits")}
+          {t(locale, "측정 구성과 집계 기준", "Measurement setup and accounting")}
         </h3>
+        <p className="mt-3">
+          {t(locale,
+            "측정 구성은 b549f3e의 thin AgenticLoop adapter, custom system_prompt_override, terminal_exec-only 도구입니다. 사전 등록한 전체 지표는 측정 불가(not-measurable), 판정은 미확정(inconclusive)이며 공식 리더보드 제출 자격은 없습니다.",
+            "Measured configuration: b549f3e thin AgenticLoop adapter, custom system_prompt_override, and terminal_exec-only tools. The preregistered full-suite primary is not-measurable, the decision is inconclusive, and official leaderboard submission eligibility is false.",
+          )}
+        </p>
         <p className="mt-3">
           {t(
             locale,
@@ -110,8 +109,8 @@ export function BenchmarkComparison() {
         <p className="mt-3">
           {t(
             locale,
-            "인프라 무효를 모델의 0점 실패로 바꾸지 않았습니다. Harbor는 공유 seed 제어를 제공하지 않았고, 여러 날에 걸친 실행에서 시점·공급자 용량·인증 계정의 영향은 하네스 효과와 분리되지 않습니다.",
-            "Infrastructure-invalid trials were not converted into semantic zeroes. Harbor exposed no shared seed control. The run spanned several days; timing, provider capacity, and credential-principal effects cannot be separated from harness effects.",
+            "인프라 무효는 제외하고 정상 실행의 실패는 분모에 포함했습니다. 실행은 여러 날에 걸쳤으며, 공유 seed·실행 시점·공급자 용량·인증 계정 부하는 통제하지 못했습니다.",
+            "Infrastructure-invalid trials are excluded; valid task failures remain in the denominator. Runs spanned several days without control of shared seeds, timing, provider capacity, or credential-principal load.",
           )}
         </p>
       </section>

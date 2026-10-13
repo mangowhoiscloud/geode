@@ -99,8 +99,8 @@ function LandingContent() {
         <section className="landing-container landing-run-section" aria-label={t(locale, "실제 작업의 실행 기록", "A recorded task execution")}>
           <div className="landing-section-heading">
             <p className="landing-kicker">Autonomous Agent Harness</p>
-            <h2>{t(locale, "말한 결과에서, 확인할 수 있는 결과로.", "From a claimed result to an inspectable one.")}</h2>
-            <p>{t(locale, "TLS 인증서를 만드는 실제 기록으로 작업 요청, 도구 호출, verifier 결과를 따라갑니다. 실행 기록과 과제 성공의 판정을 구분합니다.", "Follow a recorded TLS certificate task from request to tool calls and verifier result. Execution records and the task's success verdict remain distinct.")}</p>
+            <h2>{t(locale, "TLS 인증서를 만들고 검증한 실행 기록.", "A recorded TLS certificate task.")}</h2>
+            <p>{t(locale, "작업 요청부터 도구 호출과 verifier 결과까지, TLS 인증서를 만든 실행을 따라갑니다.", "Follow the TLS certificate task from the request through tool calls to its verifier result.")}</p>
             <Link className="landing-text-link" href={`/docs/architecture/agentic-loop?lang=${locale}`}>{t(locale, "자율 수행의 구조", "How autonomous execution works")}</Link>
           </div>
           <RecordedRun />
@@ -110,7 +110,7 @@ function LandingContent() {
           <div className="landing-section-heading">
             <h2 id="loop-title">{t(locale, "도구의 결과가 다음 판단으로.", "The result becomes the next step.")}</h2>
             <p>{t(locale,
-              "한 번 답하고 끝나지 않습니다. 도구를 실행하고 결과를 읽은 뒤, 다음 동작이나 최종 응답을 선택합니다.",
+              "도구를 실행하고 결과를 읽은 뒤, 다음 동작이나 최종 응답을 선택합니다.",
               "The loop runs a tool, reads its result, then chooses another action or a final response.",
             )}</p>
           </div>
@@ -131,7 +131,7 @@ function LandingContent() {
             </ol>
             <div className="landing-loop-return">
               <Repeat2 size={20} aria-hidden="true" />
-              <p>{t(locale, "필요하면 반복합니다. 최종 응답은 성공의 외부 검증과 다릅니다.", "Repeat when needed. A final response is not an external proof of success.")}</p>
+              <p>{t(locale, "관측을 바탕으로 도구 실행과 판단을 반복합니다.", "Use each observation to continue the tool-and-decision loop.")}</p>
             </div>
           </div>
           <div className="landing-loop-notes">
@@ -145,8 +145,8 @@ function LandingContent() {
             <p className="landing-kicker">Harbor × Terminal-Bench 2.1</p>
             <h2 id="evidence-title">{t(locale, "같은 모델. 다른 하네스.", "Same model. Different harness.")}</h2>
             <p>{t(locale,
-              "GEODE와 native Codex를 같은 작업과 verifier로 비교했습니다. 결과와 한계를 함께 공개합니다.",
-              "GEODE and native Codex, measured on the same tasks and verifiers. Read the results with their limits.",
+              "GEODE와 native Codex를 같은 작업과 verifier로 비교했습니다.",
+              "GEODE and native Codex, measured on the same tasks and verifiers.",
             )}</p>
           </div>
           <BenchmarkComparison />
@@ -156,8 +156,8 @@ function LandingContent() {
           <div className="landing-section-heading">
             <h2 id="features-title">{t(locale, "실행하고, 측정하고, 개선합니다.", "Run it. Measure it. Improve it.")}</h2>
             <p>{t(locale,
-              "실행과 평가, scaffold 탐색은 서로 다른 책임입니다. 현재 작업의 성공과 개선 후보의 판정을 섞지 않습니다.",
-              "Execution, evaluation, and scaffold search have separate responsibilities. A completed turn is not a promoted improvement.",
+              "core가 작업을 실행하고, evals가 결과를 측정하며, evolve가 scaffold 후보를 탐색합니다.",
+              "core runs tasks, evals measures their results, and evolve searches scaffold candidates.",
             )}</p>
           </div>
           <div className="landing-responsibilities">
@@ -175,13 +175,13 @@ function LandingContent() {
               <article>
                 <span className="landing-package">evals</span>
                 <h3>{t(locale, "측정과 판정의 근거", "Evidence for a judgement")}</h3>
-                <p>{t(locale, "작업 결과, trajectory, verifier를 구분해 비교와 감사를 지원합니다.", "Task results, trajectories, and verifier receipts support comparison and audit without becoming the same record.")}</p>
+                <p>{t(locale, "작업 결과, trajectory, verifier 기록을 모아 실행을 비교하고 감사합니다.", "Task results, trajectories, and verifier receipts support comparison and audit.")}</p>
                 <Link className="landing-text-link" href={`/docs/benchmarks/terminal-bench?lang=${locale}`}>{t(locale, "측정 방법 보기", "Read the evaluation method")}</Link>
               </article>
               <article id="distill">
                 <span className="landing-package">evolve</span>
-                <h3>{t(locale, "별도로 검증하는 개선 후보", "Improvement, tested separately")}</h3>
-                <p>{t(locale, "Scaffold 후보를 탐색하고 평가합니다. 실험에서 선택된 후보가 곧 프로덕션 릴리즈는 아닙니다.", "Scaffold candidates are searched and evaluated. An experiment's selected candidate is not a production release.")}</p>
+                <h3>{t(locale, "실험으로 고르는 scaffold 후보", "Scaffold candidates, selected through experiments")}</h3>
+                <p>{t(locale, "Scaffold 후보를 변형하고 평가한 뒤 채택하거나 복원합니다.", "Mutate and evaluate scaffold candidates, then keep or revert them.")}</p>
                 <Link className="landing-text-link" href={`/docs/capabilities/outer-loop?lang=${locale}`}>{t(locale, "외부 루프 살펴보기", "Explore the outer loop")}</Link>
               </article>
             </div>
@@ -197,8 +197,8 @@ function LandingContent() {
               "Improvement-execution controls (L1) and bounded candidate search (L2) are implemented. Next: establish whether runs inheriting accepted changes outperform a fixed-strategy control.",
             )}</p>
             <p>{t(locale,
-              "현재 표시는 코드 범위이며 자율성 등급 인증이 아닙니다. 경험 선택(L3), 배포 적응(L4), 개선 메커니즘의 계승(L5)은 각각 별도 증거가 필요합니다.",
-              "These labels describe code scope, not certified autonomy levels. Experience acquisition (L3), deployment adaptation (L4), and recursive inheritance (L5) each need separate evidence.",
+              "후속 연구는 경험 선택(L3), 배포 적응(L4), 개선 메커니즘의 계승(L5)을 대상으로 합니다.",
+              "Further research covers experience acquisition (L3), deployment adaptation (L4), and recursive inheritance (L5).",
             )}</p>
           </div>
           <div className="landing-inline-links">

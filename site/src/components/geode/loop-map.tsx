@@ -24,10 +24,10 @@ export function LoopMap({ locale }: { locale: Locale }) {
         <ol className="loop-map-cycle">
           <li>{t(locale, "후보 생성", "Propose")}</li><li>{t(locale, "평가", "Evaluate")}</li><li>{t(locale, "채택·복원", "Keep / revert")}</li>
         </ol>
-        <p className="loop-map-return">{t(locale, "탐색 중 채택 ≠ 독립 검증 ≠ 배포", "Search acceptance ≠ independent validation ≠ release")}</p>
+        <p className="loop-map-return">{t(locale, "탐색 채택, 독립 검증, 릴리즈를 각각 판정", "Separate verdicts for search acceptance, validation, and release")}</p>
       </div>
       <figcaption>
-        {t(locale, "구현 구조의 개념도. 지속적 성능 향상은 별도 검증 대상입니다.", "Conceptual architecture. Sustained improvement requires separate evidence.")}{" "}
+        {t(locale, "런타임 관측을 scaffold 탐색에 연결하는 구현 구조입니다.", "An implemented path from runtime observations to scaffold search.")}{" "}
         <Link href={`/docs/research/overview?lang=${locale}`}>{t(locale, "연구와 근거", "Research and evidence")}</Link>
       </figcaption>
     </figure>

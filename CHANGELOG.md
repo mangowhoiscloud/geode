@@ -56,6 +56,11 @@ functional change.
 
 ### Changed
 
+- **Research color and surface copy.** Match the collection and reader controls
+  to GEODE's dark palette while preserving source slide colors and layout.
+  Describe actions and observations directly; consolidate measurement scope
+  and provenance in the existing evidence sections.
+
 - **Main landing restoration.** Restore the pre-TypeUI dark design and controls,
   remove publication lists and previews from the main body, and keep Research
   navigation pointed at the standalone collection. Isolate the two stylesheets
