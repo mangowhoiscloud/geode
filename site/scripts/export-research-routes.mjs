@@ -19,9 +19,9 @@ export function projectReader(source) {
   // Rebase only file references, leaving scene and language URLs at the new resource.
   html = html.replace(/(["'])(assets\/[^"']+|report-(?:ko|en)\.pdf)\1/g,
     (_, quote, file) => `${quote}${legacyPath}${file}${quote}`);
-  html = replaceRequired(html, 'class="reader-home" href="/geode/" aria-label="GEODE home">GEODE<', 'class="reader-home" href="/geode/research/#research-jev">GEODE / Research<');
+  html = replaceRequired(html, 'class="reader-home" href="/geode/" aria-label="GEODE home">GEODE<', 'class="reader-home" href="/geode/research/#jev">GEODE / Research<');
   html = replaceRequired(html, '.reader-home{font-weight:700;', '.reader-home{white-space:nowrap;flex-shrink:0;font-weight:700;');
-  html = replaceRequired(html, "href='/geode/?lang='+(english?'en':'ko');", "href='/geode/research/?lang='+(english?'en':'ko')+'#research-jev';");
+  html = replaceRequired(html, "href='/geode/?lang='+(english?'en':'ko');", "href='/geode/research/'+(english?'?lang=en':'')+'#jev';");
   html = replaceRequired(html, "jump(s.id);history.replaceState(null,'','#'+s.id);", "jump(s.id);");
   // The frozen film's show() owns all scene navigation (TOC, keyboard, overview,
   // and pager). Project that boundary once; builds within a scene stay local.
