@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { attachReaderSwipe } from "../src/lib/reader-swipe.mjs";
 
 export const legacyPath = "/geode/resaerch/jev-system1-offloading/";
 export const readerPath = "/geode/research/jev-system1-offloading/";
@@ -36,6 +37,11 @@ function restoreResearchRoute(){
 }
 window.addEventListener('popstate',restoreResearchRoute);
 readerSourcesButton.addEventListener('click',()=>{if(location.hash!=='#readerSources')history.pushState(history.state,'','#readerSources');});
+// Swipes move whole scenes; the original pager still controls in-scene builds.
+if(!renderMode) (${attachReaderSwipe.toString()})(stage,direction=>{
+ const next=state.index+direction;
+ if(!state.overview&&next>=0&&next<slides.length)show(next);
+});
 </script>`);
 }
 

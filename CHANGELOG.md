@@ -47,6 +47,12 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Research reader touch navigation.** Swipe artwork left or right to move
+  between GEODE, Jev, and JEVDB scenes. Preserve scene URLs, language, browser
+  history, vertical scrolling, pinch zoom, and taps on full-size image links.
+
 ### Fixed
 
 - **Research resource routes.** Add a standalone publication collection and
