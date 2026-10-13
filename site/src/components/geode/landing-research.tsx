@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Download } from "lucide-react";
 import { t, useLocale, type Locale } from "@/components/geode/locale-context";
+import { normalizeResearchSelection, publicationIds as ids, researchSelectionIndex, selectionHashes } from "@/lib/research-selection";
 
 const jevEvidence = "https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927";
-const ids = ["research-geode", "research-jev", "jevdb-paper-review"];
 
 /** One copy source for the landing entries and the /research/ collection. */
 function publications(locale: Locale) {
@@ -89,14 +89,22 @@ export function ResearchSection() {
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
     const readHash = () => {
-      const index = ids.indexOf(window.location.hash.slice(1));
+      const url = normalizeResearchSelection(new URL(window.location.href));
+      const index = researchSelectionIndex(url.hash);
       setSelected(index >= 0 ? index : 0);
+      if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url);
     };
     const timer = window.setTimeout(readHash, 0);
     window.addEventListener("hashchange", readHash);
     window.addEventListener("popstate", readHash);
     return () => { window.clearTimeout(timer); window.removeEventListener("hashchange", readHash); window.removeEventListener("popstate", readHash); };
   }, []);
+  const selectPublication = (index: number) => {
+    setSelected(index);
+    const url = new URL(window.location.href);
+    url.hash = selectionHashes[index];
+    if (url.href !== window.location.href) window.history.pushState(window.history.state, "", url);
+  };
   const materials = publications(locale);
   const topics = [
     {
@@ -120,7 +128,7 @@ export function ResearchSection() {
     <section id="research" className="landing-container landing-section landing-research" aria-labelledby="research-title">
       <div className="landing-section-heading"><h1 id="research-title" lang="en">Research</h1><p>{t(locale, "실행을 들여다보고, 판단을 실험합니다.", "Inside the execution. Into the decisions.")}</p></div>
       <div className="research-tabs" role="tablist" aria-label={t(locale, "연구자료 선택", "Select a publication")}>
-        {materials.map((item, i) => <button key={ids[i]} ref={element => { tabs.current[i] = element; }} id={`${ids[i]}-tab`} type="button" role="tab" aria-selected={selected === i} aria-controls={`${ids[i]}-panel`} tabIndex={selected === i ? 0 : -1} onClick={() => { setSelected(i); window.history.pushState(window.history.state, "", `#${ids[i]}`); }} onKeyDown={event => { const next = { ArrowLeft: (i + 2) % 3, ArrowRight: (i + 1) % 3, Home: 0, End: 2 }[event.key]; if (next !== undefined) { event.preventDefault(); tabs.current[next]?.focus(); } }}><span>{item.name}</span><span className="research-tab-kind">{item.kind}</span></button>)}
+        {materials.map((item, i) => <button key={ids[i]} ref={element => { tabs.current[i] = element; }} id={`${ids[i]}-tab`} type="button" role="tab" aria-selected={selected === i} aria-controls={`${ids[i]}-panel`} tabIndex={selected === i ? 0 : -1} onClick={() => selectPublication(i)} onKeyDown={event => { const next = { ArrowLeft: (i + 2) % 3, ArrowRight: (i + 1) % 3, Home: 0, End: 2 }[event.key]; if (next !== undefined) { event.preventDefault(); tabs.current[next]?.focus(); } }}><span>{item.name}</span><span className="research-tab-kind">{item.kind}</span></button>)}
       </div>
       {materials.map((item, i) => <article key={ids[i]} id={`${ids[i]}-panel`} role="tabpanel" aria-labelledby={`${ids[i]}-tab`} hidden={selected !== i} tabIndex={0} className="research-publication">
         <a className="research-preview" href={item.reader} aria-label={t(locale, `${item.name} 첫 장면 열기`, `Open the first scene of ${item.name}`)}><Image src={item.image} alt={t(locale, `${item.name} 원본 표지`, `Original cover of ${item.name}`)} width={item.width} height={item.height} /></a>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { normalizeResearchSelection } from "@/lib/research-selection";
 
 const legacyPaths: Record<string, string> = {
   "#research": "/geode/research/",
@@ -15,11 +16,10 @@ export function LegacyResearchRedirect() {
     const redirect = () => {
       const destination = legacyPaths[window.location.hash];
       if (!destination) return;
-      const url = new URL(window.location.href);
+      const url = normalizeResearchSelection(new URL(window.location.href));
       url.pathname = destination;
       // The landing defaults to English; the publication readers default to Korean.
       if (!url.searchParams.has("lang")) url.searchParams.set("lang", "en");
-      if (url.hash === "#research") url.hash = "";
       window.location.replace(url.toString());
     };
     redirect();

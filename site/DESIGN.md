@@ -43,8 +43,8 @@ removed.
 scrolling. Incoming fragments select the same publication. Panel IDs remain
 separate from selection hashes; Arrow/Home/End move focus and Enter/Space
 activate. GEODE, Jev and JEVDB headers retain `GEODE / Research` return links.
-Each return link retains its publication selection (`#research-geode`,
-`#research-jev`, or `#jevdb-paper-review`) and language. Collection selection
+Each return link retains its publication selection (no hash for the default
+GEODE report, `#jev`, or `#jevdb`) and language. Collection selection
 URLs remain valid; scene-reading links use the explicit resource path, with
 `lang` for language and a page/scene hash for position.
 
@@ -81,6 +81,13 @@ collection; no publication list or preview is rendered in the main body.
 Readers live at `/research/geode/`, `/research/jev-system1-offloading/`, and
 `/research/jevdb/`. Canonical metadata and the sitemap identify these resources.
 Language queries select a display language; fragments identify pages or scenes.
+Within the collection, fragments select publications: the default GEODE report
+uses no fragment; Jev uses `#jev` and JEVDB uses `#jevdb`. Historical
+`#research-geode`, `#research-jev`, and `#jevdb-paper-review` addresses still
+select the same publication and normalize with `replaceState`. This preserves
+Back/Forward without adding a redirect entry. Selecting the active tab adds no
+history entry. DOM tab/panel IDs remain separate from public URL fragments.
+Queries stay before fragments; changing language retains selection or scene.
 The collection and readers default to Korean; the existing landing defaults to
 English. Compatibility navigation preserves that distinction.
 

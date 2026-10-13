@@ -53,6 +53,8 @@ functional change.
   correct the Jev reader URL to `/research/jev-system1-offloading/`. Preserve
   shared homepage anchors and legacy reader/download addresses, and restore
   language and selected pages when navigating browser history.
+  Shorten collection selection URLs to the default report, `#jev`, or `#jevdb`,
+  preserving historical selection links without duplicate history entries.
 
 ### Changed
 
