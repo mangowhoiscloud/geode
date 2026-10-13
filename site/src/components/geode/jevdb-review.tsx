@@ -98,7 +98,7 @@ function ReviewContent() {
       <a className="jevdb-skip" href="#review-content">{t(locale, "본문으로 이동", "Skip to content")}</a>
       <header className="jevdb-header">
         <div className="jevdb-identity">
-          <Link className="jevdb-home" href={`/research/?lang=${locale}#jevdb-paper-review`}>GEODE / Research</Link>
+          <Link className="jevdb-home" href={`/research/${locale === "en" ? "?lang=en" : ""}#jevdb`}>GEODE / Research</Link>
           <div><h1>JEVDB: Prune First, Decide Fast</h1><p>{t(locale, "논문 리뷰 · 류지환 · v25", "Paper review · Jihwan Ryu · v25")}</p></div>
         </div>
         <div className="jevdb-actions">
