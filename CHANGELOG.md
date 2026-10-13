@@ -56,6 +56,11 @@ functional change.
 
 ### Changed
 
+- **Restore light research readers.** GEODE, Jev Decision Offloading and JEVDB
+  use their previous light reading workspaces, preserving source artifacts,
+  bilingual copy and navigation. The main and Research collection retain
+  their dark palette.
+
 - **Research color and surface copy.** Match the collection and reader controls
   to GEODE's dark palette while preserving source slide colors and layout.
   Describe actions and observations directly; consolidate measurement scope

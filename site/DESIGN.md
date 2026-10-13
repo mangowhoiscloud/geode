@@ -22,8 +22,9 @@ language; the existing footer retains its direct source links.
 
 The independent `/research/` collection and readers retain their layout and
 source artwork. The operator-directed 2026-10-13 revision below aligns their
-UI colors with the restored main; PDFs/PPT, slide pixels, figures and videos
-keep their original palettes and bytes.
+collection colors with the restored main. The subsequent reader rollback below
+restores the light artifact workspaces; PDFs/PPT, slide pixels, figures and
+videos keep their original palettes and bytes.
 
 **CSS ownership.** `landing.css` is scoped to `.geode-home` and restores the
 prior main declarations. `research.css` is scoped to `.geode-research` and
@@ -42,6 +43,10 @@ removed.
 scrolling. Incoming fragments select the same publication. Panel IDs remain
 separate from selection hashes; Arrow/Home/End move focus and Enter/Space
 activate. GEODE, Jev and JEVDB headers retain `GEODE / Research` return links.
+Each return link retains its publication selection (`#research-geode`,
+`#research-jev`, or `#jevdb-paper-review`) and language. Collection selection
+URLs remain valid; scene-reading links use the explicit resource path, with
+`lang` for language and a page/scene hash for position.
 
 ### Research color and copy revision (operator-directed 2026-10-13)
 
@@ -50,12 +55,17 @@ existing spacing, typography, selector and unframed media layout. Its dark
 substrate and secondary text inherit `globals.css`; focus uses the rose
 identity accent. Metadata uses the readable secondary ink.
 
-GEODE and JEVDB reader controls map their existing `--reader-*` aliases to
-those tokens. The standalone Jev projection derives prefixed color aliases
-from `globals.css`, then applies them only to header, navigation, contents,
-source sheet, text view and overview labels. Frozen film variables are never
-redefined on the slide subtree. Original PDF/PPT, images, diagram semantic
-colors, slide text and build behavior remain source-owned.
+### Reader light-canvas restoration (operator-directed 2026-10-13)
+
+All three “Read scene by scene” destinations retain the light reader chrome
+from `889f2874^`: `/research/geode/`, `/research/jev-system1-offloading/`,
+and `/research/jevdb/`. Restore the existing cool-neutral canvas, dark ink,
+blue focus, neutral download action, and light contents/source sheets without
+changing layout or copy. GEODE and JEVDB share the scoped `.jevdb-reader`
+palette; the standalone Jev projection uses its frozen light reader styles.
+No global token changes or theme switcher apply to the dark main and Research
+collection. Original PDF/PPT, images, diagram semantic colors, slide text and
+build behavior remain source-owned.
 
 Surface copy leads with actions, artifacts and observations. Keep sample
 counts, common denominators, configuration pins, uncertainty, missing-data
@@ -215,8 +225,8 @@ deployment proof.
 `/research/jevdb/` reuses the Decision Offloading reader described below:
 its 224px flat scene list, compact header/toolbar,
 large slide canvas, native mobile contents dialog, and right source sheet.
-Reuse the existing Pretendard/mono assets and layout, with reader color
-aliases mapped onto the GEODE tokens. The 19 v25 slide images and original PPT remain unchanged. KO/EN
+Reuse the existing Pretendard/mono assets, layout and scoped cool-neutral
+light reader palette. The 19 v25 slide images and original PPT remain unchanged. KO/EN
 controls translate navigation and reading notes; they do not claim a second
 slide edition. The video and PPT stay in the opening header. Every slide has
 one settled build, without artificial animation or a nonfunctional motion
@@ -327,8 +337,8 @@ gold and aqua appear only where their meaning applies.
 **Single substrate.** Every page is dark by design. No light mode, no
 dark-panel-on-light-page. Character PNGs were authored on transparent
 backgrounds and sit naturally on this substrate. Scoped exceptions: the
-original artwork inside research readers. Their outer controls and the
-Research collection use the same substrate as the main landing.
+original artwork and the operator-restored light research readers. The
+Research collection retains the same dark substrate as the main landing.
 
 **Petri-blue is scoped, not dead.** `--acc-si` keeps the hub's Bootstrap-blue
 identity on exactly two surfaces: the 04-self-improving docs section
