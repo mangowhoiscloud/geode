@@ -153,7 +153,7 @@ function ReviewContent() {
           </article>}
 
           <footer className="jevdb-footer">
-            <p>{t(locale, "원 논문 주장, 발표자 예시, 별도 GEODE 실험을 구분합니다. 언어 선택은 목차와 해설에 적용되며, 슬라이드와 PPT는 영문 v25 원본입니다.", "Paper claims, presenter examples, and the separate GEODE experiment remain distinct. Language selection changes navigation and notes; the slides and PPT preserve the original English v25 edition.")}</p>
+            <p>{t(locale, "영문 v25 슬라이드·PPT에 한·영 목차와 해설을 제공합니다. 각 장면에 논문 결과, 발표자 예시, GEODE 실험의 출처와 조건을 표시했습니다.", "English v25 slides and PPT with Korean and English navigation and notes. Each scene identifies the source and conditions of paper results, presenter examples, or the GEODE experiment.")}</p>
             <button ref={sourceButton} type="button" aria-haspopup="dialog" aria-controls="reader-sources" onClick={() => {
               window.history.pushState(window.history.state, "", "#readerSources");
               sources.current?.showModal();
@@ -182,8 +182,8 @@ function ReviewContent() {
           <section><h3>{t(locale, "별도 GEODE 연구 · 장면 18", "Separate GEODE study · scene 18")}</h3><ul>
             <li><a href={`/geode/research/jev-system1-offloading/?lang=${locale}#v3-e2e-injected`}><span>STUDY</span> <span>Jev Decision Offloading · U8c</span></a></li>
             <li><a href={evidence}><span>DATA</span> <span>{t(locale, "고정된 연구 기록 · 3bcf4044", "Pinned study records · 3bcf4044")}</span></a></li>
-          </ul><p>{t(locale, "U8c는 18 matched cases의 agent-loop 비교입니다. U3의 frozen-state 단일 판정이나 U8n의 사후 분석과 합치지 않습니다. 이 리뷰에서 새 실험을 실행하지 않았으며 JEVDB 재현 결과를 주장하지 않습니다.", "U8c compares agent loops across 18 matched cases. It is separate from U3 frozen-state single judgments and the U8n post-hoc analysis. This review runs no new experiment and claims no JEVDB reproduction.")}</p></section>
-          <section><h3>{t(locale, "원본 보존", "Preserved originals")}</h3><p>{t(locale, "2026년 10월 11일 완성한 v25 PPT는 변경하지 않았습니다. 웹은 기존 v25 PDF 검수 이미지를 재사용하며 원본의 영문 텍스트도 제공합니다. 단계는 슬라이드당 1개이며, 별도의 모션이나 중간 build를 만들지 않았습니다.", "The v25 PPT completed on October 11, 2026 is unchanged. The reader reuses existing v25 PDF review images and provides the original English slide text. Each slide has one settled build; no motion or intermediate builds were added.")}</p></section>
+          </ul><p>{t(locale, "U8c는 18 matched cases의 GEODE agent-loop 비교입니다. U3는 frozen-state 단일 판정, U8n은 사후 분석으로 각각 수행했습니다. 이 장면은 기존 실험을 논문 리뷰에 연결한 것으로, JEVDB 재현 실행은 0회입니다.", "U8c compares GEODE agent loops across 18 matched cases. U3 covers frozen-state single judgments; U8n is a post-hoc analysis. This scene connects existing experiments to the paper review. JEVDB reproduction runs: 0.")}</p></section>
+          <section><h3>{t(locale, "원본 보존", "Preserved originals")}</h3><p>{t(locale, "2026년 10월 11일 완성한 v25 PPT와 PDF 검수 이미지를 사용합니다. 영문 슬라이드 19장과 원문 텍스트를 페이지별로 읽을 수 있습니다.", "The v25 PPT was completed on October 11, 2026. Browse its 19 English slides using the PDF review images and original slide text.")}</p></section>
         </div>
       </dialog>
     </div>

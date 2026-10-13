@@ -14,6 +14,7 @@
 .report-chapters a[aria-current] { color: var(--reader-ink); font-weight: 700; }
 .report-search { display: grid; gap: 8px; margin: 20px 0 8px; font-size: 12px; flex-shrink: 0; }
 .report-search input { background: var(--reader-paper); width: 100%; padding: 10px; min-height: 44px; border: 0; border-bottom: 1px solid var(--reader-line); border-radius: 0; }
+.report-search input::placeholder { color: var(--reader-muted); opacity: 1; }
 .report-page-list { min-height: 100px; }
 .report-page-list a > span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .report-text { padding-bottom: 8px; }

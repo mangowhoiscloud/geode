@@ -20,17 +20,17 @@ Publication lists, cover previews and the Research selector are absent from the
 main body. The header and hero Research links open `/research/` in the current
 language; the existing footer retains its direct source links.
 
-The independent `/research/` collection and all readers retain their current
-appearance and content from `f2aaf547`. The collection keeps the TypeUI white
-canvas and original publication previews. Reader chrome, reports, measurements,
-PDFs/PPT, images and videos are unchanged.
+The independent `/research/` collection and readers retain their layout and
+source artwork. The operator-directed 2026-10-13 revision below aligns their
+UI colors with the restored main; PDFs/PPT, slide pixels, figures and videos
+keep their original palettes and bytes.
 
 **CSS ownership.** `landing.css` is scoped to `.geode-home` and restores the
 prior main declarations. `research.css` is scoped to `.geode-research` and
-preserves the current collection declarations. Global document selectors use
+preserves collection geometry while inheriting the shared colors. Global document selectors use
 `:has()` with the corresponding root. Both stylesheets can remain loaded during
 client navigation without recoloring the other surface. Shared global tokens,
-Docs, About and reader styles are unchanged.
+Docs and About styles are unchanged.
 
 **Navigation.** The restored `#features`, `#distill` and `#roadmap` sections
 again use native in-page navigation. Old Research fragments still replace-
@@ -43,10 +43,30 @@ scrolling. Incoming fragments select the same publication. Panel IDs remain
 separate from selection hashes; Arrow/Home/End move focus and Enter/Space
 activate. GEODE, Jev and JEVDB headers retain `GEODE / Research` return links.
 
+### Research color and copy revision (operator-directed 2026-10-13)
+
+The main and publication collection share the §2 palette. Research keeps its
+existing spacing, typography, selector and unframed media layout. Its dark
+substrate and secondary text inherit `globals.css`; focus uses the rose
+identity accent. Metadata uses the readable secondary ink.
+
+GEODE and JEVDB reader controls map their existing `--reader-*` aliases to
+those tokens. The standalone Jev projection derives prefixed color aliases
+from `globals.css`, then applies them only to header, navigation, contents,
+source sheet, text view and overview labels. Frozen film variables are never
+redefined on the slide subtree. Original PDF/PPT, images, diagram semantic
+colors, slide text and build behavior remain source-owned.
+
+Surface copy leads with actions, artifacts and observations. Keep sample
+counts, common denominators, configuration pins, uncertainty, missing-data
+status and author/study attribution next to the relevant evidence. Consolidate
+repeated defensive prose into the existing measurement or source sections;
+removing a disclaimer cannot imply measured superiority or a new experiment.
+
 ### Research route ownership (2026-10-12)
 
-`/research/` is the standalone publication collection with its existing white
-header and full publication selector. The restored main header links to this
+`/research/` is the standalone publication collection with its existing
+header layout and full publication selector. The restored main header links to this
 collection; no publication list or preview is rendered in the main body.
 Readers live at `/research/geode/`, `/research/jev-system1-offloading/`, and
 `/research/jevdb/`. Canonical metadata and the sitemap identify these resources.
@@ -70,8 +90,7 @@ Use one real, uncropped publication canvas with three visible document tabs:
 GEODE report, Jev study, JEVDB review. Labels and a quiet selected underline
 identify the document; no card background, border frame, corner treatment,
 shadow, autoplay, or decorative illustration is added. The original artwork
-retains its own palette and diagrams. The surface uses the scoped white-canvas
-tokens preserved in `research.css`.
+retains its own palette and diagrams. The surface uses the shared dark GEODE tokens through `research.css`.
 
 The original cover opens that same first page or scene. A caption identifies
 the edition and language. Short copy distinguishes the historical GEODE
@@ -194,10 +213,10 @@ deployment proof.
 ### JEVDB paper review reader (operator-approved 2026-10-12)
 
 `/research/jevdb/` reuses the Decision Offloading reader described below:
-its cool light workspace, 224px flat scene list, compact header/toolbar,
+its 224px flat scene list, compact header/toolbar,
 large slide canvas, native mobile contents dialog, and right source sheet.
-Reuse the existing Pretendard/mono assets and film tokens, scoped to this
-route. The 19 v25 slide images and original PPT remain unchanged. KO/EN
+Reuse the existing Pretendard/mono assets and layout, with reader color
+aliases mapped onto the GEODE tokens. The 19 v25 slide images and original PPT remain unchanged. KO/EN
 controls translate navigation and reading notes; they do not claim a second
 slide edition. The video and PPT stay in the opening header. Every slide has
 one settled build, without artificial animation or a nonfunctional motion
@@ -308,9 +327,8 @@ gold and aqua appear only where their meaning applies.
 **Single substrate.** Every page is dark by design. No light mode, no
 dark-panel-on-light-page. Character PNGs were authored on transparent
 backgrounds and sit naturally on this substrate. Scoped exceptions: the
-research readers and, since 2026-10-12, the landing and `/research/`
-collection white canvas (see "Landing information architecture" above). These
-are fixed surfaces, not a theme toggle.
+original artwork inside research readers. Their outer controls and the
+Research collection use the same substrate as the main landing.
 
 **Petri-blue is scoped, not dead.** `--acc-si` keeps the hub's Bootstrap-blue
 identity on exactly two surfaces: the 04-self-improving docs section
