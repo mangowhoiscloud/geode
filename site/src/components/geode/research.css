@@ -1,29 +1,20 @@
-/* Research collection preserved from f2aaf547; independent of the main landing. */
-html:has(.geode-research), body:has(.geode-research) { background: #FFFFFF; scroll-behavior: auto; }
+/* Research keeps its publication layout and shares the GEODE color tokens. */
+html:has(.geode-research), body:has(.geode-research) { background: var(--paper); scroll-behavior: auto; }
 .geode-research {
-  --paper: #FFFFFF;
-  --paper-2: #F3F4F7;
-  --ink: #171B27;
-  --ink-1: #171B27;
-  --ink-2: #515C6A;
-  --ink-3: #515C6A;
-  --rule: #CBD1DC;
-  --rule-soft: #E2E6EE;
-  --acc-artifact: #B83C75;
-  --acc-soft: #B83C75;
+  --ink-3: var(--ink-2);
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-inter), sans-serif;
   font-size: 16px;
   line-height: 1.6;
-  color-scheme: light;
+  color-scheme: dark;
 }
 .geode-research ::selection { background: var(--rule-soft); color: var(--ink); }
 .geode-research *, .geode-research *::before, .geode-research *::after { box-sizing: border-box; }
 .geode-research :is(h1, h2, h3) { font-family: var(--font-display), sans-serif; font-weight: 600; }
 .geode-research :is(a, button, summary) { -webkit-tap-highlight-color: transparent; }
 .geode-research :is(a, button, summary, [tabindex="0"]):focus-visible {
-  outline: 2px solid var(--ink);
+  outline: 2px solid var(--acc-artifact);
   outline-offset: 5px;
 }
 .geode-research [id] { scroll-margin-top: 100px; }
@@ -43,9 +34,9 @@ html:has(.geode-research), body:has(.geode-research) { background: #FFFFFF; scro
 .geode-research .landing-locale button { min-width: 40px; min-height: 44px; cursor: pointer; color: var(--ink-2); font-size: 12px; border-radius: 4px; }
 .geode-research .landing-locale button[aria-pressed="true"] { color: var(--ink); background: var(--paper-2); }
 .geode-research .landing-mobile-menu { display: none; }
-.geode-research .landing-header :is(a, button):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+.geode-research .landing-header :is(a, button):focus-visible { outline: 2px solid var(--acc-artifact); outline-offset: 2px; border-radius: 4px; }
 .geode-research .landing-menu-dialog { position: fixed; inset: 12px 12px auto; width: calc(100% - 24px); max-width: 440px; margin: 0 0 0 auto; padding: 0; max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); color: var(--ink); }
-.geode-research .landing-menu-dialog::backdrop { background: #171b2766; }
+.geode-research .landing-menu-dialog::backdrop { background: color-mix(in srgb, var(--paper-deep) 75%, transparent); }
 .geode-research .landing-menu-body { padding: 12px 20px 20px; }
 .geode-research .landing-menu-heading { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
 .geode-research .landing-menu-heading h2 { font-size: 16px; }
