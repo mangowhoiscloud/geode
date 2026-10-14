@@ -49,11 +49,48 @@ functional change.
 
 ### Added
 
+- **GPT-6.1 Sol.** Select `gpt-6.1-sol` on the Platform API and the Codex
+  subscription. Requests accept only `low`..`max` effort (no `none`, `minimal`
+  or Codex `ultra`), budget context per route (1.05M/922K input on the API,
+  the Codex client's 500K default and 872K ceiling on the subscription) and
+  price API usage at the published rates, including the full-request tier
+  above 272K input tokens.
+- **Claude Sonnet 5.5 and Haiku 5.5.** Add both with their own request
+  contracts: adaptive thinking with signed-block binding, the
+  `computer_toolset_20260801` computer toolset, local rejection of forced tool
+  choice on Sonnet 5.5 (Haiku 5.5 keeps it), and Haiku 5.5's 5x tariff when a
+  prompt, counting cache reads and writes, exceeds 100,000 tokens. Account-bound
+  thinking drops are now reported by reason and count.
 - **Research reader touch navigation.** Swipe artwork left or right to move
   between GEODE, Jev, and JEVDB scenes. Preserve scene URLs, language, browser
   history, vertical scrolling, pinch zoom, and taps on full-size image links.
 
 ### Fixed
+
+- **Current models in evaluations.** Petri and seed-generation roles now admit
+  current catalog offerings (opt-in `current_models = true`; pinned defaults
+  and custom `allowed_models` unchanged), so explicit GPT-6/6.1 and Claude 5.5
+  selections are no longer rejected or silently replaced. Petri API-key judges
+  and auditors use GEODE-owned `openai-platform/` and `anthropic-platform/`
+  inspect_ai providers. GPT-6 requests use the Responses API with their
+  effort, and Claude requests keep explicit `tool_choice`. Unsupported effort,
+  thinking-off or forced-tool combinations are rejected before any request.
+  Raw `openai/` and `anthropic/` ids remain the stock escape hatch. Seed
+  voters without an explicit effort no longer send `none` to models that
+  reject it, `max` is a valid voter effort, and bare-id subscription mapping
+  follows the catalog instead of a `gpt-5` name prefix.
+- **Approval cancellation.** Release a lock acquired after its awaiting request
+  was cancelled, so later tool approvals continue instead of waiting forever.
+- **Provider setup.** Offer OpenRouter alongside the other API-key providers
+  during initial setup and collect only the selected provider's hidden key.
+- **Setup menu input.** The setup wizard re-asks on an empty or unknown choice
+  instead of treating it as the API-key route; no key is requested or saved.
+- **Auth recovery advice.** `/login health` and the model-facing credential
+  note no longer present plan `use` as a provider switch (it only reorders
+  plans within one provider); provider switches point to `/model` or a
+  user-requested `switch_model`. Expired OAuth advice distinguishes native
+  `/login openai` from an imported Codex CLI token (`codex login`, then
+  `/login refresh`).
 
 - **Research resource routes.** Add a standalone publication collection and
   correct the Jev reader URL to `/research/jev-system1-offloading/`. Preserve
@@ -62,7 +99,46 @@ functional change.
   Shorten collection selection URLs to the default report, `#jev`, or `#jevdb`,
   preserving historical selection links without duplicate history entries.
 
+### Removed
+
+- **Duplicate sync approval gates.** The unused synchronous
+  `ApprovalWorkflow.apply_safety_gates` / `confirm_write` / `confirm_cost` /
+  `confirm_sensitive` / `confirm_mcp` / `request_bash_approval` twins are
+  deleted; the async gates are the single policy implementation. The blocking
+  terminal prompt (`prompt_with_always`) stays as the prompt owner.
+
 ### Changed
+
+- **Model lifecycle (2026-10-14).** GPT-5.5 (retired 2026-10-14) and
+  GPT-5.3-Codex-Spark (retired 2026-09-14) are rejected on the Codex
+  subscription before credential or network access, with the documented
+  replacement named; their Platform API routes and historical prices remain.
+  Saved selections are never remapped. Deprecated Sonnet 4.5, GPT-5.3 Codex and
+  GPT-5.4 Nano stay selectable, labelled with their retirement date. Claude
+  secondary and budget defaults move to `claude-sonnet-5-5` and
+  `claude-haiku-5-5`; retired Sonnet families name `claude-sonnet-5-5`.
+
+- **One-time approvals stay one-time.** Three `y` answers no longer promote a
+  tool to session-wide always-allow; only an explicit `a` grants a standing
+  allow. Consecutive-denial auto-deny, per-invocation personal-data consent,
+  HITL levels and skip-permissions are unchanged.
+- **`geode setup --reset` keeps credential files.** It reopens the credential
+  wizard even when a credential already works, instead of unlinking
+  `~/.geode/.env` and clearing the dry-run marker first. A successful entry
+  replaces only the selected provider's key (and clears the dry-run marker, as
+  any successful setup does); cancelling or failing leaves `.env`, `auth.toml`
+  and the marker as they were. The later sandbox and Computer Use steps are
+  unchanged.
+- **In-context slot policy schema.** `InContextSlot` exposes only the consumed
+  `max_entries`; ranking and placement stay fixed. Saved policies whose retired
+  `rank_by` / `injection_point` values were valid still load with identical
+  output (keys ignored; delete them to migrate). Previously invalid legacy
+  values keep their old rejection: a non-string value rejects the file, and an
+  unknown `injection_point` drops only that slot.
+
+- **Credential entry.** `/login add` selects ChatGPT sign-in or a provider API
+  key in one menu. Setup and direct Anthropic login share the same key-input
+  flow and existing credential persistence, validation and client invalidation.
 
 - **Restore light research readers.** GEODE, Jev Decision Offloading and JEVDB
   use their previous light reading workspaces, preserving source artifacts,

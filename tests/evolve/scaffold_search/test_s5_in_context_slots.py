@@ -11,7 +11,9 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterator
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -19,13 +21,10 @@ import pytest
 from core.agent.policy_injection import in_context_slots
 from core.agent.policy_injection.in_context_slots import (
     CANONICAL_SLOTS,
-    INJECTION_SYSTEM_PROMPT,
-    INJECTION_TOOL_DESCRIPTIONS,
     SLOT_EXEMPLARS,
     SLOT_MEMORY_RECALL,
     SLOT_RUBRIC_EXCERPTS,
     SLOT_TOOL_HINTS,
-    VALID_INJECTION_POINTS,
     InContextSlot,
     _load_in_context_slots_override,
 )
@@ -72,18 +71,16 @@ def test_slot_identifier_constants_match_canonical() -> None:
     assert SLOT_TOOL_RANKING == "tool_ranking"
 
 
-def test_valid_injection_points_has_two_namespaces() -> None:
-    assert {"system_prompt", "tool_descriptions"} == VALID_INJECTION_POINTS
-    assert INJECTION_SYSTEM_PROMPT == "system_prompt"
-    assert INJECTION_TOOL_DESCRIPTIONS == "tool_descriptions"
+def test_in_context_slot_exposes_only_consumed_controls() -> None:
+    """Ranking and placement are fixed in the wiring; only the cap is a knob."""
+    assert {field.name for field in fields(InContextSlot)} == {"name", "max_entries"}
+    assert not hasattr(in_context_slots, "VALID_INJECTION_POINTS")
 
 
 def test_in_context_slot_dataclass_is_frozen() -> None:
     slot = InContextSlot(
         name="exemplars",
         max_entries=3,
-        rank_by="elo_rating",
-        injection_point="system_prompt",
     )
     with pytest.raises(Exception):  # FrozenInstanceError or AttributeError
         slot.max_entries = 5  # type: ignore[misc]
@@ -115,8 +112,6 @@ def test_load_drops_slot_when_max_entries_negative(isolated_sot: Path) -> None:
             "exemplars": {"max_entries": -1},
             "memory_recall": {
                 "max_entries": 5,
-                "rank_by": "recency",
-                "injection_point": "system_prompt",
             },
         },
     )
@@ -143,28 +138,18 @@ def test_load_valid_payload_all_5_slots(isolated_sot: Path) -> None:
     payload = {
         "exemplars": {
             "max_entries": 3,
-            "rank_by": "elo_rating",
-            "injection_point": "system_prompt",
         },
         "memory_recall": {
             "max_entries": 5,
-            "rank_by": "recency",
-            "injection_point": "system_prompt",
         },
         "rubric_excerpts": {
             "max_entries": 3,
-            "rank_by": "regression_severity",
-            "injection_point": "system_prompt",
         },
         "tool_hints": {
             "max_entries": 5,
-            "rank_by": "success_rate",
-            "injection_point": "tool_descriptions",
         },
         "tool_ranking": {
             "max_entries": 5,
-            "rank_by": "wilson_lb",
-            "injection_point": "system_prompt",
         },
     }
     _write(isolated_sot, payload)
@@ -172,15 +157,14 @@ def test_load_valid_payload_all_5_slots(isolated_sot: Path) -> None:
     assert result is not None
     assert set(result.keys()) == set(CANONICAL_SLOTS)
     assert result["exemplars"].max_entries == 3
-    assert result["tool_hints"].injection_point == "tool_descriptions"
-    assert result["tool_ranking"].rank_by == "wilson_lb"
+    assert result["tool_hints"].max_entries == 5
 
 
 def test_load_partial_slots(isolated_sot: Path) -> None:
     """Subset of slots → only that subset returned."""
     _write(
         isolated_sot,
-        {"exemplars": {"max_entries": 3, "rank_by": "elo", "injection_point": "system_prompt"}},
+        {"exemplars": {"max_entries": 3}},
     )
     result = _load_in_context_slots_override()
     assert result is not None
@@ -194,10 +178,8 @@ def test_load_unknown_slot_dropped(isolated_sot: Path) -> None:
         {
             "exemplars": {
                 "max_entries": 3,
-                "rank_by": "elo",
-                "injection_point": "system_prompt",
             },
-            "future_slot": {"max_entries": 99, "injection_point": "system_prompt"},
+            "future_slot": {"max_entries": 99},
         },
     )
     result = _load_in_context_slots_override()
@@ -207,35 +189,63 @@ def test_load_unknown_slot_dropped(isolated_sot: Path) -> None:
 
 
 def test_load_unknown_injection_point_drops_slot(isolated_sot: Path) -> None:
-    """Slot with `injection_point` outside VALID_INJECTION_POINTS → drop slot
-    (per-axis graceful; other slots stay valid)."""
+    """Legacy `injection_point` outside the old enum still drops that slot
+    (per-axis graceful; other slots stay valid) — retiring the knob must not
+    activate a previously invalid policy."""
     _write(
         isolated_sot,
         {
-            "exemplars": {
-                "max_entries": 3,
-                "rank_by": "elo",
-                "injection_point": "badness",
-            },
-            "memory_recall": {
-                "max_entries": 5,
-                "rank_by": "recency",
-                "injection_point": "system_prompt",
-            },
+            "exemplars": {"max_entries": 3, "rank_by": "elo", "injection_point": "badness"},
+            "memory_recall": {"max_entries": 5, "rank_by": "recency"},
         },
     )
     result = _load_in_context_slots_override()
-    assert result is not None
-    assert "exemplars" not in result
-    assert "memory_recall" in result
+    assert result == {"memory_recall": InContextSlot(name="memory_recall", max_entries=5)}
 
 
-def test_load_default_injection_point_is_system_prompt(isolated_sot: Path) -> None:
-    """`injection_point` 누락 시 default = 'system_prompt'."""
-    _write(isolated_sot, {"exemplars": {"max_entries": 3, "rank_by": "elo"}})
-    result = _load_in_context_slots_override()
-    assert result is not None
-    assert result["exemplars"].injection_point == "system_prompt"
+def test_load_valid_legacy_keys_keep_slot_without_warning(
+    isolated_sot: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Valid legacy strings still activate the slot by `max_entries`. The
+    note is debug-level: the wiring reloads the policy on every call."""
+    _write(
+        isolated_sot,
+        {
+            "exemplars": {"max_entries": 3, "rank_by": "elo", "injection_point": "system_prompt"},
+            "tool_hints": {"max_entries": 5, "injection_point": "tool_descriptions"},
+            "memory_recall": {"max_entries": 2},
+        },
+    )
+    with caplog.at_level("DEBUG", logger=in_context_slots.__name__):
+        result = _load_in_context_slots_override()
+    assert result == {
+        "exemplars": InContextSlot(name="exemplars", max_entries=3),
+        "tool_hints": InContextSlot(name="tool_hints", max_entries=5),
+        "memory_recall": InContextSlot(name="memory_recall", max_entries=2),
+    }
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len([r for r in caplog.records if "retired keys" in r.getMessage()]) == 2
+
+
+@pytest.mark.parametrize("key", ["rank_by", "injection_point"])
+def test_load_non_string_legacy_key_rejects_file(isolated_sot: Path, key: str) -> None:
+    """Graceful source: a malformed legacy value still discards the file."""
+    _write(
+        isolated_sot, {"exemplars": {"max_entries": 3, key: 5}, "memory_recall": {"max_entries": 2}}
+    )
+    assert _load_in_context_slots_override() is None
+
+
+@pytest.mark.parametrize("key", ["rank_by", "injection_point"])
+def test_strict_override_non_string_legacy_key_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    sot = tmp_path / "override.json"
+    _write(sot, {"exemplars": {"max_entries": 3, key: ["system_prompt"]}})
+    monkeypatch.setenv("GEODE_IN_CONTEXT_SLOTS_OVERRIDE", str(sot))
+    monkeypatch.setenv("GEODE_IN_CONTEXT_SLOTS_STRICT", "1")
+    with pytest.raises(RuntimeError, match=f"{key} must be str"):
+        _load_in_context_slots_override()
 
 
 def test_strict_env_var_raises_on_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -260,8 +270,6 @@ def test_operator_local_layer_priority(isolated_sot: Path) -> None:
             {
                 "exemplars": {
                     "max_entries": 99,
-                    "rank_by": "from-ops",
-                    "injection_point": "system_prompt",
                 }
             },
         ),
@@ -272,14 +280,11 @@ def test_operator_local_layer_priority(isolated_sot: Path) -> None:
         {
             "exemplars": {
                 "max_entries": 3,
-                "rank_by": "from-repo",
-                "injection_point": "system_prompt",
             }
         },
     )
     result = _load_in_context_slots_override()
     assert result is not None
-    assert result["exemplars"].rank_by == "from-ops"
     assert result["exemplars"].max_entries == 99
 
 

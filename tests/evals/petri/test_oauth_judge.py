@@ -4,7 +4,7 @@ Coverage:
 
 - ``to_inspect_model`` auto-routes gpt-5.x to ``openai-codex/`` when a
   Codex OAuth token resolves; falls back to ``openai/`` otherwise.
-- User-pinned raw ids (``openai/gpt-5.5``) bypass the rewrite.
+- User-pinned raw ids (``openai/gpt-5.6-sol``) bypass the rewrite.
 - ``--use-oauth`` / ``--no-oauth`` overrides auto-detect.
 - ``is_oauth_routed`` predicate classifies inspect_ai ids correctly.
 - ``estimate_cost_usd`` zeros out the judge / auditor contribution
@@ -37,7 +37,7 @@ def test_to_inspect_model_uses_oauth_when_token_present() -> None:
     from evals.petri.models import to_inspect_model
 
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=True):
-        assert to_inspect_model("gpt-5.5") == "openai-codex/gpt-5.5"
+        assert to_inspect_model("gpt-5.6-sol") == "openai-codex/gpt-5.6-sol"
         assert to_inspect_model("gpt-5.6-luna") == "openai-codex/gpt-5.6-luna"
         from core.llm.errors import ModelSourceUnavailableError
 
@@ -55,8 +55,8 @@ def test_to_inspect_model_falls_back_to_per_token_without_token(
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-only-api-key")
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=False):
-        assert to_inspect_model("gpt-5.5") == "openai/gpt-5.5"
-        assert to_inspect_model("gpt-5.4-mini") == "openai/gpt-5.4-mini"
+        assert to_inspect_model("gpt-5.6-sol") == "openai-platform/gpt-5.6-sol"
+        assert to_inspect_model("gpt-5.4-mini") == "openai-platform/gpt-5.4-mini"
 
 
 def test_to_inspect_model_use_oauth_true_forces_route() -> None:
@@ -69,7 +69,7 @@ def test_to_inspect_model_use_oauth_true_forces_route() -> None:
     from evals.petri.models import to_inspect_model
 
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=False):
-        assert to_inspect_model("gpt-5.5", use_oauth=True) == "openai-codex/gpt-5.5"
+        assert to_inspect_model("gpt-5.6-sol", use_oauth=True) == "openai-codex/gpt-5.6-sol"
 
 
 def test_to_inspect_model_use_oauth_false_keeps_per_token() -> None:
@@ -77,17 +77,17 @@ def test_to_inspect_model_use_oauth_false_keeps_per_token() -> None:
     from evals.petri.models import to_inspect_model
 
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=True):
-        assert to_inspect_model("gpt-5.5", use_oauth=False) == "openai/gpt-5.5"
+        assert to_inspect_model("gpt-5.6-sol", use_oauth=False) == "openai-platform/gpt-5.6-sol"
 
 
 def test_to_inspect_model_raw_openai_passthrough_bypasses_oauth() -> None:
-    """User-pinned raw ``openai/gpt-5.5`` stays PAYG even with token."""
+    """User-pinned raw ``openai/gpt-5.6-sol`` stays PAYG even with token."""
     from evals.petri.models import to_inspect_model
 
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=True):
-        assert to_inspect_model("openai/gpt-5.5") == "openai/gpt-5.5"
+        assert to_inspect_model("openai/gpt-5.6-sol") == "openai/gpt-5.6-sol"
         # And the explicit OAuth-routed form is honoured.
-        assert to_inspect_model("openai-codex/gpt-5.5") == "openai-codex/gpt-5.5"
+        assert to_inspect_model("openai-codex/gpt-5.6-sol") == "openai-codex/gpt-5.6-sol"
 
 
 def test_to_inspect_model_o_series_never_oauth() -> None:
@@ -96,8 +96,8 @@ def test_to_inspect_model_o_series_never_oauth() -> None:
     from evals.petri.models import to_inspect_model
 
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=True):
-        assert to_inspect_model("o3") == "openai/o3"
-        assert to_inspect_model("o4-mini") == "openai/o4-mini"
+        assert to_inspect_model("o3") == "openai-platform/o3"
+        assert to_inspect_model("o4-mini") == "openai-platform/o4-mini"
 
 
 # ---------------------------------------------------------------------------
@@ -108,10 +108,10 @@ def test_to_inspect_model_o_series_never_oauth() -> None:
 def test_is_oauth_routed_classifies_inspect_ids() -> None:
     from evals.petri.models import is_oauth_routed
 
-    assert is_oauth_routed("openai-codex/gpt-5.5") is True
+    assert is_oauth_routed("openai-codex/gpt-5.6-sol") is True
     assert is_oauth_routed("openai-codex/gpt-5.3-codex") is True
     assert is_oauth_routed("claude-code/claude-haiku-4-5-20251001") is True
-    assert is_oauth_routed("openai/gpt-5.5") is False
+    assert is_oauth_routed("openai/gpt-5.6-sol") is False
     assert is_oauth_routed("anthropic/claude-haiku-4-5-20251001") is False
     assert is_oauth_routed("geode/claude-opus-4-7") is False
 
@@ -127,14 +127,14 @@ def test_estimate_cost_zero_for_oauth_judge() -> None:
     from evals.petri.runner import estimate_cost_usd
 
     payg = estimate_cost_usd(
-        judge="gpt-5.5",
+        judge="gpt-5.6-sol",
         auditor="claude-sonnet-4-6",
         target="claude-opus-4-7",
         seeds=1,
         max_turns=10,
     )
     oauth = estimate_cost_usd(
-        judge="gpt-5.5",
+        judge="gpt-5.6-sol",
         auditor="claude-sonnet-4-6",
         target="claude-opus-4-7",
         seeds=1,
@@ -177,7 +177,7 @@ def test_estimate_cost_both_oauth_only_target_remains() -> None:
     from evals.petri.runner import estimate_cost_usd
 
     full_oauth = estimate_cost_usd(
-        judge="gpt-5.5",
+        judge="gpt-5.6-sol",
         auditor="gpt-5.4-mini",
         target="claude-opus-4-7",
         seeds=1,
@@ -214,7 +214,7 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
         patch("evals.petri.user_overrides.read_role_override", return_value={}),
     ):
         report = run_audit(
-            judge="gpt-5.5",
+            judge="gpt-5.6-sol",
             auditor="claude-sonnet-4-6",
             target="claude-opus-4-7",
             seeds=1,
@@ -222,8 +222,10 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
             dry_run=True,
         )
     joined = " ".join(report.command)
-    assert "judge=openai-codex/gpt-5.5" in joined
-    assert "auditor=anthropic/claude-sonnet-4-6" in joined  # PAYG default (anthropic auditor)
+    assert "judge=openai-codex/gpt-5.6-sol" in joined
+    assert (
+        "auditor=anthropic-platform/claude-sonnet-4-6" in joined
+    )  # PAYG default (anthropic auditor)
 
 
 def test_run_audit_no_oauth_flag_forces_per_token() -> None:
@@ -232,7 +234,7 @@ def test_run_audit_no_oauth_flag_forces_per_token() -> None:
 
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=True):
         report = run_audit(
-            judge="gpt-5.5",
+            judge="gpt-5.6-sol",
             auditor="claude-sonnet-4-6",
             target="claude-opus-4-7",
             seeds=1,
@@ -241,7 +243,7 @@ def test_run_audit_no_oauth_flag_forces_per_token() -> None:
             use_oauth=False,
         )
     joined = " ".join(report.command)
-    assert "judge=openai/gpt-5.5" in joined
+    assert "judge=openai-platform/gpt-5.6-sol" in joined
     assert "openai-codex" not in joined
 
 
@@ -252,7 +254,7 @@ def test_run_audit_falls_back_when_no_token(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("OPENAI_API_KEY", "test-only-api-key")
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=False):
         report = run_audit(
-            judge="gpt-5.5",
+            judge="gpt-5.6-sol",
             auditor="claude-sonnet-4-6",
             target="claude-opus-4-7",
             seeds=1,
@@ -260,17 +262,17 @@ def test_run_audit_falls_back_when_no_token(monkeypatch: pytest.MonkeyPatch) -> 
             dry_run=True,
         )
     joined = " ".join(report.command)
-    assert "judge=openai/gpt-5.5" in joined
+    assert "judge=openai-platform/gpt-5.6-sol" in joined
     assert "openai-codex" not in joined
 
 
 def test_run_audit_user_pinned_raw_openai_not_rewritten() -> None:
-    """User pinned ``openai/gpt-5.5`` → no rewrite (raw passthrough)."""
+    """User pinned ``openai/gpt-5.6-sol`` → no rewrite (raw passthrough)."""
     from evals.petri.runner import run_audit
 
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=True):
         report = run_audit(
-            judge="openai/gpt-5.5",
+            judge="openai/gpt-5.6-sol",
             auditor="claude-sonnet-4-6",
             target="claude-opus-4-7",
             seeds=1,
@@ -278,7 +280,7 @@ def test_run_audit_user_pinned_raw_openai_not_rewritten() -> None:
             dry_run=True,
         )
     joined = " ".join(report.command)
-    assert "judge=openai/gpt-5.5" in joined
+    assert "judge=openai/gpt-5.6-sol" in joined
     assert "openai-codex" not in joined
 
 
@@ -329,10 +331,10 @@ def test_openai_codex_init_raises_without_token() -> None:
         # runs under our patch.
         from inspect_ai.model._model import _models
 
-        _models.pop("openai-codex/gpt-5.5::None::None", None)
+        _models.pop("openai-codex/gpt-5.6-sol::None::None", None)
 
         with pytest.raises(Exception) as exc_info:
-            get_model("openai-codex/gpt-5.5", memoize=False)
+            get_model("openai-codex/gpt-5.6-sol", memoize=False)
         # Error string mentions either the prerequisite or auth.
         msg = str(exc_info.value).lower()
         assert "codex" in msg or "auth" in msg or "prerequisite" in msg or "openai" in msg
@@ -360,7 +362,7 @@ def test_openai_codex_constructor_sets_codex_headers() -> None:
 
     _models.clear()
     with patch("core.llm.providers.codex.resolve_codex_token", return_value=fake_token):
-        model = get_model("openai-codex/gpt-5.5", memoize=False)
+        model = get_model("openai-codex/gpt-5.6-sol", memoize=False)
     api = model.api  # OpenAICodexAPI instance
     assert api._codex_token == fake_token
     assert api._codex_headers["originator"] == "codex_cli_rs"
@@ -423,7 +425,7 @@ def test_count_tokens_uses_tiktoken_not_responses_api() -> None:
 
     _models.clear()
     with patch("core.llm.providers.codex.resolve_codex_token", return_value=fake_token):
-        model = get_model("openai-codex/gpt-5.5", memoize=False)
+        model = get_model("openai-codex/gpt-5.6-sol", memoize=False)
 
     # tiktoken local count — must NOT make a network call to the
     # responses endpoint. "hello world" → handful of tokens.

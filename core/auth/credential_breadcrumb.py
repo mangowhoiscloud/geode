@@ -34,8 +34,9 @@ _NEXT_ACTION: dict[ProfileRejectReason, str] = {
         "(or `codex login` then `/login refresh` for an imported Codex credential)"
     ),
     ProfileRejectReason.COOLING_DOWN: (
-        "rate-limited or upstream rejected — wait until cooldown clears, "
-        "or call manage_login(subcommand='use', args='<other-plan>') to switch"
+        "rate-limited or upstream rejected — wait until cooldown clears, or prefer "
+        "another plan of this same provider with "
+        "manage_login(subcommand='use', args='<plan-id>')"
     ),
     ProfileRejectReason.MISSING_KEY: (
         "no API key registered — ask the user to run `/login add` in their terminal; "
@@ -113,8 +114,9 @@ def format(
             lines.append(
                 "  cross-provider: "
                 + alt
-                + " — switch with manage_login(subcommand='use', args='<plan-id>') "
-                "or have the user run /model <slug>."
+                + " — manage_login 'use' only reorders plans within one provider; "
+                "to change provider, ask the user to run /model <model> or, once "
+                "the user asks for the switch, call switch_model(model_hint='<model>')."
             )
 
     return "\n".join(lines)

@@ -20,11 +20,12 @@
 # Defaults reflect ADR-003's settled-decision table (Plan §13). Override
 # via ~/.geode/seed-generation.toml is wired in S5.5 (picker).
 #
-# Supported model lineup. Anthropic models use the API adapter; OpenAI models
-# may use PAYG or the Codex subscription adapter. Anthropic surface: claude-opus-4-8 /
-# claude-opus-4-7 / claude-sonnet-4-6 / claude-haiku-4-5. Codex surface:
-# gpt-6-astra / gpt-5.6 / gpt-5.5 / gpt-5.4 /
-# gpt-5.4-mini / gpt-5.3-codex (see core/llm/model_pricing.toml).
+# Model lineup. A role with ``current_models = true`` admits every current
+# Anthropic/OpenAI offering from core/llm/model_catalog.py::MODEL_OFFERINGS;
+# ``allowed_models`` below lists
+# only extra historical or alias ids. ``default_model`` values stay pinned for
+# reproducible runs. Anthropic uses the API adapter; OpenAI may use PAYG or the
+# Codex subscription, and source-specific retirement is checked at binding.
 
 [seed_generation]
 # Sorted alphabetically for stable diffs + dedup auditability.
@@ -56,19 +57,9 @@ enabled_roles = [
 # ── Roles ────────────────────────────────────────────────────────────────────
 
 [seed_generation.role.generator]
+current_models = true
 default_model = "claude-opus-4-8"
-allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4",
-]
+allowed_models = []
 role_contract = "agents/generator.md"
 # CSP-13 (2026-05-23) — Loop 2 (debate-turn) of the 3-loop port. 0 =
 # off (single-shot, back-compat default). 2-6 = N-turn debate inside
@@ -79,24 +70,16 @@ role_contract = "agents/generator.md"
 num_turns = 0
 
 [seed_generation.role.critic]
+current_models = true
 default_model = "claude-opus-4-8"
 # ``claude-opus-4-7`` remains accepted for API-backed runs.
 allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
     "claude-haiku-4-5",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4-mini",
 ]
 role_contract = "agents/critic.md"
 
 [seed_generation.role.proximity]
+current_models = true
 # CSP-8 (2026-05-22) — Proximity reverted to LLM-clustering pattern
 # (paper §3). Pre-CSP-8 was an embedding call to text-embedding-3-small;
 # now an LLM completion call like every other role. CSP-10 dropped the
@@ -105,21 +88,12 @@ default_model = "claude-opus-4-8"
 # ``claude-opus-4-7`` remains accepted for API-backed runs; proximity is
 # also a reasoning-heavy role.
 allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
     "claude-haiku-4-5",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4-mini",
 ]
 role_contract = "agents/proximity.md"
 
 [seed_generation.role.pilot]
+current_models = true
 # PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04) — the Pilot runs the Petri audit
 # directly (``evals.petri.runner.run_audit`` +
 # ``core.audit.dim_extractor.extract_dim_aggregates``); it spawns NO LLM
@@ -129,59 +103,27 @@ role_contract = "agents/proximity.md"
 # for picker-provenance symmetry with the other roles.
 default_model = "claude-opus-4-8"
 allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
     "claude-haiku-4-5",
-    "gpt-5.4-mini",
-    "gpt-5.3-codex",
 ]
 
 [seed_generation.role.ranker]
+current_models = true
 # 3-judge panel orchestrator. Its own default_model is a placeholder —
 # the panel's voter binding (below) drives actual LLM calls.
 default_model = "claude-opus-4-8"
-allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-]
+allowed_models = []
 role_contract = "agents/ranker.md"
 
 [seed_generation.role.evolver]
+current_models = true
 default_model = "claude-opus-4-8"
-allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-]
+allowed_models = []
 role_contract = "agents/evolver.md"
 
 [seed_generation.role.meta_reviewer]
+current_models = true
 default_model = "claude-opus-4-8"
-allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-]
+allowed_models = []
 role_contract = "agents/meta_reviewer.md"
 
 # PR-SUPERVISOR-ENABLE (2026-05-26) — supervisor role spec section.
@@ -192,18 +134,9 @@ role_contract = "agents/meta_reviewer.md"
 # value of every downstream call). Allowed list mirrors meta_reviewer
 # (same single-shot, run-level analyst pattern).
 [seed_generation.role.supervisor]
+current_models = true
 default_model = "claude-opus-4-8"
-allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-]
+allowed_models = []
 role_contract = "agents/supervisor.md"
 
 # CSP-14 (2026-05-23) — Loop 3 (literature paper-analysis) role of the
@@ -214,19 +147,9 @@ role_contract = "agents/supervisor.md"
 # in ``~/.geode/config.toml`` to opt into the external arxiv fetch +
 # git-tracked snapshot loop.
 [seed_generation.role.literature_review]
+current_models = true
 default_model = "claude-opus-4-8"
-allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4",
-]
+allowed_models = []
 role_contract = "agents/literature_review.md"
 max_papers = 0
 queries_per_run = 3

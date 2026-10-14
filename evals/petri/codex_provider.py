@@ -82,8 +82,13 @@ def register() -> None:
     from inspect_ai.model import modelapi
     from inspect_ai.model._providers.openai import OpenAIAPI as _StockOpenAIAPI
 
+    from evals.petri.adapters.http_openai import (
+        CatalogOpenAIFamily,
+        admit_openai_reasoning_effort,
+    )
+
     @modelapi(name="openai-codex")
-    class OpenAICodexAPI(_StockOpenAIAPI):  # type: ignore[misc, unused-ignore]
+    class OpenAICodexAPI(CatalogOpenAIFamily, _StockOpenAIAPI):  # type: ignore[misc, unused-ignore]
         """OAuth-routed variant of inspect_ai's stock ``OpenAIAPI``.
 
         Subclass invariants:
@@ -101,7 +106,15 @@ def register() -> None:
         - ``generate()`` is overridden to use streaming, strip
           ``max_output_tokens``, move system into ``instructions=``,
           and apply the codex-rs output-item accumulator workaround.
+        - Model family and effort admission come from GEODE's verified
+          ``OpenAIModelSpec`` (:class:`CatalogOpenAIFamily`), not
+          inspect_ai's name heuristic.
         """
+
+        def _geode_official_endpoint(self) -> bool:
+            from core.config import CODEX_BASE_URL
+
+            return self.base_url == CODEX_BASE_URL  # an explicit override is not Codex
 
         def __init__(self, *args: _Any, **kwargs: _Any) -> None:
             from core.config import CODEX_BASE_URL
@@ -195,6 +208,7 @@ def register() -> None:
             tool_choice: _Any,
             config: _Any,
         ) -> _Any:
+            admit_openai_reasoning_effort(self, config.reasoning_effort)
             from inspect_ai.log._samples import set_active_model_event_call
             from inspect_ai.model._generate_config import has_image_output
             from inspect_ai.model._model_call import as_error_response

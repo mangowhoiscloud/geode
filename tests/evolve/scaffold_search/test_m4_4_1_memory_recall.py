@@ -300,8 +300,6 @@ def test_orchestrator_prepends_memory_block(
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,
                 max_entries=3,
-                rank_by="recency",
-                injection_point="system_prompt",
             )
         },
     )
@@ -340,8 +338,6 @@ def test_orchestrator_no_op_when_recall_dir_missing(
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,
                 max_entries=3,
-                rank_by="recency",
-                injection_point="system_prompt",
             )
         },
     )

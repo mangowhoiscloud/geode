@@ -110,6 +110,8 @@ geode-evolve = "evolve.cli:app"
 geode_audit = "evals.petri"
 geode = "evals.petri"
 openai-codex = "evals.petri"
+openai-platform = "evals.petri"
+anthropic-platform = "evals.petri"
 
 [project.optional-dependencies]
 # Compatibility extra retained for existing ``geode-agent[mcp]`` installs.

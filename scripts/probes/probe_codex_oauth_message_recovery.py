@@ -35,7 +35,7 @@ async def main() -> None:
     print("[probe] simplest call: minimal prompt, no schema, no reasoning")
     t0 = time.time()
     async with client.responses.stream(
-        model="gpt-5.5",
+        model="gpt-6-sol",  # gpt-5.5 left Codex on 2026-10-14
         instructions="You are a helpful assistant.",
         input=[{"role": "user", "content": "Say 'hello world' and nothing else."}],
         store=False,
