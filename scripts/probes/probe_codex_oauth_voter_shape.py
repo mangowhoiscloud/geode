@@ -108,7 +108,7 @@ async def run_probe() -> None:
         sys.exit(1)
 
     req = AdapterCallRequest(
-        model="gpt-5.5",
+        model="gpt-6-sol",  # gpt-5.5 left Codex on 2026-10-14
         messages=(Message(role="user", content=HANDOFF_CONTEXT + "\n\n" + VOTER_INSTRUCTION),),
         system_prompt="You judge seed-candidate matches for the seed-generation Elo tournament.",
         effort=effort,

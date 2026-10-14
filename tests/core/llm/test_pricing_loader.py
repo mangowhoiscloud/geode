@@ -252,6 +252,48 @@ def test_current_model_tariffs_are_provider_specific() -> None:
     assert prices["gpt-5.6-sol"].output == pytest.approx(20e-6)
     assert prices["glm-5.3-flashx"].cache_read == pytest.approx(0.075e-6)
     assert prices["glm-5.3"].cache_inclusive_input
+    sonnet = prices["claude-sonnet-5-5"]
+    assert (sonnet.input, sonnet.output, sonnet.cache_read) == pytest.approx((2e-6, 10e-6, 0.10e-6))
+    assert (sonnet.cache_write, sonnet.cache_write_1h) == pytest.approx((2.5e-6, 4e-6))
+    assert sonnet.long_context_threshold is None  # full 1M window at standard rates
+
+
+@pytest.mark.parametrize(
+    ("uncached", "read", "write", "expected"),
+    [
+        # Exactly 100,000 prompt tokens (input + cache read + cache write): standard.
+        (60_000, 40_000, 0, 60_000 * 0.10e-6 + 40_000 * 0.01e-6 + 1_000 * 0.50e-6),
+        (0, 100_000, 0, 100_000 * 0.01e-6 + 1_000 * 0.50e-6),
+        # One more prompt token moves the whole request to the higher tariff.
+        (1, 100_000, 0, 1 * 0.50e-6 + 100_000 * 0.05e-6 + 1_000 * 2.50e-6),
+        # Over the threshold, every category on the request uses the higher tariff,
+        # including the cache hit and the 1-hour subset of writes.
+        (
+            50_000,
+            40_000,
+            20_000,
+            50_000 * 0.50e-6
+            + 40_000 * 0.05e-6
+            + 10_000 * 0.625e-6
+            + 10_000 * 1.0e-6
+            + 1_000 * 2.50e-6,
+        ),
+    ],
+)
+def test_haiku_55_prompt_length_tariff(
+    uncached: int, read: int, write: int, expected: float
+) -> None:
+    from core.llm.token_tracker import TokenTracker
+
+    cost = TokenTracker().calculate_cost(
+        "claude-haiku-5-5",
+        uncached,
+        1_000,
+        cache_creation_tokens=write,
+        cache_creation_1h_tokens=write // 2,
+        cache_read_tokens=read,
+    )
+    assert cost == pytest.approx(expected)
 
 
 @pytest.mark.parametrize("value", ["0", "-5", "true", "1.5"])

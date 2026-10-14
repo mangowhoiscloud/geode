@@ -522,8 +522,8 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter, GLM 
 
 | 프로바이더 | 기본 모델 | 라우팅 규칙 | 인증 레인 |
 | --- | --- | --- | --- |
-| Anthropic | `claude-opus-5-5` (보조 `claude-sonnet-5`, 저비용 `claude-haiku-4-5-20251001`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
-| OpenAI / Codex | `gpt-6-sol` | `gpt-`, `o3-`, `o4-` 접두사. `-codex` 접미사는 기존 provider 별칭으로 해석하며, 실제 API 키 또는 구독 경로는 선택한 자격 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다. | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
+| Anthropic | `claude-opus-5-5` (보조 `claude-sonnet-5-5`, 저비용 `claude-haiku-5-5`) | `claude-` 접두사 | `ANTHROPIC_API_KEY` |
+| OpenAI / Codex | `gpt-6-sol` (`gpt-6.1-sol` 선택 가능, 구독은 계정별 순차 제공) | `gpt-`, `o3-`, `o4-` 접두사. `-codex` 접미사는 기존 provider 별칭으로 해석하며, 실제 API 키 또는 구독 경로는 선택한 자격 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다. | ChatGPT 구독 OAuth(`~/.codex/auth.json`) 또는 `OPENAI_API_KEY` |
 | OpenRouter | `routing.toml` 기본값 없음. `openrouter/openrouter/free`, `openrouter/openrouter/auto` 또는 정확한 catalogue id를 직접 고릅니다. | `openrouter/<publisher>/<model>`. 외부 namespace 하나를 제거해 OpenRouter에 전달 | `OPENROUTER_API_KEY`. 크레딧 기반 PAYG이며 direct provider와 동치 폴백하지 않습니다. |
 | GLM (ZhipuAI) | `glm-5.3` (무료 티어 `glm-4.7-flash`) | `glm-` 접두사 | `ZAI_API_KEY`. PAYG API 경로입니다. 현재 Coding Plan 정책에서 GEODE 사용 자격은 확인되지 않아 구독 실행을 차단합니다. |
 
@@ -531,13 +531,13 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter, GLM 
 
 OpenRouter는 OpenAI의 별칭이 아니라 별도 inference router입니다. `/login add`로 키를 등록하고 `/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조를 선택합니다. 응답의 `usage.cost`가 예산·사용량 기록의 권위이고, 반환 모델·선택 provider·routing attempt는 bounded LLM-call event에 남습니다. `free`/`auto`는 동적 경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
 
-활성 모델과 별칭, 문맥·출력 한도, API 요율은 [2026-09-24 공급자 조사](https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md)에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.
+활성 모델과 별칭, 문맥·출력 한도, API 요율은 [2026-09-24 공급자 조사](https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md)와 [2026-10-14 갱신](https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20261014.md)에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.
 
 ## 소스별 모델 지원 종료
 
-2026-09-24 확인: Codex의 ChatGPT 로그인 경로에서`gpt-5.2`·`gpt-5.3-codex`는 폐기되었고,`gpt-5.4`·`gpt-5.4-mini`는 8월 31일 지원이 끝났습니다. 이 경로의 선택·요청은 차단하지만 유효한 API 사용과 과거 요금·평가 기록은 보존합니다. `gpt-5.5`의 구독 퇴역 예정일은 10월 14일입니다. 신규 구독 선택지에서는 빼되 기존 명시적 설정을 이미 퇴역한 것으로 처리하지 않습니다. 근거는 [공식 Codex 모델 안내](https://learn.chatgpt.com/docs/models#deprecated-codex-models)입니다.
+2026-10-14 확인: Codex의 ChatGPT 로그인 경로에서`gpt-5.5`는 10월 14일, `gpt-5.3-codex-spark`는 9월 14일, `gpt-5.4`·`gpt-5.4-mini`는 8월 31일 지원이 끝났고 `gpt-5.2`·`gpt-5.3-codex`는 폐기되었습니다. 이 경로의 선택·요청은 자격 증명 확인과 네트워크 요청 전에 차단하고 대체 모델(`gpt-5.5`는 `gpt-6-sol`, Free·Go 요금제는 `gpt-6-luna`)을 안내하지만 저장된 선택을 바꾸지 않습니다. 유효한 API 사용과 과거 요금·평가 기록은 보존합니다. API에서 폐기 예정인 `gpt-5.3-codex`·`gpt-5.4-nano`(2027-04-01 종료, [공식 API 폐기 안내](https://developers.openai.com/api/docs/deprecations))는 종료일을 표시한 채 선택할 수 있습니다. 근거는 [공식 Codex 모델 안내](https://learn.chatgpt.com/docs/models#deprecated-codex-models)입니다.
 
-Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상 모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에 일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. [공식 모델 수명주기](https://platform.claude.com/docs/en/about-claude/model-deprecations)를 2026-09-24에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
+Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와 이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상 모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에 일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. Sonnet 4.5는 폐기 예정(2026-11-30 종료)이라 종료일을 표시한 채 선택할 수 있습니다. [공식 모델 수명주기](https://platform.claude.com/docs/en/about-claude/model-deprecations)를 2026-10-14에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
 
 ## 키와 설정이 사는 곳
 
@@ -6151,7 +6151,7 @@ TypeSafe는 `TYPESAFE_API_KEY` 환경 입력을 사용합니다. OpenRouter는 `
 | `[model.defaults]` | `anthropic`, `anthropic_secondary`, `anthropic_budget`, `openai`, `codex`, `glm` | 프로바이더별 기본 모델 id. `core.config.ANTHROPIC_PRIMARY` 등으로 export됩니다. |
 | `[model.fallbacks]` | 프로바이더별 리스트 4개 | 기본은 전부 빈 리스트입니다. 같은 프로바이더 묵시적 폴백 체인은 출하되지 않고, 기본 모델 실패는 예외를 던지며 사용자가 `/model`로 고릅니다. 폴백은 `~/.geode/routing.toml`에서 옵트인합니다. |
 | `[routing.prefixes]` | 모델 id 접두사 | 모델 id 접두사를 프로바이더로 매핑합니다. 첫 매치가 이깁니다. 매치되는 접두사가 없는 계열(gemini-, deepseek-, llama-, qwen- 등)은 모델당 한 번 경고를 남기고 `fallback_provider`(OpenAI 호환 엔드포인트)로 흘러갑니다. 해당 id를 서빙하는 OpenAI 호환 프록시에는 정상 경로입니다. |
-| `[routing]` | `codex_only_models`, `codex_suffixes`, `fallback_provider` | Codex 전용 모델 목록은 현재 비어 있습니다. `gpt-5.5`/`gpt-5.5-pro`도 선택한 API-key 또는 구독 source를 따릅니다. `-codex`/`-codex-max`/`-codex-mini` 접미사는 `openai-codex`로 라우팅하고, 미해석 ID는 `openai`로 분류합니다. 모델 퇴역은 provider 분류와 별도로 실제 source에 적용합니다. |
+| `[routing]` | `codex_only_models`, `codex_suffixes`, `fallback_provider` | Codex 전용 모델 목록은 현재 비어 있습니다. `gpt-6.1-sol`처럼 두 경로에 모두 있는 모델은 선택한 API-key 또는 구독 source를 따르며, 소스별 퇴역(예: 10월 14일 구독에서 빠진 `gpt-5.5`)은 그 source에서만 거절됩니다. `-codex`/`-codex-max`/`-codex-mini` 접미사는 `openai-codex`로 라우팅하고, 미해석 ID는 `openai`로 분류합니다. 모델 퇴역은 provider 분류와 별도로 실제 source에 적용합니다. |
 | `[nodes]` | `analyst`, `evaluator`, `scoring`, `synthesizer` | 파이프라인 노드 모델. 출하 매니페스트가 네 노드 모두 Anthropic 기본 모델로 고정하므로 노드가 REPL 모델을 상속하지 않습니다. 조회 순서는 프로젝트 `.geode/routing.toml`, 매니페스트, 없으면 `settings.model`. |
 | `[credentials.patterns]` | API 키 정규식 | 키 모양에서 프로바이더를 추정합니다. 첫 매치가 이깁니다. GLM 키({id}.{secret} 모양)는 `core.config.env_io.is_glm_key`가 감지합니다. |
 | `[credentials.env_vars]` | 프로바이더 이름 | 프로바이더별 API 키 환경 변수 이름. |
@@ -7489,11 +7489,11 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 600 |
-| 테스트 Python 파일 | 768 |
+| 테스트 Python 파일 | 770 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 84 / 84 / 84 / 84 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |
-| 프로덕션 ContextVar | 25 |
+| 프로덕션 ContextVar | 26 |
 | core → outer import 지점 / 파일 | 0 / 0 |
 | import-linter 예외 edge | 0 |
 

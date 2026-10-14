@@ -422,7 +422,7 @@ def test_saved_explicit_api_key_reaches_binding_with_fallback_disabled(
     binding = get_binding("judge")
     assert cs.self_improving_loop_fallback_policy() is False
     assert binding.source == "api_key"
-    assert binding.inspect_id == "openai/gpt-5.5"
+    assert binding.inspect_id == "openai-platform/gpt-5.5"
 
 
 def test_read_role_override_falls_through_on_import_error(

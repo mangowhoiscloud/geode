@@ -38,10 +38,10 @@ def _isolate_voter_overrides(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_voter_spec_accepts_optional_effort() -> None:
     """``VoterSpec`` exposes ``effort`` with empty-string default
     (back-compat — pre-fix TOML rows without ``effort`` still load)."""
-    v = VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex")
+    v = VoterSpec(model="gpt-5.6-sol", provider="openai", source="openai-codex")
     assert v.effort == ""
 
-    v2 = VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex", effort="low")
+    v2 = VoterSpec(model="gpt-5.6-sol", provider="openai", source="openai-codex", effort="low")
     assert v2.effort == "low"
 
 
@@ -59,7 +59,7 @@ def _minimal_manifest(voter_effort: str = "") -> SeedGenerationManifest:
     """Manifest with 2 voters where the first carries the override
     effort and the second uses default empty."""
     voter_first = VoterSpec(
-        model="gpt-5.5", provider="openai", source="openai-codex", effort=voter_effort
+        model="gpt-5.6-sol", provider="openai", source="openai-codex", effort=voter_effort
     )
     voter_second = VoterSpec(model="claude-opus-4-7", provider="anthropic", source="api_key")
     return SeedGenerationManifest(
@@ -90,14 +90,17 @@ def test_picker_propagates_voter_effort_into_binding() -> None:
 
 
 def test_ranker_voter_subtask_uses_voter_effort_when_set() -> None:
-    """When ``VoterBinding.effort`` is non-empty, the ranker's
-    SubTask carries that effort; when empty, falls back to Sprint G
-    default ``"none"``."""
+    """A non-empty ``VoterBinding.effort`` is kept; an empty one resolves
+    from the model contract (``none`` where accepted, else the catalog default)."""
     from evals.seed_generation.agents.ranker import Ranker
 
     voters = [
-        VoterBinding(model="gpt-5.5", provider="openai", source="openai-codex", effort="low"),
+        VoterBinding(model="gpt-5.6-sol", provider="openai", source="openai-codex", effort="low"),
         VoterBinding(model="claude-opus-4-7", provider="anthropic", source="api_key"),
+        VoterBinding(model="gpt-5.5", provider="openai", source="api_key"),
+        VoterBinding(model="gpt-6.1-sol", provider="openai", source="openai-codex"),
+        VoterBinding(model="gpt-6-astra", provider="openai", source="api_key"),
+        VoterBinding(model="custom-gateway-model", provider="openai", source="api_key"),
     ]
     ranker = Ranker(manager=MagicMock(), voters=voters)
     match = MatchPlan(match_id="m000", a="c_a", b="c_b")
@@ -106,16 +109,14 @@ def test_ranker_voter_subtask_uses_voter_effort_when_set() -> None:
         pilot_means={},
         candidate_bodies={"c_a": "body-a", "c_b": "body-b"},
     )
-    # 2 voters × 1 match = 2 tasks
-    assert len(tasks) == 2
+    assert len(tasks) == len(voters)
     # First voter override → effort="low"
     assert tasks[0].effort == "low", (
         f"voter.effort='low' override must flow to SubTask.effort; got {tasks[0].effort!r}"
     )
-    # Second voter empty → Sprint G default "none"
-    assert tasks[1].effort == "none", (
-        f"empty voter.effort must fall back to 'none'; got {tasks[1].effort!r}"
-    )
+    # Claude, GPT-6.1 Sol and Astra reject ``none``: their catalog default is used.
+    # gpt-5.5 keeps the historical ``none``; an unknown model keeps the worker default.
+    assert [task.effort for task in tasks[1:]] == ["high", "none", "medium", "medium", ""]
 
 
 def test_voter_spec_invalid_source_still_rejected_after_effort_addition() -> None:
@@ -129,14 +130,14 @@ def test_voter_spec_rejects_invalid_effort_value() -> None:
     """Codex MCP catch — operator typo (e.g. ``"loww"``) must fail at
     manifest load, not silently flow to the server."""
     with pytest.raises(ValueError, match="reasoning_effort"):
-        VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex", effort="loww")
+        VoterSpec(model="gpt-5.6-sol", provider="openai", source="openai-codex", effort="loww")
 
 
 def test_voter_spec_accepts_all_documented_effort_values() -> None:
     """Every value in the OpenAI Responses API documented enum + empty
     sentinel must pass the validator."""
-    for effort in ("", "none", "minimal", "low", "medium", "high", "xhigh"):
-        v = VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex", effort=effort)
+    for effort in ("", "none", "minimal", "low", "medium", "high", "xhigh", "max"):
+        v = VoterSpec(model="gpt-5.6-sol", provider="openai", source="openai-codex", effort=effort)
         assert v.effort == effort
 
 

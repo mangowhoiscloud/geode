@@ -126,12 +126,12 @@ def init(
             "# Uncomment to override default model per pipeline node.\n\n"
             "[nodes]\n"
             '# analyst = "claude-opus-5-5"\n'
-            '# evaluator = "claude-sonnet-5"\n'
-            '# scoring = "claude-haiku-4-5-20251001"\n'
+            '# evaluator = "claude-sonnet-5-5"\n'
+            '# scoring = "claude-haiku-5-5"\n'
             '# synthesizer = "claude-opus-5-5"\n\n'
             "[agentic]\n"
             '# default = "claude-opus-5-5"\n'
-            '# sub_agent = "claude-sonnet-5"\n',
+            '# sub_agent = "claude-sonnet-5-5"\n',
             encoding="utf-8",
         )
         console.print("  Created .geode/routing.toml (template)")
@@ -147,10 +147,10 @@ def init(
             "# If only denylist is set, listed models are blocked.\n\n"
             "[policy]\n"
             "# allowlist = "
-            '["claude-opus-5-5", "claude-sonnet-5", "gpt-6-sol"]\n'
+            '["claude-opus-5-5", "claude-sonnet-5-5", "gpt-6.1-sol"]\n'
             "# denylist = "
             '["claude-haiku-4-5-20251001"]\n'
-            '# default_model = "claude-sonnet-5"\n',
+            '# default_model = "claude-sonnet-5-5"\n',
             encoding="utf-8",
         )
         console.print("  Created .geode/model-policy.toml (template)")

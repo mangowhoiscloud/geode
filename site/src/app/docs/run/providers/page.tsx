@@ -34,13 +34,13 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td>Anthropic</td>
-                  <td><code>claude-opus-5-5</code> (보조 <code>claude-sonnet-5</code>, 저비용 <code>claude-haiku-4-5-20251001</code>)</td>
+                  <td><code>claude-opus-5-5</code> (보조 <code>claude-sonnet-5-5</code>, 저비용 <code>claude-haiku-5-5</code>)</td>
                   <td><code>claude-</code> 접두사</td>
                   <td><code>ANTHROPIC_API_KEY</code></td>
                 </tr>
                 <tr>
                   <td>OpenAI / Codex</td>
-                  <td><code>gpt-6-sol</code></td>
+                  <td><code>gpt-6-sol</code> (<code>gpt-6.1-sol</code> 선택 가능, 구독은 계정별 순차 제공)</td>
                   <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> 접두사. <code>-codex</code> 접미사는 기존 provider 별칭으로 해석하며, 실제 API 키 또는 구독 경로는 선택한 자격 소스를 따릅니다. 모델별 지원·퇴역은 소스마다 다르고, 카탈로그 등록은 계정 접근 증거가 아닙니다.</td>
                   <td>ChatGPT 구독 OAuth(<code>~/.codex/auth.json</code>) 또는 <code>OPENAI_API_KEY</code></td>
                 </tr>
@@ -73,24 +73,29 @@ export default function Page() {
               경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
             </p>
 
-            <p>활성 모델과 별칭, 문맥·출력 한도, API 요율은 <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 공급자 조사</a>에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.</p>
+            <p>활성 모델과 별칭, 문맥·출력 한도, API 요율은 <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 공급자 조사</a>와 <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20261014.md">2026-10-14 갱신</a>에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.</p>
 
             <h2>소스별 모델 지원 종료</h2>
             <p>
-              2026-09-24 확인: Codex의 ChatGPT 로그인 경로에서
-              <code>gpt-5.2</code>·<code>gpt-5.3-codex</code>는 폐기되었고,
-              <code>gpt-5.4</code>·<code>gpt-5.4-mini</code>는 8월 31일 지원이
-              끝났습니다. 이 경로의 선택·요청은 차단하지만 유효한 API 사용과
-              과거 요금·평가 기록은 보존합니다. <code>gpt-5.5</code>의 구독
-              퇴역 예정일은 10월 14일입니다. 신규 구독 선택지에서는 빼되 기존 명시적 설정을 이미 퇴역한 것으로 처리하지 않습니다.
+              2026-10-14 확인: Codex의 ChatGPT 로그인 경로에서
+              <code>gpt-5.5</code>는 10월 14일, <code>gpt-5.3-codex-spark</code>는
+              9월 14일, <code>gpt-5.4</code>·<code>gpt-5.4-mini</code>는 8월 31일
+              지원이 끝났고 <code>gpt-5.2</code>·<code>gpt-5.3-codex</code>는
+              폐기되었습니다. 이 경로의 선택·요청은 자격 증명 확인과 네트워크
+              요청 전에 차단하고 대체 모델(<code>gpt-5.5</code>는 <code>gpt-6-sol</code>,
+              Free·Go 요금제는 <code>gpt-6-luna</code>)을 안내하지만 저장된 선택을 바꾸지
+              않습니다. 유효한 API 사용과 과거 요금·평가 기록은 보존합니다.
+              API에서 폐기 예정인 <code>gpt-5.3-codex</code>·<code>gpt-5.4-nano</code>
+              (2027-04-01 종료, <a href="https://developers.openai.com/api/docs/deprecations">공식 API 폐기 안내</a>)는 종료일을 표시한 채 선택할 수 있습니다.
               근거는 <a href="https://learn.chatgpt.com/docs/models#deprecated-codex-models">공식 Codex 모델 안내</a>입니다.
             </p>
             <p>
               Anthropic 공식 API에서도 지원이 끝난 Opus 4.1·Opus 4·Sonnet 4와
               이전 세대를 네트워크 요청 전에 거절합니다. 현재 지원되는 4.5 이상
               모델은 유지하며, 이 퇴역 일정을 OpenRouter 등 다른 운영사의 경로에
-              일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. <a href="https://platform.claude.com/docs/en/about-claude/model-deprecations">공식 모델 수명주기</a>를
-              2026-09-24에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
+              일괄 적용하지 않으며 실제 클라이언트의 endpoint를 확인합니다. Sonnet 4.5는
+              폐기 예정(2026-11-30 종료)이라 종료일을 표시한 채 선택할 수 있습니다. <a href="https://platform.claude.com/docs/en/about-claude/model-deprecations">공식 모델 수명주기</a>를
+              2026-10-14에 확인했으며, 계정별 실제 접근 권한은 별도 검증 대상입니다.
             </p>
             <h2>키와 설정이 사는 곳</h2>
             <p>모델, effort, 로그인 소스 선택이 어느 <code>config.toml</code>에 저장되는지는 <a href="/geode/docs/config/basics">설정 기초</a>에 있습니다.</p>
@@ -262,13 +267,13 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               <tbody>
                 <tr>
                   <td>Anthropic</td>
-                  <td><code>claude-opus-5-5</code> (secondary <code>claude-sonnet-5</code>, budget <code>claude-haiku-4-5-20251001</code>)</td>
+                  <td><code>claude-opus-5-5</code> (secondary <code>claude-sonnet-5-5</code>, budget <code>claude-haiku-5-5</code>)</td>
                   <td><code>claude-</code> prefix</td>
                   <td><code>ANTHROPIC_API_KEY</code></td>
                 </tr>
                 <tr>
                   <td>OpenAI / Codex</td>
-                  <td><code>gpt-6-sol</code></td>
+                  <td><code>gpt-6-sol</code> (<code>gpt-6.1-sol</code> selectable; subscription rollout varies by account)</td>
                   <td><code>gpt-</code>, <code>o3-</code>, <code>o4-</code> prefixes. The <code>-codex</code> suffix retains a legacy provider alias; the actual route follows the selected API-key or subscription source. Support and retirement are source-specific; catalog presence does not establish account access.</td>
                   <td>ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>) or <code>OPENAI_API_KEY</code></td>
                 </tr>
@@ -303,26 +308,32 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               evaluation targets.
             </p>
 
-            <p>See the <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 provider audit</a> for active models, aliases, context/output limits and API tariffs with primary sources. API dollar prices and subscription credits are separate; a catalogue refresh does not establish live account acceptance or billed charges.</p>
+            <p>See the <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 provider audit</a> and the <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20261014.md">2026-10-14 refresh</a> for active models, aliases, context/output limits and API tariffs with primary sources. API dollar prices and subscription credits are separate; a catalogue refresh does not establish live account acceptance or billed charges.</p>
 
             <h2>Source-specific model retirement</h2>
             <p>
-              Checked 2026-09-24: on the ChatGPT-sign-in Codex route,
-              <code>gpt-5.2</code> and <code>gpt-5.3-codex</code> are deprecated;
-              <code>gpt-5.4</code> and <code>gpt-5.4-mini</code> retired on August 31.
-              GEODE blocks selection and requests on that source while retaining
-              valid API routes and historical pricing/evaluation records.
-              <code>gpt-5.5</code> is scheduled to retire on October 14, so it is
-              not retired yet. It is omitted from new subscription choices while existing explicit settings remain readable and executable until that boundary. See the <a href="https://learn.chatgpt.com/docs/models#deprecated-codex-models">official Codex model guidance</a>.
+              Checked 2026-10-14: on the ChatGPT-sign-in Codex route,
+              <code>gpt-5.5</code> retired on October 14,
+              <code>gpt-5.3-codex-spark</code> on September 14, and
+              <code>gpt-5.4</code> and <code>gpt-5.4-mini</code> on August 31;
+              <code>gpt-5.2</code> and <code>gpt-5.3-codex</code> are deprecated.
+              GEODE rejects these selections and requests before credential or
+              network access and names the replacement (<code>gpt-6-sol</code> for
+              <code>gpt-5.5</code>, <code>gpt-6-luna</code> on Free and Go plans)
+              without rewriting the saved choice. Valid API routes and historical
+              pricing/evaluation records remain. API-deprecated
+              <code>gpt-5.3-codex</code> and <code>gpt-5.4-nano</code> (shutdown
+              2027-04-01, per the <a href="https://developers.openai.com/api/docs/deprecations">official API deprecations</a>) stay selectable with their retirement date shown. See the <a href="https://learn.chatgpt.com/docs/models#deprecated-codex-models">official Codex model guidance</a>.
             </p>
             <p>
               The official Anthropic API similarly rejects confirmed retired Opus
               4.1, Opus 4, Sonnet 4, and older families before network submission.
-              Active 4.5+ models remain available. These dates do not govern
+              Active 4.5+ models remain available; deprecated Sonnet 4.5 (retiring
+              2026-11-30) stays selectable with that date shown. These dates do not govern
               independently operated routes such as OpenRouter; admission checks
               the actual client endpoint. The{" "}
               <a href="https://platform.claude.com/docs/en/about-claude/model-deprecations">official model lifecycle</a>{" "}
-              was checked on 2026-09-24; account entitlement still requires its
+              was checked on 2026-10-14; account entitlement still requires its
               own verification.
             </p>
             <h2>Where keys and settings live</h2>

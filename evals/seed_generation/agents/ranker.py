@@ -833,7 +833,7 @@ class Ranker(BaseSeedAgent):
                     # requiring a code redeploy. The adapter validates
                     # the value against the model's
                     # ``reasoning_effort_values`` at request time.
-                    effort=voter.effort or "none",
+                    effort=_voter_effort(voter),
                 )
             )
         return tasks
@@ -1030,3 +1030,19 @@ class Ranker(BaseSeedAgent):
                 state.run_dir,
                 exc,
             )
+
+
+def _voter_effort(voter: VoterBinding) -> str:
+    """An explicit voter effort is kept; otherwise use the model contract.
+
+    The historical ``none`` default stays where the model accepts it (e.g.
+    gpt-5.5); models without ``none`` (GPT-6 Astra, GPT-6.1 Sol, Claude) get
+    their catalog default. An unknown model keeps the worker's own default.
+    """
+    if voter.effort:
+        return voter.effort
+    from core.llm.model_catalog import default_effort, supported_efforts
+
+    if "none" in supported_efforts(voter.model, voter.provider):
+        return "none"
+    return default_effort(voter.model, voter.provider) or ""

@@ -140,6 +140,24 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         supports_tool_search=True,
         supports_explicit_prompt_cache=True,
     ),
+    # GPT-6.1 Sol (checked 2026-10-14). Platform: low..max only, no none/minimal,
+    # tools on Responses only. Codex limits are the local client catalogue
+    # (0.162.0 models_cache: 500K default / 872K max), not account entitlement.
+    # Ultra stays a Codex orchestration mode and is never sent as an effort.
+    # ref: https://developers.openai.com/api/docs/models/gpt-6.1-sol
+    "gpt-6.1-sol": OpenAIModelSpec(
+        model_id="gpt-6.1-sol",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-6.1-sol"),
+        max_input_tokens=922_000,
+        codex_context_window=500_000,
+        codex_max_context_window=872_000,
+        max_output_tokens=128_000,
+        supports_tool_search=True,
+        supports_explicit_prompt_cache=True,
+    ),
     # Public Platform and Codex models, checked 2026-09-24. Account rollout
     # remains separate; Ultra is a Codex execution mode, not an API effort.
     "gpt-6-sol": OpenAIModelSpec(
@@ -332,6 +350,11 @@ _OPENAI_LEGACY_DEFAULT = OpenAIModelSpec(
 # Process-scoped dedup so the warning fires once per unknown model_id,
 # not on every LLM call.
 _UNKNOWN_MODEL_WARNED: set[str] = set()
+
+
+def find_openai_model_spec(model_id: str) -> OpenAIModelSpec | None:
+    """Return a verified spec, or ``None`` for an unknown model (no default)."""
+    return _OPENAI_MODELS.get(model_id)
 
 
 def get_openai_model_spec(model_id: str) -> OpenAIModelSpec:
@@ -732,6 +755,7 @@ def build_codex_input(req: AdapterCallRequest, *, backend: str = "codex") -> lis
 # an acceptance contract. Membership stays ``unverified — live test
 # required``: run the Phase-C Platform round-trip on gpt-5.6-sol before
 # adding it here (same protocol as the 2026-06-17 gpt-5.5 verification).
+# gpt-6.1-sol (2026-10-14) lists computer_use too and stays under the same rule.
 _OPENAI_COMPUTER_USE_GA_MODELS: frozenset[str] = frozenset({"gpt-5.5"})
 
 

@@ -53,6 +53,27 @@ class RoleSpec(BaseModel):
     default_model: str
     allowed_models: list[str]
     role_contract: str | None = None
+    current_models: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _append_current_models(cls, data: Any) -> Any:
+        """Current Anthropic/OpenAI offerings come from the shared catalog.
+
+        Opt-in per role (``current_models = true``, as the bundled manifest
+        does); a custom manifest's ``allowed_models`` keeps its exact meaning.
+        """
+        if isinstance(data, dict) and data.get("current_models") is True:
+            from core.llm.model_catalog import offered_model_ids
+
+            listed = list(data.get("allowed_models", []))
+            data = {
+                **data,
+                "allowed_models": list(
+                    dict.fromkeys([*listed, *offered_model_ids("anthropic", "openai")])
+                ),
+            }
+        return data
 
     @model_validator(mode="after")
     def _default_in_allowed(self) -> RoleSpec:

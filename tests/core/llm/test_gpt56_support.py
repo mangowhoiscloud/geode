@@ -101,6 +101,7 @@ def test_model_picker_platform_openai_surface_is_current_and_ordered() -> None:
     ]
     assert visible == [
         "gpt-6-astra",
+        "gpt-6.1-sol",
         "gpt-6-sol",
         "gpt-6-luna",
         "gpt-5.6-sol",
@@ -112,8 +113,9 @@ def test_model_picker_platform_openai_surface_is_current_and_ordered() -> None:
         "gpt-5.4-mini",
         "gpt-5.4-nano",
     ]
-    # Codex sign-in retirement does not remove documented Platform API models.
-    assert "gpt-5.3-codex" in visible
+    # Codex sign-in retirement does not remove documented Platform API models,
+    # and API-deprecated rows stay selectable until their 2027-04-01 shutdown.
+    assert {"gpt-5.5", "gpt-5.3-codex"} <= set(visible)
 
 
 def test_effort_picker_offers_max() -> None:
@@ -136,12 +138,15 @@ def test_capability_graph_context_window() -> None:
 
 
 def test_plugin_allowlists_include_gpt56() -> None:
-    for rel in (
-        "evals/seed_generation/seed_generation.plugin.toml",
-        "evals/petri/petri.plugin.toml",
-    ):
-        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
-        assert "gpt-5.6-sol" in text, rel
+    from evals.petri.manifest import load_manifest as load_petri
+    from evals.seed_generation.manifest import load_manifest as load_seed
+
+    # Loaded role membership (the catalog-derived allowlists), not TOML text.
+    petri, seed = load_petri(), load_seed()
+    for role in ("auditor", "target", "judge"):
+        assert {"gpt-5.6-sol"} <= set(petri.get_role(role).allowed_models), role
+    for role in seed.roles:
+        assert {"gpt-5.6-sol"} <= set(seed.get_role(role).allowed_models), role
 
 
 def test_unsupported_reasoning_effort_is_not_replaced() -> None:

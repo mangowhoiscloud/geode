@@ -151,8 +151,12 @@ def test_astra_catalogue_route_and_picker() -> None:
 
     assert MODEL_PRICING[MODEL].cache_write == 12.5 / 1_000_000
 
-    for manifest in (
-        REPO_ROOT / "evals" / "petri" / "petri.plugin.toml",
-        REPO_ROOT / "evals" / "seed_generation" / "seed_generation.plugin.toml",
-    ):
-        assert MODEL in manifest.read_text()
+    from evals.petri.manifest import load_manifest as load_petri
+    from evals.seed_generation.manifest import load_manifest as load_seed
+
+    # Loaded role membership (the catalog-derived allowlists), not TOML text.
+    petri, seed = load_petri(), load_seed()
+    for role in ("auditor", "target", "judge"):
+        assert {MODEL} <= set(petri.get_role(role).allowed_models), role
+    for role in seed.roles:
+        assert {MODEL} <= set(seed.get_role(role).allowed_models), role

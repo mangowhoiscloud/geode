@@ -84,8 +84,8 @@ def _make_manifest() -> SeedGenerationManifest:
     judge_panel = JudgePanelSpec(
         voters=[
             VoterSpec(model="claude-opus-4-7", provider="anthropic", source="api_key"),
-            VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex"),
-            VoterSpec(model="gpt-5.5", provider="openai", source="openai-codex"),
+            VoterSpec(model="gpt-5.6-sol", provider="openai", source="openai-codex"),
+            VoterSpec(model="gpt-5.6-sol", provider="openai", source="openai-codex"),
         ],
         required_diversity_providers=2,
     )
@@ -415,7 +415,7 @@ def test_list_subscription_roles() -> None:
     result = PickerResult(
         bindings={
             "generator": RoleBinding(
-                role="generator", model="gpt-5.5", provider="openai", source="openai-codex"
+                role="generator", model="gpt-5.6-sol", provider="openai", source="openai-codex"
             )
         },
         voters=[],
@@ -533,7 +533,7 @@ def test_config_voter_override_wins_over_manifest_default(tmp_path: Path) -> Non
     cfg = tmp_path / "config.toml"
     cfg.write_text(
         "[[seed_generation.judge_panel.voters]]\n"
-        'model = "gpt-5.5"\nprovider = "openai"\nsource = "openai-codex"\n\n'
+        'model = "gpt-5.6-sol"\nprovider = "openai"\nsource = "openai-codex"\n\n'
         "[[seed_generation.judge_panel.voters]]\n"
         'model = "claude-opus-4-8"\nprovider = "anthropic"\nsource = "api_key"\n',
         encoding="utf-8",
