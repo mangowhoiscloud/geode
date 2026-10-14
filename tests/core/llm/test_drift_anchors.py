@@ -92,9 +92,11 @@ class TestModelCapabilityAnchor:
 
     def test_effort_picker_uses_the_model_contract_owner(self) -> None:
         from core.cli import effort_picker
-        from core.llm import model_capabilities as caps
+        from core.llm import model_catalog
 
-        assert effort_picker.get_anthropic_model_spec is caps.get_anthropic_model_spec
+        # The picker re-exports the single effort owner that eval callers use too.
+        assert effort_picker.supported_efforts is model_catalog.supported_efforts
+        assert effort_picker.default_effort is model_catalog.default_effort
 
     def test_picker_surfaces_match_adapter_acceptance(self) -> None:
         """End-to-end invariant the anchor exists to guarantee: the picker

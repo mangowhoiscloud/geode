@@ -144,8 +144,8 @@ def test_anthropic_auditor_judge_default_to_api_key_payg() -> None:
             dry_run=True,
         )
     joined = " ".join(report.command)
-    assert "auditor=anthropic/claude-opus-4-8" in joined
-    assert "judge=anthropic/claude-opus-4-8" in joined
+    assert "auditor=anthropic-platform/claude-opus-4-8" in joined
+    assert "judge=anthropic-platform/claude-opus-4-8" in joined
     assert "claude-cli/" not in joined  # PAYG api_key path, not OAuth
 
 
@@ -159,7 +159,7 @@ def test_explicit_openai_subscription_override_wins_over_payg_default() -> None:
 
     with patch("evals.petri.user_overrides.read_role_override", side_effect=_override):
         report = run_audit(
-            judge="gpt-5.5",
+            judge="gpt-5.6-sol",
             auditor="claude-opus-4-8",
             target="claude-opus-4-7",
             seeds=1,
@@ -167,4 +167,4 @@ def test_explicit_openai_subscription_override_wins_over_payg_default() -> None:
             dry_run=True,
         )
     joined = " ".join(report.command)
-    assert "judge=openai-codex/gpt-5.5" in joined
+    assert "judge=openai-codex/gpt-5.6-sol" in joined

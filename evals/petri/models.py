@@ -137,8 +137,8 @@ def to_inspect_model(
     policy. ``True`` requests OpenAI OAuth; ``False`` explicitly selects the
     API-key route. A concrete ``source`` takes precedence over this flag.
 
-    The current bare-id OAuth heuristic covers only ``gpt-5*`` names. A
-    concrete subscription source pin bypasses that heuristic, not credential
+    Bare-id OAuth coverage is the catalog's current subscription offerings. A
+    concrete subscription source pin bypasses that coverage check, not credential
     resolution. Other names require an explicit source or raw provider/model
     identifier; a mapping limitation is not proof of backend availability.
     """
@@ -150,7 +150,7 @@ def to_inspect_model(
         require_model_source_available(
             geode_id.split("/", 1)[1], provider="openai", source="subscription"
         )
-    elif geode_id.startswith("anthropic/"):
+    elif geode_id.startswith(("anthropic/", "anthropic-platform/")):
         require_model_source_available(
             geode_id.split("/", 1)[1], provider="anthropic", source="payg"
         )
@@ -239,10 +239,20 @@ def to_inspect_model(
 
 
 def _supports_oauth_for_provider(model: str, provider: str) -> bool:
-    """Return this mapper's bare-id OAuth coverage, not backend entitlement."""
-    if provider == "openai":
-        return model.startswith("gpt-5")
-    return False
+    """Bare-id OAuth coverage from the shared catalog, not backend entitlement.
+
+    Current subscription offerings, plus ids with a known subscription
+    lifecycle row so a retired choice still fails loudly on that source instead
+    of moving to PAYG. Other names (aliases, custom ids) need an explicit
+    source or provider/model id.
+    """
+    if provider != "openai":
+        return False
+    from core.llm.model_catalog import model_ids_for_source, model_source_unavailable_reason
+
+    return model in model_ids_for_source("openai", "subscription") or (
+        model_source_unavailable_reason(model, provider="openai", source="subscription") is not None
+    )
 
 
 def _source_from_use_oauth(provider: str, use_oauth: bool | None) -> str | None:

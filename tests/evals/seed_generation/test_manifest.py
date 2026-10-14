@@ -38,6 +38,24 @@ def test_role_default_must_be_in_allowed() -> None:
         )
 
 
+def test_bundled_roles_opt_into_current_catalog_while_custom_lists_stay_exact() -> None:
+    from core.llm.model_catalog import offered_model_ids
+
+    custom = SeedRoleSpec(default_model="claude-opus-4-7", allowed_models=["claude-opus-4-7"])
+    assert custom.allowed_models == ["claude-opus-4-7"]
+    opted = SeedRoleSpec(
+        default_model="claude-opus-4-8", allowed_models=["claude-haiku-4-5"], current_models=True
+    )
+    assert opted.allowed_models[0] == "claude-haiku-4-5"
+    assert set(offered_model_ids("anthropic", "openai")) <= set(opted.allowed_models)
+    assert "glm-5.3" not in opted.allowed_models
+    bundled = load_manifest()
+    for role in ("pilot", "ranker", "generator"):
+        allowed = set(bundled.get_role(role).allowed_models)
+        assert {"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "claude-sonnet-5-5"} <= allowed
+        assert bundled.get_role(role).default_model == "claude-opus-4-8"  # pinned default
+
+
 def test_voter_rejects_auto_source() -> None:
     with pytest.raises(ValueError, match="auto"):
         VoterSpec(model="claude-sonnet-4-6", provider="anthropic", source="auto")

@@ -58,7 +58,7 @@ _VOTE_SCHEMA: dict[str, Any] = {
 def _voter_req(*, schema: dict[str, Any] | None = None) -> AdapterCallRequest:
     """Build a voter-shape AdapterCallRequest (matches ranker.py:285)."""
     return AdapterCallRequest(
-        model="gpt-5.5",
+        model="gpt-6-sol",
         messages=[Message(role="user", content="Judge match A vs B")],
         system_prompt="Role: ranker voter.",
         max_tokens=1024,
@@ -137,7 +137,7 @@ def test_acomplete_empty_response_no_schema_dumps_and_returns_empty(
     # Result is empty (the failure mode caller sees).
     assert result.text == ""
     # Dump fired — operator has forensic evidence.
-    dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
+    dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-6-sol.json"))
     assert len(dumps) == 1, f"expected 1 dump, got {len(dumps)}"
     payload = json.loads(dumps[0].read_text(encoding="utf-8"))
     assert payload["stop_reason"] == "completed"
@@ -167,7 +167,7 @@ def test_acomplete_empty_response_env_fail_fast_still_dumps(
     ):
         asyncio.run(adapter.acomplete(_voter_req(schema=None)))
 
-    dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
+    dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-6-sol.json"))
     assert len(dumps) == 1
     completed = error.value.completed_result
     assert completed is not None
@@ -195,7 +195,7 @@ def test_acomplete_empty_response_can_attest_actionable_partial(
     ):
         asyncio.run(adapter.acomplete(_voter_req(schema=None)))
 
-    dump = next((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
+    dump = next((tmp_path / "codex-oauth-empty-text").glob("*-gpt-6-sol.json"))
     error.value.mark_actionable()
     assert Path(f"{dump}.actionable").is_file()
 
@@ -382,7 +382,7 @@ def test_acomplete_empty_response_with_schema_still_dumps(tmp_path: Path) -> Non
         result = asyncio.run(adapter.acomplete(_voter_req(schema=_VOTE_SCHEMA)))
 
     assert result.text == ""
-    dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
+    dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-6-sol.json"))
     assert len(dumps) == 1
     # text.format WAS sent — proves the fix path is exercised even on
     # this edge-case empty response. A future operator inspecting the

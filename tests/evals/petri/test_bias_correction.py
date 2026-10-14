@@ -155,13 +155,15 @@ def test_format_bias_chip_shape() -> None:
 
 
 def test_run_audit_emits_bias_chip_for_same_provider_dry_run() -> None:
+    from core.config import CODEX_PRIMARY
     from evals.petri.runner import run_audit
 
+    # The configured subscription default: one OpenAI provider across all roles.
     with patch("evals.petri.adapters.openai_codex_oauth.is_available", return_value=True):
         report = run_audit(
-            judge="gpt-5.5",
-            auditor="gpt-5.5",
-            target="gpt-5.5",
+            judge=CODEX_PRIMARY,
+            auditor=CODEX_PRIMARY,
+            target=CODEX_PRIMARY,
             seeds=1,
             max_turns=5,
             use_oauth=True,

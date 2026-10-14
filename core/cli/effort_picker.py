@@ -25,41 +25,9 @@ import re
 import sys
 from dataclasses import dataclass
 
-from core.llm.adapters._openai_common import get_openai_model_spec
-from core.llm.model_capabilities import get_anthropic_model_spec
-from core.llm.providers.glm import get_glm_model_spec
-
-
-def supported_efforts(model: str, provider: str) -> tuple[str, ...]:
-    """Return the valid effort enum for ``(model, provider)``.
-
-    Empty tuple = "no effort knob" → picker shows ``[fixed]``.
-    """
-    if provider == "anthropic":
-        spec = get_anthropic_model_spec(model)
-        return spec.effort_values if spec is not None else ()
-    if provider == "openrouter" and model.startswith("openrouter/openai/"):
-        model = model.removeprefix("openrouter/openai/")
-        provider = "openai"
-    if provider in ("openai", "openai-codex"):
-        return get_openai_model_spec(model).reasoning_effort_values or ()
-    if provider == "glm":
-        glm_spec = get_glm_model_spec(model)
-        return glm_spec.reasoning_effort_values if glm_spec is not None else ()
-    return ()
-
-
-def default_effort(model: str, provider: str) -> str | None:
-    """Use the same model contract as request shaping."""
-    if not supported_efforts(model, provider):
-        return None
-    if provider == "anthropic":
-        spec = get_anthropic_model_spec(model)
-        return spec.default_effort if spec is not None else None
-    if provider == "glm":
-        glm_spec = get_glm_model_spec(model)
-        return glm_spec.default_effort if glm_spec is not None else None
-    return "medium"
+from core.llm.model_catalog import EFFORT_LEVELS
+from core.llm.model_catalog import default_effort as default_effort
+from core.llm.model_catalog import supported_efforts as supported_efforts
 
 
 def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
@@ -72,7 +40,7 @@ def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
         # A persisted unsupported value can sit between native levels.
         # Move only on explicit arrow input, in the requested direction without
         # turning a first left-arrow press into a higher effort.
-        order = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+        order = EFFORT_LEVELS
         if current in order and all(level in order for level in levels):
             index = order.index(current)
             if direction > 0:
@@ -93,7 +61,10 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "claude-fable-5-1": "Fable 5.1 · demanding reasoning · 1M context",
     "claude-opus-5-5": "Opus 5.5 · agentic coding · 1M context",
     "claude-opus-5": "Opus 5 · adaptive thinking · 1M context",
+    "claude-sonnet-5-5": "Sonnet 5.5 · speed and intelligence · no forced tool use · 1M context",
+    "claude-haiku-5-5": "Haiku 5.5 · fastest · >100K-token prompts bill 5x · 1M context",
     "claude-sonnet-5": "Sonnet 5 · speed and intelligence · 1M context",
+    "gpt-6.1-sol": "GPT-6.1 Sol · near-Astra complex work · API + rollout-gated subscription",
     "gpt-6-sol": "GPT-6 Sol · coding and everyday work · API + subscription",
     "gpt-6-luna": "GPT-6 Luna · efficient routine work · API + subscription",
     "glm-5.3": "GLM-5.3 · reasoning · 1M context",
@@ -110,7 +81,7 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "gpt-5.6-sol": "GPT-5.6 Sol · frontier tier, max-effort capable · API + subscription",
     "gpt-5.6-terra": "GPT-5.6 Terra · balanced intelligence/cost · API + subscription",
     "gpt-5.6-luna": "GPT-5.6 Luna · efficient high-volume tier · API + subscription",
-    "gpt-5.5": "GPT-5.5 · API + subscription (Codex retirement: 2026-10-14)",
+    "gpt-5.5": "GPT-5.5 · Platform API · retired from ChatGPT subscription 2026-10-14",
     "gpt-5.4": "GPT-5.4 · Platform API · retired from ChatGPT subscription",
     "gpt-5.4-mini": "GPT-5.4 Mini · Platform API · retired from ChatGPT subscription",
     "gpt-5.3-codex": "GPT-5.3 Codex · Platform API · deprecated for ChatGPT subscription",

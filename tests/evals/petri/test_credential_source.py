@@ -51,7 +51,7 @@ def test_list_credential_sources_anthropic_shape(monkeypatch):
     api_key_entry = next(e for e in out if e["source"] == "api_key")
     assert api_key_entry["available"] is True
     assert api_key_entry["adapter"] == "evals.petri.adapters.http_anthropic"
-    assert api_key_entry["inspect_prefix"] == "anthropic"
+    assert api_key_entry["inspect_prefix"] == "anthropic-platform"
     assert api_key_entry["auth_env_vars"] == ["ANTHROPIC_API_KEY"]
     auto_entry = next(e for e in out if e["source"] == "auto")
     assert auto_entry["available"] is True

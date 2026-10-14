@@ -103,8 +103,8 @@ def test_default_manifest_default_path_constant() -> None:
 def test_default_manifest_inspect_prefixes() -> None:
     """Inspect prefixes match the existing to_inspect_model contract."""
     manifest = load_manifest()
-    assert manifest.get_adapter("anthropic", "api_key").inspect_prefix == "anthropic"
-    assert manifest.get_adapter("openai", "api_key").inspect_prefix == "openai"
+    assert manifest.get_adapter("anthropic", "api_key").inspect_prefix == "anthropic-platform"
+    assert manifest.get_adapter("openai", "api_key").inspect_prefix == "openai-platform"
     assert manifest.get_adapter("openai", "openai-codex").inspect_prefix == "openai-codex"
     assert manifest.get_adapter("zhipuai", "api_key").inspect_prefix == "geode"
 

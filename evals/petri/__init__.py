@@ -68,4 +68,18 @@ except ImportError:
         exc_info=True,
     )
 
+# GEODE-owned API-key providers (``openai-platform``, ``anthropic-platform``)
+# answer model-family and option admission from GEODE's verified model specs.
+try:
+    from evals.petri.adapters.http_anthropic import register as _register_anthropic
+    from evals.petri.adapters.http_openai import register as _register_openai
+
+    _register_openai()
+    _register_anthropic()
+except ImportError:
+    _logging.getLogger(__name__).debug(
+        "petri_audit API-key ModelAPI registration deferred — [audit] extra not installed",
+        exc_info=True,
+    )
+
 __all__: list[str] = []
