@@ -136,30 +136,55 @@ class TestEnvSetupWizard:
         )
 
     def test_wizard_skips_on_enter_after_choosing_path_b(self, tmp_path):
-        """User picks Path B then presses Enter for every key → no keys set."""
+        """An empty key for the selected provider does not complete setup."""
         with (
             patch("core.cli.onboarding.console") as mock_console,
             patch("core.config.settings") as mock_settings,
+            patch("sys.stdin.isatty", return_value=True),
+            patch("core.cli.commands.login.TerminalMenu") as menu,
         ):
+            menu.return_value.show.return_value = 0
             _no_keys_mock(mock_settings)
             mock_console.input.return_value = "2"
             with patch("getpass.getpass", return_value=""):
                 result = env_setup_wizard()
         assert result is False
 
-    def test_wizard_sets_key_via_path_b(self, tmp_path):
-        """User picks Path B and enters an Anthropic key."""
+    @pytest.mark.parametrize(
+        "index,provider", [(0, "anthropic"), (1, "openai"), (2, "openrouter"), (3, "glm")]
+    )
+    def test_wizard_sets_key_via_path_b(self, tmp_path, index, provider):
+        """Setup asks only for the selected provider, including OpenRouter."""
         with (
             patch("core.cli.onboarding.console") as mock_console,
             patch("core.auth.auth_toml.save_api_key") as save,
             patch("core.config.settings") as mock_settings,
+            patch("sys.stdin.isatty", return_value=True),
+            patch("core.cli.commands.login.TerminalMenu") as menu,
         ):
+            menu.return_value.show.return_value = index
             _no_keys_mock(mock_settings)
             mock_console.input.return_value = "2"
-            with patch("getpass.getpass", side_effect=["sk-ant-test-key-12345678", "", ""]):
+            with patch("getpass.getpass", return_value="synthetic-provider-key") as hidden:
                 result = env_setup_wizard()
-        save.assert_called_once_with("sk-ant-test-key-12345678", provider="anthropic")
+        menu.assert_called_once()
+        hidden.assert_called_once()
+        save.assert_called_once_with("synthetic-provider-key", provider=provider)
         assert result is True
+
+    def test_wizard_provider_cancel_does_not_prompt_or_save_key(self):
+        with (
+            patch("core.cli.onboarding.console") as console,
+            patch("sys.stdin.isatty", return_value=True),
+            patch("core.cli.commands.login.TerminalMenu") as menu,
+            patch("getpass.getpass") as hidden,
+            patch("core.auth.auth_toml.save_api_key") as save,
+        ):
+            console.input.return_value = "2"
+            menu.return_value.show.return_value = None
+            assert env_setup_wizard() is False
+        hidden.assert_not_called()
+        save.assert_not_called()
 
     def test_wizard_handles_ctrl_c(self, tmp_path):
         """Ctrl+C at the menu prompt gracefully stops."""

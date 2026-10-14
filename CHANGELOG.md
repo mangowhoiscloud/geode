@@ -55,6 +55,11 @@ functional change.
 
 ### Fixed
 
+- **Approval cancellation.** Release a lock acquired after its awaiting request
+  was cancelled, so later tool approvals continue instead of waiting forever.
+- **Provider setup.** Offer OpenRouter alongside the other API-key providers
+  during initial setup and collect only the selected provider's hidden key.
+
 - **Research resource routes.** Add a standalone publication collection and
   correct the Jev reader URL to `/research/jev-system1-offloading/`. Preserve
   shared homepage anchors and legacy reader/download addresses, and restore
@@ -63,6 +68,10 @@ functional change.
   preserving historical selection links without duplicate history entries.
 
 ### Changed
+
+- **Credential entry.** `/login add` selects ChatGPT sign-in or a provider API
+  key in one menu. Setup and direct Anthropic login share the same key-input
+  flow and existing credential persistence, validation and client invalidation.
 
 - **Restore light research readers.** GEODE, Jev Decision Offloading and JEVDB
   use their previous light reading workspaces, preserving source artifacts,

@@ -84,7 +84,7 @@ export default function Page() {
                 <tr><td><code>/login openai</code></td><td>ChatGPT 구독 OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td>숨김 입력으로 Anthropic PAYG 키를 등록합니다. 세션 소스 선택은 바꾸지 않습니다.</td></tr>
                 <tr><td><code>/login google</code></td><td>Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다.</td></tr>
-                <tr><td><code>/login add</code></td><td>자격 추가. 메뉴에서 플랜 종류(ChatGPT 구독 또는 PAYG API 키)를 고르고, PAYG는 프로바이더(Anthropic, OpenAI, OpenRouter, GLM)를 고른 뒤 키를 입력합니다.</td></tr>
+                <tr><td><code>/login add</code></td><td>ChatGPT 구독 로그인 또는 프로바이더 API 키(Anthropic, OpenAI, OpenRouter, GLM)를 한 메뉴에서 고릅니다. API 키는 선택한 프로바이더에 대해 한 번만 입력하며, 초기 설정도 같은 입력·저장 경로를 사용합니다. 다른 프로바이더를 추가할 때는 다시 실행합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
                 <tr><td><code>/login route</code></td><td>프로바이더와 플랜 라우팅 확인.</td></tr>
                 <tr><td><code>/login quota</code></td><td>플랜에 선언된 호출 한도. GEODE는 사용량을 세지 않으므로 현재 사용량은 프로바이더 계정에서 확인합니다.</td></tr>
@@ -284,7 +284,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr><td><code>/login openai</code></td><td>ChatGPT subscription OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td>Registers an Anthropic PAYG key through hidden input; preserves session source selection.</td></tr>
                 <tr><td><code>/login google</code></td><td>Google Workspace OAuth for Gmail, Calendar, Drive, Docs, Sheets, Tasks, and Contacts. Imports a user-owned Desktop app client and stays separate from LLM-provider credentials.</td></tr>
-                <tr><td><code>/login add</code></td><td>Add a credential. A menu picks the plan kind (ChatGPT subscription or PAYG API key); for PAYG, pick the provider (Anthropic, OpenAI, OpenRouter, GLM), then enter the key.</td></tr>
+                <tr><td><code>/login add</code></td><td>Choose ChatGPT subscription sign-in or a provider API key (Anthropic, OpenAI, OpenRouter, GLM) in one menu. Enter only the selected provider&apos;s key; initial setup uses the same input and storage flow. Run again to add another provider.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>
                 <tr><td><code>/login route</code></td><td>Inspect provider and plan routing.</td></tr>
                 <tr><td><code>/login quota</code></td><td>Declared plan call limits. GEODE does not count usage; check current usage in the provider account.</td></tr>

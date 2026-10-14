@@ -6254,7 +6254,7 @@ Anthropic과 OpenRouter의 내장 경로는 `api_key`뿐입니다. 과거 `claud
 | `/login openai` | ChatGPT 구독 OAuth 로그인. device-code 플로우는 `core/auth/oauth_login.py`이고, 결과는 `auth.toml`에 OAUTH\_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다. |
 | `/login anthropic` | 숨김 입력으로 Anthropic PAYG 키를 등록합니다. 세션 소스 선택은 바꾸지 않습니다. |
 | `/login google` | Gmail, Calendar, Drive, Docs, Sheets, Tasks, Contacts용 Google Workspace OAuth. 사용자가 만든 Desktop 앱 클라이언트를 가져오며 LLM 프로바이더 자격과 분리됩니다. |
-| `/login add` | 자격 추가. 메뉴에서 플랜 종류(ChatGPT 구독 또는 PAYG API 키)를 고르고, PAYG는 프로바이더(Anthropic, OpenAI, OpenRouter, GLM)를 고른 뒤 키를 입력합니다. |
+| `/login add` | ChatGPT 구독 로그인 또는 프로바이더 API 키(Anthropic, OpenAI, OpenRouter, GLM)를 한 메뉴에서 고릅니다. API 키는 선택한 프로바이더에 대해 한 번만 입력하며, 초기 설정도 같은 입력·저장 경로를 사용합니다. 다른 프로바이더를 추가할 때는 다시 실행합니다. |
 | `/login use` / `remove` | 프로파일 선택과 제거. |
 | `/login route` | 프로바이더와 플랜 라우팅 확인. |
 | `/login quota` | 플랜에 선언된 호출 한도. GEODE는 사용량을 세지 않으므로 현재 사용량은 프로바이더 계정에서 확인합니다. |

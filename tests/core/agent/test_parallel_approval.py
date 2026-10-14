@@ -20,12 +20,15 @@ This invariant pins:
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import threading
 import time
 from typing import Any
+from unittest.mock import Mock
 
 import core.agent.approval as _approval_mod
+import pytest
 
 # ---------------------------------------------------------------------------
 # Contract 1 — apply_safety_gates uses _approval_lock
@@ -125,3 +128,52 @@ def test_second_parallel_write_short_circuits_after_always() -> None:
         "second parallel call must observe always-set promotion and approve"
     )
     assert "write" in gate._always_approved_categories
+
+
+def test_cancelled_approval_waiter_releases_late_lock_grant() -> None:
+    async def scenario() -> None:
+        callback = Mock(return_value="y")
+        gate = _approval_mod.ApprovalWorkflow(approval_callback=callback)
+        lock = threading.Lock()
+        waiting = threading.Event()
+        acquired = threading.Event()
+
+        def acquire() -> bool:
+            waiting.set()
+            result = lock.acquire()
+            acquired.set()
+            return result
+
+        gate._approval_lock = Mock(acquire=acquire, release=lock.release)
+        lock.acquire()
+        task = asyncio.create_task(
+            gate.confirm_declared_async(
+                "edit_file", {}, per_invocation=False, contains_personal_data=False
+            )
+        )
+        try:
+            assert await asyncio.to_thread(waiting.wait, 1)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            lock.release()
+            assert await asyncio.to_thread(acquired.wait, 1)
+
+            async def wait_for_release() -> None:
+                while lock.locked():
+                    await asyncio.sleep(0.01)
+
+            await asyncio.wait_for(wait_for_release(), 1)
+            callback.assert_not_called()
+            assert await asyncio.wait_for(
+                gate.confirm_declared_async(
+                    "edit_file", {}, per_invocation=False, contains_personal_data=False
+                ),
+                1,
+            )
+            callback.assert_called_once()
+        finally:
+            if lock.locked():
+                lock.release()
+
+    asyncio.run(scenario())

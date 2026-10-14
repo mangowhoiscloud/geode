@@ -86,7 +86,7 @@ def env_setup_wizard() -> bool:
             "Pick how you want to talk to the model:\n"
             "  [cyan]1[/cyan]  ChatGPT subscription sign-in "
             "(Plus / Pro / Business / Edu / Enterprise)\n"
-            "  [cyan]2[/cyan]  API key (Anthropic / OpenAI / ZhipuAI GLM)\n"
+            "  [cyan]2[/cyan]  API key (Anthropic / OpenAI / OpenRouter / GLM)\n"
             "  [cyan]3[/cyan]  Skip — explore in dry-run mode (fixture data, no LLM)\n\n"
             "[muted]Press Ctrl+C to abort at any time.[/muted]",
             title="Setup",
@@ -130,38 +130,19 @@ def _wizard_subscription_path() -> bool:
 
 
 def _wizard_api_key_path() -> bool:
-    """Prompt for API keys in the terminal and commit through the auth owner."""
-    import getpass
+    """Set up one chosen provider through the same hidden-input flow as /login."""
+    from rich.markup import escape
 
-    from core.auth.auth_toml import auth_toml_path, save_api_key
+    from core.cli.commands.login import prompt_api_key
+    from core.observability.redaction import redact_secrets
 
-    any_set = False
-    providers = [
-        ("Anthropic", "anthropic", "https://console.anthropic.com/settings/keys"),
-        ("OpenAI", "openai", "https://platform.openai.com/api-keys"),
-        ("ZhipuAI", "glm", "https://open.bigmodel.cn/usercenter/apikeys"),
-    ]
-    console.print("\n  [header]API keys[/header] — press Enter to skip a provider.")
-    for label, provider, url in providers:
-        try:
-            console.print(f"\n  [label]{label}[/label] [muted]({url})[/muted]")
-            # allow-direct-io: terminal-owned secret input stays hidden.
-            value = getpass.getpass("  API key (hidden): ").strip()
-        except (KeyboardInterrupt, EOFError):
-            console.print("\n  [muted]Setup cancelled.[/muted]")
-            break
-        if not value:
-            continue
-        try:
-            save_api_key(value, provider=provider)
-        except (ValueError, OSError):
-            console.print(f"  [error]{label} credential update failed.[/error]")
-            continue
-        console.print(f"  [success]{label} key saved[/success]")
-        any_set = True
-    if any_set:
-        console.print(f"\n  [success]API keys saved[/success] [muted]({auth_toml_path()})[/muted]")
-    return any_set
+    try:
+        prompt_api_key()
+    except (ValueError, OSError) as exc:
+        console.print(f"  [warning]{escape(redact_secrets(str(exc)))}[/warning]\n")
+        return False
+    console.print("  [muted]Use /login add to register another provider.[/muted]\n")
+    return True
 
 
 # ---------------------------------------------------------------------------

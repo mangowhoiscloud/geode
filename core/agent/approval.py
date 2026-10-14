@@ -191,7 +191,17 @@ class ApprovalWorkflow:
 
     async def _with_approval_locks(self, body: Callable[[], Awaitable[_T]]) -> _T:
         """Serialize async prompts with both async and legacy sync approval paths."""
-        await asyncio.to_thread(self._approval_lock.acquire)
+        future = asyncio.get_running_loop().run_in_executor(None, self._approval_lock.acquire)
+        try:
+            await asyncio.shield(future)
+        except asyncio.CancelledError:
+
+            def release_late_grant(done: asyncio.Future[bool]) -> None:
+                if not done.cancelled() and done.exception() is None and done.result():
+                    self._approval_lock.release()
+
+            future.add_done_callback(release_late_grant)
+            raise
         try:
             return await body()
         finally:
