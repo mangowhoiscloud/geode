@@ -28,10 +28,8 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 from urllib.parse import parse_qs, urlencode, urlparse
-
-import httpx
 
 from core.memory.atomic_write import atomic_write_json
 from core.paths import GLOBAL_GOOGLE_ACCOUNTS_FILE
@@ -39,6 +37,11 @@ from core.tools.google_capabilities import (
     GOOGLE_SERVICE_DESCRIPTORS,
     GoogleServiceDescriptor,
 )
+
+if TYPE_CHECKING:
+    # Runtime startup imports this module for the account store; httpx (and its
+    # optional CLI dependencies) load only when an OAuth request is sent.
+    import httpx
 
 log = logging.getLogger(__name__)
 _ACCOUNT_STORE_LOCK = threading.RLock()
@@ -791,6 +794,8 @@ def _exchange_authorization_code(
     }
     if client.client_secret:
         form["client_secret"] = client.client_secret
+    import httpx
+
     try:
         response = http_client.post(GOOGLE_TOKEN_URL, data=form)
     except httpx.HTTPError as exc:
@@ -809,6 +814,8 @@ def _exchange_authorization_code(
 
 
 def _fetch_google_userinfo(access_token: str, http_client: httpx.Client) -> dict[str, Any]:
+    import httpx
+
     try:
         response = http_client.get(
             GOOGLE_USERINFO_URL,
@@ -903,6 +910,8 @@ def login_google(
         raise GoogleOAuthCallbackError(f"Google authorization was denied: {detail}")
     if not callback.code:
         raise GoogleOAuthCallbackError("Google authorization code was missing")
+
+    import httpx
 
     owns_client = http_client is None
     client_http = http_client or httpx.Client(timeout=30.0)
@@ -1011,6 +1020,8 @@ def revoke_google_account(
         raise GoogleOAuthError("No matching Google account is connected")
     secret = store.load_secret(account)
     if not local_only:
+        import httpx
+
         owns_client = http_client is None
         client_http = http_client or httpx.Client(timeout=30.0)
         try:

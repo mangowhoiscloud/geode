@@ -446,18 +446,36 @@ def test_status_ticker_lifecycle() -> None:
     assert app._status_tick_thread is None
 
 
-def test_approval_request_resolves_from_key_decision() -> None:
+def test_approval_request_resolves_from_key_decision(monkeypatch) -> None:
     app = FullscreenThinCli(_Client())
     result: dict[str, str] = {}
+    prompt_shown = threading.Event()
+    set_status = app._set_status
+
+    def observe_status(*args, **kwargs) -> None:
+        set_status(*args, **kwargs)
+        # Shown after the pending event is published and before the worker waits.
+        if args and args[0] == "Approval required":
+            prompt_shown.set()
+
+    monkeypatch.setattr(app, "_set_status", observe_status)
 
     def wait_for_decision() -> None:
         result["decision"] = app._on_approval_request({"tool_name": "computer", "detail": "click"})
 
-    thread = threading.Thread(target=wait_for_decision)
+    thread = threading.Thread(target=wait_for_decision, daemon=True)
     thread.start()
-    assert app._approval_event is not None
-    app._resolve_approval("y")
-    thread.join(timeout=2)
+    try:
+        assert prompt_shown.wait(timeout=2)
+        assert app._approval_event is not None
+        app._resolve_approval("y")
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+    finally:
+        # Unblock a still-waiting worker so a failed assertion cannot leak it.
+        if thread.is_alive() and prompt_shown.wait(timeout=2):
+            app._resolve_approval("n")
+        thread.join(timeout=2)
 
     assert result["decision"] == "y"
     assert app.state.approval_pending is False

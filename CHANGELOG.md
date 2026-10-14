@@ -79,6 +79,19 @@ functional change.
   voters without an explicit effort no longer send `none` to models that
   reject it, `max` is a valid voter effort, and bare-id subscription mapping
   follows the catalog instead of a `gpt-5` name prefix.
+- **Startup import cost.** Importing the runtime, hook types, adapter registry
+  or extension policy no longer loads `core.config`, its routing manifest or
+  pydantic; the policy source is imported when a policy is read, and the key
+  masker when an auth profile key is rendered. Runtime creation still loads
+  configuration as before.
+  Runtime startup no longer imports httpx (and its optional CLI dependencies)
+  to build the Google calendar adapter; Google OAuth and Workspace requests
+  import it when they send. Credentials are still discovered at call time.
+- **CLI channel shutdown.** Stopping the daemon's CLI channel while a client is
+  disconnecting no longer fails with `Event loop is closed` or leaks an
+  unawaited close coroutine: a client whose loop already shut down has had
+  its connection closed by its own handler. Other scheduling failures still
+  propagate.
 - **Approval cancellation.** Release a lock acquired after its awaiting request
   was cancelled, so later tool approvals continue instead of waiting forever.
 - **Provider setup.** Offer OpenRouter alongside the other API-key providers

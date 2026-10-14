@@ -241,3 +241,68 @@ def test_connection_context_survives_cancellable_request_task(monkeypatch):
         assert observations == [True, False]
 
     asyncio.run(run())
+
+
+def _endpoint_after_owned_loop_teardown() -> _AsyncClientEndpoint:
+    """Model stop()'s snapshot of a handler the runner then cancels and closes."""
+    import socket
+
+    from core.async_runtime import owned_asyncio_runner
+
+    ours, _peer = socket.socketpair()
+    holder: dict[str, _AsyncClientEndpoint] = {}
+
+    async def connected_handler() -> None:
+        _reader, writer = await asyncio.open_connection(sock=ours)
+        holder["endpoint"] = _AsyncClientEndpoint(asyncio.get_running_loop(), writer)
+
+        async def parked() -> None:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                writer.close()  # mirrors CLIPoller._handle_async_client
+
+        asyncio.get_running_loop().create_task(parked())
+        await asyncio.sleep(0)
+
+    with owned_asyncio_runner() as runner:
+        runner.run(connected_handler())
+    _peer.close()
+    return holder["endpoint"]
+
+
+def test_close_after_owned_loop_teardown_neither_raises_nor_leaks_coroutine():
+    import gc
+    import warnings
+
+    endpoint = _endpoint_after_owned_loop_teardown()
+    assert endpoint._loop.is_closed()
+    assert endpoint._writer.is_closing()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        endpoint.close_threadsafe()
+        gc.collect()
+
+    assert not [w for w in caught if "never awaited" in str(w.message)]
+    assert endpoint._approval_responses.get_nowait() == ("n", "")
+
+
+def test_close_scheduling_failure_on_open_loop_still_propagates():
+    import gc
+    import warnings
+
+    class RefusingLoop:
+        def call_soon_threadsafe(self, *_args):
+            raise RuntimeError("scheduler refused")
+
+        def is_closed(self) -> bool:
+            return False
+
+    endpoint = _AsyncClientEndpoint(RefusingLoop(), SimpleNamespace())
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(RuntimeError, match="scheduler refused"):
+            endpoint.close_threadsafe()
+        gc.collect()
+    assert not [w for w in caught if "never awaited" in str(w.message)]
