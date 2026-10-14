@@ -104,3 +104,19 @@ def test_availability_is_metadata_only() -> None:
     writable = GoogleWorkspaceCalendarAdapter(StubCalendarClient(scopes=(CALENDAR_WRITE_SCOPE,)))
     assert asyncio.run(writable.acan_read()) is True
     assert asyncio.run(writable.acan_write()) is True
+
+
+def test_default_adapter_construction_does_not_import_http_transport() -> None:
+    import subprocess
+    import sys
+
+    probe = (
+        "import sys\n"
+        "from core.mcp.google_workspace_calendar import GoogleWorkspaceCalendarAdapter\n"
+        "GoogleWorkspaceCalendarAdapter()\n"
+        "print('httpx' in sys.modules)\n"
+    )
+    completed = subprocess.run(  # noqa: S603 -- current interpreter, fixed probe
+        [sys.executable, "-c", probe], check=True, capture_output=True, text=True
+    )
+    assert completed.stdout.strip() == "False"

@@ -158,3 +158,33 @@ def test_401_forces_one_refresh_and_retry(tmp_path: Path) -> None:
     assert payload == {"ok": True}
     assert token_count == 2
     assert api_count == 2
+
+
+def test_owned_transport_is_resolved_at_request_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "access-1", "expires_in": 3600})
+        raise httpx.ConnectError("offline", request=request)
+
+    real_async_client = httpx.AsyncClient
+    owned: list[httpx.AsyncClient] = []
+
+    def owned_client(**kwargs: Any) -> httpx.AsyncClient:
+        client = real_async_client(transport=httpx.MockTransport(handler), **kwargs)
+        owned.append(client)
+        return client
+
+    # The module imports httpx inside the request path, so patching the shared
+    # module after construction must still govern both owned clients.
+    client = GoogleWorkspaceClient(account_store=_store(tmp_path))
+    monkeypatch.setattr(httpx, "AsyncClient", owned_client)
+    with pytest.raises(GoogleWorkspaceError, match="request failed"):
+        asyncio.run(
+            client.request_json(
+                "GET", "https://www.googleapis.com/drive/v3/files", required_scopes=(SCOPE,)
+            )
+        )
+    assert len(owned) == 2
+    assert all(c.is_closed for c in owned)

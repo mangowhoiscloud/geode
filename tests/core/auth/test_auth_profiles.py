@@ -66,6 +66,28 @@ class TestAuthProfile:
         )
         assert p.masked_key == "***"
 
+    def test_runtime_import_defers_config_until_key_is_masked(self):
+        import subprocess
+        import sys
+
+        # Same module set as the architecture performance import stage.
+        probe = (
+            "import sys\n"
+            "from core.hooks.catalog import EventRetentionClass\n"
+            "from core.observability.event_store import HookEventStore\n"
+            "from core.runtime import GeodeRuntime\n"
+            "from core.tools.composition import compose_tool_plan\n"
+            "from core.tools.plan import thaw_tool_schema\n"
+            "from core.auth.profiles import AuthProfile, CredentialType\n"
+            "print('core.config' in sys.modules)\n"
+            "p = AuthProfile('t:k', 't', CredentialType.API_KEY, 'sk-ant-api03-abcdef1234567890xyz')\n"
+            "print(p.masked_key)\n"
+        )
+        completed = subprocess.run(  # noqa: S603 -- current interpreter, fixed probe
+            [sys.executable, "-c", probe], check=True, capture_output=True, text=True
+        )
+        assert completed.stdout.split() == ["False", "sk-ant-api...0xyz"]
+
     def test_is_expired(self):
         p = AuthProfile(
             name="test:exp",

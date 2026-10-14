@@ -272,7 +272,17 @@ class _AsyncClientEndpoint:
             with contextlib.suppress(OSError):
                 await self._writer.wait_closed()
 
-        future = asyncio.run_coroutine_threadsafe(_close(), self._loop)
+        closer = _close()
+        try:
+            future = asyncio.run_coroutine_threadsafe(closer, self._loop)
+        except RuntimeError:
+            closer.close()
+            if not self._loop.is_closed():
+                raise
+            # stop() can snapshot this endpoint just before the serve loop exits.
+            # The owning runner cancels and awaits every client handler before
+            # closing its loop, and the handler's finally closed this writer.
+            return
         with contextlib.suppress(Exception):
             future.result(timeout=2.0)
 
