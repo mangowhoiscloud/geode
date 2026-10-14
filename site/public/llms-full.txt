@@ -531,7 +531,7 @@ GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), OpenRouter, GLM 
 
 OpenRouter는 OpenAI의 별칭이 아니라 별도 inference router입니다. `/login add`로 키를 등록하고 `/model openrouter/anthropic/claude-sonnet-4`처럼 정확한 참조를 선택합니다. 응답의 `usage.cost`가 예산·사용량 기록의 권위이고, 반환 모델·선택 provider·routing attempt는 bounded LLM-call event에 남습니다. `free`/`auto`는 동적 경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
 
-활성 모델과 별칭, 문맥·출력 한도, API 요율은 [2026-09-24 공급자 조사](https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md)와 [2026-10-14 갱신](https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20261014.md)에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.
+활성 모델과 별칭, 문맥·출력 한도, API 요율은 [2026-09-24 공급자 조사](https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md)와 [2026-10-14 갱신](https://github.com/mangowhoiscloud/geode/blob/1a8891f1e3700a6d101504b9e0c8c7e10ef7ca6f/docs/research/provider-refresh-20261014.md)에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.
 
 ## 소스별 모델 지원 종료
 

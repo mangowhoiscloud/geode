@@ -73,7 +73,7 @@ export default function Page() {
               경로이므로 고정 모델 공식 평가에 사용하지 않습니다.
             </p>
 
-            <p>활성 모델과 별칭, 문맥·출력 한도, API 요율은 <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 공급자 조사</a>와 <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20261014.md">2026-10-14 갱신</a>에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.</p>
+            <p>활성 모델과 별칭, 문맥·출력 한도, API 요율은 <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 공급자 조사</a>와 <a href="https://github.com/mangowhoiscloud/geode/blob/1a8891f1e3700a6d101504b9e0c8c7e10ef7ca6f/docs/research/provider-refresh-20261014.md">2026-10-14 갱신</a>에서 원문 출처와 함께 확인할 수 있습니다. API 달러 요율과 Codex·Coding Plan의 크레딧은 별개이며, 카탈로그 갱신이 실제 계정 수락이나 청구 검증을 뜻하지 않습니다.</p>
 
             <h2>소스별 모델 지원 종료</h2>
             <p>
@@ -308,7 +308,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
               evaluation targets.
             </p>
 
-            <p>See the <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 provider audit</a> and the <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20261014.md">2026-10-14 refresh</a> for active models, aliases, context/output limits and API tariffs with primary sources. API dollar prices and subscription credits are separate; a catalogue refresh does not establish live account acceptance or billed charges.</p>
+            <p>See the <a href="https://github.com/mangowhoiscloud/geode/blob/develop/docs/research/provider-refresh-20260924.md">2026-09-24 provider audit</a> and the <a href="https://github.com/mangowhoiscloud/geode/blob/1a8891f1e3700a6d101504b9e0c8c7e10ef7ca6f/docs/research/provider-refresh-20261014.md">2026-10-14 refresh</a> for active models, aliases, context/output limits and API tariffs with primary sources. API dollar prices and subscription credits are separate; a catalogue refresh does not establish live account acceptance or billed charges.</p>
 
             <h2>Source-specific model retirement</h2>
             <p>
