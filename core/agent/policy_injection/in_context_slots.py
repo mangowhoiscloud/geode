@@ -24,27 +24,20 @@ schema 로 선언. M4.4 후속 PR 이 이 schema 를 inference path 에서 소�
 .. code-block:: json
 
     {
-      "exemplars": {
-        "max_entries": 3,
-        "rank_by": "elo_rating",
-        "injection_point": "system_prompt"
-      },
-      "memory_recall": {
-        "max_entries": 5,
-        "rank_by": "recency",
-        "injection_point": "system_prompt"
-      },
-      "rubric_excerpts": {
-        "max_entries": 3,
-        "rank_by": "regression_severity",
-        "injection_point": "system_prompt"
-      },
-      "tool_hints": {
-        "max_entries": 5,
-        "rank_by": "success_rate",
-        "injection_point": "tool_descriptions"
-      }
+      "exemplars": {"max_entries": 3},
+      "memory_recall": {"max_entries": 5},
+      "rubric_excerpts": {"max_entries": 3},
+      "tool_hints": {"max_entries": 5},
+      "tool_ranking": {"max_entries": 5}
     }
+
+``max_entries`` is the only consumed control. Each slot's ranking and its
+placement (prepended to the system prompt, or to messages for exemplars) are
+fixed in ``in_context_wiring.py``. Legacy files may still carry ``rank_by`` /
+``injection_point``: they keep their old validation (non-string values reject
+the file; an ``injection_point`` other than ``system_prompt`` /
+``tool_descriptions`` drops that slot), and valid values are ignored. To
+migrate, delete both keys from each slot entry.
 
 빈 정책 / 누락 slot → 해당 slot 비활성 (no-op). 부적합 schema 또는
 unknown slot 은 graceful drop (forward-compat).
@@ -108,15 +101,11 @@ CANONICAL_SLOTS: tuple[str, ...] = (
     SLOT_TOOL_RANKING,
 )
 
-# Valid ``injection_point`` choices — namespaces the system prompt
-# assembly + tool-descriptions wiring expose. Constrained enum so a
-# mutator's typo lands in graceful drop, not silent injection into
-# the wrong section.
-INJECTION_SYSTEM_PROMPT = "system_prompt"
-INJECTION_TOOL_DESCRIPTIONS = "tool_descriptions"
-VALID_INJECTION_POINTS: frozenset[str] = frozenset(
-    {INJECTION_SYSTEM_PROMPT, INJECTION_TOOL_DESCRIPTIONS}
-)
+# Retired per-slot keys: accepted by older schemas, never consumed. They keep
+# their old validation so a file that was invalid before stays invalid; a
+# valid value selects nothing (ranking and placement are fixed).
+_LEGACY_STRING_KEYS: tuple[str, ...] = ("rank_by", "injection_point")
+_LEGACY_INJECTION_POINTS: frozenset[str] = frozenset({"system_prompt", "tool_descriptions"})
 
 
 @dataclass(frozen=True)
@@ -129,8 +118,6 @@ class InContextSlot:
 
     name: str
     max_entries: int
-    rank_by: str
-    injection_point: str
 
 
 def _load_in_context_slots_override(
@@ -183,7 +170,7 @@ def _graceful_load(path: Path) -> dict[str, InContextSlot] | None:
 
 
 def _validate_schema(data: Any, path: Path) -> None:
-    """Top-level ``dict[str, dict]``; each entry must contain int + 2 str."""
+    """Top-level ``dict[str, dict]``; ``max_entries`` must be an int."""
     if not isinstance(data, dict):
         raise RuntimeError(f"in-context-slots at {path} must be a dict")
     for slot, entry in data.items():
@@ -204,16 +191,15 @@ def _validate_schema(data: Any, path: Path) -> None:
             # negative value discard the entire SoT via ``_graceful_load``
             # — contradicts the per-axis graceful claim. (Codex MCP catch,
             # PR #1425 FAIL #2.)
-        if "rank_by" in entry and not isinstance(entry["rank_by"], str):
-            raise RuntimeError(f"in-context-slots at {path}[{slot!r}].rank_by must be str")
-        if "injection_point" in entry and not isinstance(entry["injection_point"], str):
-            raise RuntimeError(f"in-context-slots at {path}[{slot!r}].injection_point must be str")
+        for key in _LEGACY_STRING_KEYS:
+            if key in entry and not isinstance(entry[key], str):
+                raise RuntimeError(f"in-context-slots at {path}[{slot!r}].{key} must be str")
 
 
 def _coerce(data: dict[str, Any]) -> dict[str, InContextSlot]:
     """Extract canonical slots with field defaults. Unknown slot dropped
-    (forward-compat); unknown ``injection_point`` value dropped (per-axis
-    graceful)."""
+    (forward-compat); a legacy ``injection_point`` outside the old enum drops
+    that slot (unchanged); valid legacy keys are otherwise ignored."""
     result: dict[str, InContextSlot] = {}
     for slot in CANONICAL_SLOTS:
         if slot not in data:
@@ -226,36 +212,29 @@ def _coerce(data: dict[str, Any]) -> dict[str, InContextSlot]:
             continue
         if max_entries < 0:
             continue
-        rank_by = entry.get("rank_by", "")
-        if not isinstance(rank_by, str):
-            continue
-        injection_point = entry.get("injection_point", INJECTION_SYSTEM_PROMPT)
-        if injection_point not in VALID_INJECTION_POINTS:
+        injection_point = entry.get("injection_point", "system_prompt")
+        if injection_point not in _LEGACY_INJECTION_POINTS:
             log.warning(
                 "in-context-slots[%r].injection_point=%r not in %s; dropping slot",
                 slot,
                 injection_point,
-                sorted(VALID_INJECTION_POINTS),
+                sorted(_LEGACY_INJECTION_POINTS),
             )
             continue
-        result[slot] = InContextSlot(
-            name=slot,
-            max_entries=max_entries,
-            rank_by=rank_by,
-            injection_point=injection_point,
-        )
+        legacy = [key for key in _LEGACY_STRING_KEYS if key in entry]
+        if legacy:
+            # Debug only: the wiring reloads the policy on every call.
+            log.debug("in-context-slots[%r] ignores retired keys %s", slot, legacy)
+        result[slot] = InContextSlot(name=slot, max_entries=max_entries)
     return result
 
 
 __all__ = [
     "CANONICAL_SLOTS",
-    "INJECTION_SYSTEM_PROMPT",
-    "INJECTION_TOOL_DESCRIPTIONS",
     "SLOT_EXEMPLARS",
     "SLOT_MEMORY_RECALL",
     "SLOT_RUBRIC_EXCERPTS",
     "SLOT_TOOL_HINTS",
     "SLOT_TOOL_RANKING",
-    "VALID_INJECTION_POINTS",
     "InContextSlot",
 ]

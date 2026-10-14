@@ -1071,12 +1071,11 @@ _HEALTH_SUGGESTIONS: dict[str, str] = {
     "ok": "Ready to dispatch.",
     "missing_key": "Key/token is empty. Run `/login add` (interactive) or "
     "`/login set-key <plan> [key]` to populate.",
-    "expired": "OAuth token past expires_at. Re-run `codex login` and then "
-    "`/login refresh` so GEODE "
-    "picks the new token up.",
+    "expired": "OAuth token past expires_at. Sign in again with `/login openai`.",
     "cooling_down": "Backoff after consecutive failures. The verdict line "
-    "shows the cooldown deadline — wait it out or "
-    "`/login use <other-plan>` to switch providers in the meantime.",
+    "shows the cooldown deadline — wait it out, `/login use <plan>` to prefer "
+    "another plan of the same provider, or `/model <model>` to switch this "
+    "session to another provider.",
     "disabled": "Manually disabled (`/login remove <plan>` to delete, or "
     "edit `~/.geode/auth.toml` to flip `disabled=false`).",
 }
@@ -1118,6 +1117,12 @@ def _login_health(rest: str) -> None:
         if p["reason_detail"]:
             _pkg.console.print(f"    [muted]{p['reason_detail']}[/muted]")
         suggestion = _HEALTH_SUGGESTIONS.get(code, "")
+        if code == "expired" and p["managed_by"] == "codex-cli":
+            # Imported credential: GEODE only reads ~/.codex/auth.json.
+            suggestion = (
+                "Imported Codex CLI token past expires_at. Run `codex login` in the "
+                "Codex CLI, then `/login refresh` so GEODE rereads it."
+            )
         if suggestion:
             _pkg.console.print(f"    → {suggestion}")
     _pkg.console.print()

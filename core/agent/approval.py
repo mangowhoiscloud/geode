@@ -1,8 +1,8 @@
 """HITL Approval Workflow — extracted from ToolExecutor for SRP.
 
 Manages user approval gates for dangerous, write, expensive, and MCP tools.
-Tracks session-scoped approval patterns (auto-approve after 3 consecutive
-approvals, auto-deny after 3 consecutive denials).
+A one-time ``y`` stays one-time; only an explicit ``a`` grants a session-scoped
+allow. Three consecutive denials of a tool auto-deny it for the session.
 """
 
 from __future__ import annotations
@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_AUTO_APPROVE_THRESHOLD = 3
 _AUTO_DENY_THRESHOLD = 3
 _T = TypeVar("_T")
 
@@ -142,7 +141,6 @@ class ApprovalWorkflow:
         self._mcp_approved_servers: set[str] = set()
         self._always_approved_tools: set[str] = set()
         self._always_approved_categories: set[str] = set()
-        self._tool_approval_counts: dict[str, int] = {}
         self._tool_denial_counts: dict[str, int] = {}
         # Computer-use is a DANGEROUS, continuous-control tool — per-action HITL
         # is impractical, so it is approved ONCE per session (then remembered).
@@ -190,7 +188,14 @@ class ApprovalWorkflow:
         await fire_hook_async(self._hooks, event, data)
 
     async def _with_approval_locks(self, body: Callable[[], Awaitable[_T]]) -> _T:
-        """Serialize async prompts with both async and legacy sync approval paths."""
+        """Serialize the check, prompt, and always-set mutation of each gate.
+
+        Parallel tool calls in one round must not race two prompts onto the
+        same thin-client socket (v0.52.1 B6: the second waited 120s, then
+        counted as a denial), and a queued caller must observe the first
+        caller's ``a`` before it decides to prompt. The thread lock spans
+        event loops; a cancelled waiter releases a late grant.
+        """
         future = asyncio.get_running_loop().run_in_executor(None, self._approval_lock.acquire)
         try:
             await asyncio.shield(future)
@@ -340,16 +345,15 @@ class ApprovalWorkflow:
     # -----------------------------------------------------------------
 
     def track_decision(self, tool_name: str, decision: str) -> None:
-        """Track per-tool approval/denial for session-scoped pattern learning."""
-        if decision == "y":
-            self._tool_approval_counts[tool_name] = self._tool_approval_counts.get(tool_name, 0) + 1
-            self._tool_denial_counts.pop(tool_name, None)
-            if self._tool_approval_counts[tool_name] >= _AUTO_APPROVE_THRESHOLD:
-                self._always_approved_tools.add(tool_name)
-                log.info("Auto-approved tool '%s' after 3 consecutive approvals", tool_name)
-        elif decision == "n":
+        """Count consecutive denials per tool; any approval resets the streak.
+
+        One-time ``y`` approvals never widen permission — only an explicit
+        ``a`` (recorded by the calling gate) grants a standing allow.
+        """
+        if decision == "n":
             self._tool_denial_counts[tool_name] = self._tool_denial_counts.get(tool_name, 0) + 1
-            self._tool_approval_counts.pop(tool_name, None)
+        elif decision in ("y", "a"):
+            self._tool_denial_counts.pop(tool_name, None)
 
     def check_auto_deny(self, tool_name: str) -> bool:
         """Return True if tool has been denied 3+ times this session."""
@@ -507,73 +511,6 @@ class ApprovalWorkflow:
     # Safety gate orchestration
     # -----------------------------------------------------------------
 
-    def apply_safety_gates(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
-        record: ApprovalRecord | None = None,
-    ) -> tuple[dict[str, Any] | None, bool]:
-        """Check HITL gates. Returns (rejection_result, approved_via_hitl)."""
-        if tool_name in DANGEROUS_TOOLS:
-            # Dangerous tools handled separately by ToolExecutor._execute_dangerous
-            return None, False
-
-        approved = False
-
-        if tool_name in SENSITIVE_TOOLS:
-            with self._approval_lock:
-                # Google Workspace policy requires an in-context affirmative
-                # action immediately before each agentic data invocation.
-                # Session-wide always-allow and skip-permissions therefore do
-                # not bypass this boundary.
-                if not self.confirm_sensitive(tool_name, tool_input, record=record):
-                    return _sensitive_denial(tool_name), False
-                approved = True
-
-        # v0.52.2 — wrap the HITL prompt + always-set mutation under a single
-        # mutex so parallel tool calls in the same round serialize their
-        # approval prompts. Without this, two concurrent confirm_write() calls
-        # both send approval_request to the thin client and the second blocks
-        # on a recv() that no input ever satisfies (the user typed "A" once,
-        # which the first prompt consumed). Result: 120s timeout → silent
-        # denial. Bug 6 root cause from v0.52.1 incident.
-        #
-        # The lock also lets the second caller observe the first caller's
-        # "A" → ``_always_approved_categories.add("write")`` and short-circuit
-        # without re-prompting the user.
-
-        # Write tools
-        if tool_name in WRITE_TOOLS and tool_name not in SENSITIVE_TOOLS:
-            with self._approval_lock:
-                auto_reason = self._auto_grant_reason("write", tool_name)
-                if auto_reason:
-                    self.record_transition(record, "granted", auto_reason)
-                    approved = True
-                else:
-                    # REQUESTED fires inside confirm_write (richer payload);
-                    # a second outer emission double-notified handlers.
-                    if not self.confirm_write(tool_name, tool_input, record=record):
-                        return _write_denial_with_fallback(tool_name), False
-                    approved = True
-
-        # Expensive tools
-        if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
-            with self._approval_lock:
-                auto_reason = self._auto_grant_reason("cost", tool_name)
-                if auto_reason:
-                    self.record_transition(record, "granted", auto_reason)
-                    approved = True
-                else:
-                    cost = EXPENSIVE_TOOLS[tool_name]
-                    if not self.confirm_cost(tool_name, cost, record=record):
-                        return {
-                            "error": "User denied expensive operation",
-                            "denied": True,
-                        }, False
-                    approved = True
-
-        return None, approved
-
     async def apply_safety_gates_async(
         self,
         tool_name: str,
@@ -719,42 +656,6 @@ class ApprovalWorkflow:
     # Confirmation prompts
     # -----------------------------------------------------------------
 
-    def confirm_mcp(
-        self, server: str, tool_name: str, record: ApprovalRecord | None = None
-    ) -> bool:
-        """Prompt user for MCP tool confirmation with A=Always option."""
-        if self._approval_callback is None and self._interactive_approval:
-            restore_terminal()
-            console.print()
-            console.print(_approval_header(tool_name, "mcp"))
-            console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
-            console.print()
-
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_REQUESTED,
-            {
-                "tool_name": tool_name,
-                "safety_level": "MCP",
-                "args_preview": f"server={server}",
-            },
-            record=record,
-        )
-
-        response = self.prompt_with_always(
-            "Allow?",
-            f"{server}/{tool_name}",
-            safety_level="mcp",
-            tool_name=tool_name,
-            record=record,
-        )
-        if response in ("a", "y"):
-            if response == "a":
-                self._always_approved_categories.add(f"mcp:{server}")
-            self.record_transition(record, "granted", f"user:{response}")
-            return True
-        self.record_transition(record, "denied", f"user:{response}")
-        return False
-
     async def confirm_mcp_async(
         self, server: str, tool_name: str, record: ApprovalRecord | None = None
     ) -> bool:
@@ -861,58 +762,6 @@ class ApprovalWorkflow:
             )[:160]
         return ""
 
-    def confirm_sensitive(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
-        record: ApprovalRecord | None = None,
-    ) -> bool:
-        """Confirm one personal-data read or mutation without a cached bypass."""
-        service = _personal_service_label(tool_name)
-        is_mutation = tool_name in WRITE_TOOLS
-        summary = (
-            self._write_summary(tool_name, tool_input)
-            if is_mutation
-            else self._sensitive_summary(tool_input)
-        )
-        boundary = (
-            f"This {service} mutation will change personal account data."
-            if is_mutation
-            else f"Personal {service} data may be sent to your configured LLM provider."
-        )
-        disclosure = boundary + (f" Request: {summary}" if summary else "")
-        if self._approval_callback is None and self._interactive_approval:
-            restore_terminal()
-            console.print()
-            console.print(_approval_header(tool_name, "personal data"))
-            console.print(f"  [dim]{disclosure}[/dim]")
-            console.print()
-        if self.check_auto_deny(tool_name):
-            self.record_transition(record, "denied", "auto_denied:3-strikes")
-            return False
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_REQUESTED,
-            {
-                "tool_name": tool_name,
-                "safety_level": "SENSITIVE",
-                "args_preview": summary,
-            },
-            record=record,
-        )
-        response = self.prompt_with_always(
-            "Allow?",
-            disclosure,
-            safety_level="sensitive",
-            tool_name=tool_name,
-            record=record,
-            allow_always=False,
-        )
-        if response == "y":
-            self.record_transition(record, "granted", f"user:{response}")
-            return True
-        self.record_transition(record, "denied", f"user:{response}")
-        return False
-
     async def confirm_sensitive_async(
         self,
         tool_name: str,
@@ -983,52 +832,6 @@ class ApprovalWorkflow:
                 bounded.append(f"{key}={str(value)[:80]}")
         return ", ".join(bounded)[:240]
 
-    def confirm_write(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
-        record: ApprovalRecord | None = None,
-    ) -> bool:
-        """Prompt user for write operation confirmation."""
-        summary = self._write_summary(tool_name, tool_input)
-        if self._approval_callback is None and self._interactive_approval:
-            restore_terminal()
-            console.print()
-            console.print(_approval_header(tool_name, "write"))
-            if summary:
-                console.print(f"  [dim]Summary:[/dim] {summary}")
-            console.print()
-
-        if self.check_auto_deny(tool_name):
-            self.record_transition(record, "denied", "auto_denied:3-strikes")
-            return False
-
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_REQUESTED,
-            {
-                "tool_name": tool_name,
-                "safety_level": "WRITE",
-                "args_preview": str(tool_input)[:200],
-            },
-            record=record,
-        )
-
-        response = self.prompt_with_always(
-            "Allow?",
-            summary or tool_name,
-            safety_level="write",
-            tool_name=tool_name,
-            record=record,
-        )
-        self.track_decision(tool_name, response)
-        if response in ("a", "y"):
-            if response == "a":
-                self._always_approved_categories.add("write")
-            self.record_transition(record, "granted", f"user:{response}")
-            return True
-        self.record_transition(record, "denied", f"user:{response}")
-        return False
-
     async def confirm_write_async(
         self,
         tool_name: str,
@@ -1075,46 +878,6 @@ class ApprovalWorkflow:
         self.record_transition(record, "denied", f"user:{response}")
         return False
 
-    def confirm_cost(
-        self,
-        tool_name: str,
-        estimated_cost: float,
-        record: ApprovalRecord | None = None,
-    ) -> bool:
-        """Prompt user for cost confirmation with A=Always option."""
-        if self._approval_callback is None and self._interactive_approval:
-            restore_terminal()
-            console.print()
-            console.print(_approval_header(tool_name, "expensive"))
-            console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
-            console.print()
-
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_REQUESTED,
-            {
-                "tool_name": tool_name,
-                "safety_level": "EXPENSIVE",
-                "args_preview": f"estimated_cost=${estimated_cost:.2f}",
-            },
-            record=record,
-        )
-
-        if self.check_auto_deny(tool_name):
-            self.record_transition(record, "denied", "auto_denied:3-strikes")
-            return False
-
-        response = self.prompt_with_always(
-            "Proceed?", tool_name, safety_level="cost", tool_name=tool_name, record=record
-        )
-        self.track_decision(tool_name, response)
-        if response in ("a", "y"):
-            if response == "a":
-                self._always_approved_categories.add("cost")
-            self.record_transition(record, "granted", f"user:{response}")
-            return True
-        self.record_transition(record, "denied", f"user:{response}")
-        return False
-
     async def confirm_cost_async(
         self,
         tool_name: str,
@@ -1150,45 +913,6 @@ class ApprovalWorkflow:
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("cost")
-            self.record_transition(record, "granted", f"user:{response}")
-            return True
-        self.record_transition(record, "denied", f"user:{response}")
-        return False
-
-    def request_bash_approval(
-        self, command: str, reason: str, record: ApprovalRecord | None = None
-    ) -> bool:
-        """Prompt user for bash command approval with A=Always option."""
-        if self._approval_callback is None and self._interactive_approval:
-            restore_terminal()
-            console.print()
-            console.print(_approval_header("run_bash", "bash"))
-            console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
-            if reason:
-                console.print(f"  [dim]Reason:[/dim]  {reason}")
-            console.print()
-
-        self._fire_hook(
-            HookEvent.TOOL_APPROVAL_REQUESTED,
-            {
-                "tool_name": "run_bash",
-                "safety_level": "DANGEROUS",
-                "args_preview": str(command)[:200],
-            },
-            record=record,
-        )
-
-        if self.check_auto_deny("run_bash"):
-            self.record_transition(record, "denied", "auto_denied:3-strikes")
-            return False
-
-        response = self.prompt_with_always(
-            "Allow?", command, safety_level="dangerous", tool_name="run_bash", record=record
-        )
-        self.track_decision("run_bash", response)
-        if response in ("a", "y"):
-            if response == "a":
-                self._always_approved_categories.add("bash")
             self.record_transition(record, "granted", f"user:{response}")
             return True
         self.record_transition(record, "denied", f"user:{response}")

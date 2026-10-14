@@ -44,7 +44,7 @@ uv tool install -e . --force`}</pre>
               <a href="/geode/docs/config/basics">설정 기초</a>에 있습니다.
             </p>
             <pre>{`geode setup        # 처음 설정
-geode setup -r     # ~/.geode/.env 삭제 후 마법사 재실행`}</pre>
+geode setup -r     # 기존 자격 파일을 지우지 않고 자격 설정 마법사 재실행`}</pre>
 
             <h2>3. 첫 대화</h2>
             <p>
@@ -103,7 +103,7 @@ geode setup -r     # ~/.geode/.env 삭제 후 마법사 재실행`}</pre>
               <li><code>geode about</code>. 실제로 어떤 모델과 경로가 잡혀 있는지 확인합니다.</li>
               <li><code>geode config explain model</code>. 설정이 어디서 가려지는지 봅니다.</li>
               <li><code>pkill -f &quot;geode serve&quot;</code> 후 재진입. 데몬을 새로 띄웁니다.</li>
-              <li><code>geode setup -r</code>. <code>~/.geode/.env</code>와 dry-run 마커만 지우고 마법사를 다시 실행합니다. <code>auth.toml</code>의 키는 남고, <code>.env</code>에 둔 연동 토큰은 사라집니다.</li>
+              <li><code>geode setup -r</code>. 이미 쓸 수 있는 자격이 있어도 자격 설정 마법사를 다시 엽니다. 입력 전에 <code>~/.geode/.env</code>, <code>auth.toml</code>, dry-run 마커를 지우지 않습니다. 새로 입력해 성공한 provider의 키만 교체되고(성공하면 dry-run 마커는 해제됩니다), 취소하거나 실패하면 이 파일들이 그대로 남습니다.</li>
             </ol>
 
             <h2>업데이트와 삭제</h2>
@@ -176,7 +176,7 @@ uv tool install -e . --force`}</pre>
               <a href="/geode/docs/config/basics">Configuration basics</a>.
             </p>
             <pre>{`geode setup        # first-time setup
-geode setup -r     # delete ~/.geode/.env, rerun the wizard`}</pre>
+geode setup -r     # rerun credential setup; keeps existing credential files`}</pre>
 
             <h2>3. First conversation</h2>
             <p>
@@ -235,7 +235,7 @@ geode setup -r     # delete ~/.geode/.env, rerun the wizard`}</pre>
               <li><code>geode about</code>. What model and paths are actually in effect.</li>
               <li><code>geode config explain model</code>. Where a setting is being masked.</li>
               <li><code>pkill -f &quot;geode serve&quot;</code>, then re-enter. Fresh daemon.</li>
-              <li><code>geode setup -r</code>. Deletes only <code>~/.geode/.env</code> and the dry-run marker, then reruns the wizard. Keys in <code>auth.toml</code> stay; integration tokens kept in <code>.env</code> are lost.</li>
+              <li><code>geode setup -r</code>. Reopens the credential wizard even when a working credential exists. It does not delete <code>~/.geode/.env</code>, <code>auth.toml</code>, or the dry-run marker before entry. Only the provider whose key you enter successfully is replaced (a successful entry also clears the dry-run marker); cancelling or failing leaves those files as they were.</li>
             </ol>
 
             <h2>Update and uninstall</h2>

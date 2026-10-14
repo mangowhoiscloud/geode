@@ -481,10 +481,8 @@ OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "cache-poli
 AUTORESEARCH_HEURISTICS_PATH = AUTORESEARCH_POLICIES_DIR / "heuristics.json"
 OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "heuristics.json"
 # ADR-012 S5 (2026-05-21) — in-context slot configuration SoT. Declares
-# the 4 canonical slot categories (exemplars / memory_recall /
-# rubric_excerpts / tool_hints) and their per-slot top-K / rank_by /
-# injection_point. M4.4 후속 PR 이 이 schema 를 실제 inference path 에서
-# 소비하는 wiring 을 담당; 본 PR 은 schema + reader + validation 만.
+# the canonical slot categories and their per-slot top-K (``max_entries``);
+# ranking and placement are fixed in ``in_context_wiring.py``.
 AUTORESEARCH_IN_CONTEXT_SLOTS_PATH = AUTORESEARCH_POLICIES_DIR / "in-context-slots.json"
 OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "in-context-slots.json"
 # ADR-012 M2 (2026-05-21) — AgentDefinition contract mutation SoT.

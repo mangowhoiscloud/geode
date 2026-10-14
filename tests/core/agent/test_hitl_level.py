@@ -93,7 +93,9 @@ class TestAlwaysApproval:
         """When user responds 'a' to bash approval, 'bash' category is added."""
         executor = ToolExecutor()
         with patch.object(executor._approval, "prompt_with_always", return_value="a"):
-            approved = executor._approval.request_bash_approval("npm install foo", "test")
+            approved = asyncio.run(
+                executor._approval.request_bash_approval_async("npm install foo", "test")
+            )
         assert approved is True
         assert "bash" in executor._always_approved_categories
 
@@ -124,7 +126,9 @@ class TestAlwaysApproval:
             patch.object(executor._approval, "prompt_with_always", return_value="a"),
             patch("core.agent.approval.console"),
         ):
-            approved = executor._approval.confirm_write("memory_save", {"content": "test"})
+            approved = asyncio.run(
+                executor._approval.confirm_write_async("memory_save", {"content": "test"})
+            )
         assert approved is True
         assert "write" in executor._always_approved_categories
 
@@ -142,6 +146,33 @@ class TestAlwaysApproval:
             mock_prompt.assert_not_called()
         assert result["status"] == "ok"
 
+    def test_one_time_approvals_never_promote_to_always(self) -> None:
+        """Three ``y`` answers stay one-time: the fourth write, an unrelated
+        write, and a mutating bash command all still ask."""
+        save = MagicMock(return_value={"status": "ok"})
+        note = MagicMock(return_value={"status": "ok"})
+        executor = ToolExecutor(action_handlers={"memory_save": save, "note_save": note})
+        with (
+            patch.object(executor._approval, "prompt_with_always", return_value="y") as prompt,
+            patch("core.agent.approval.console"),
+            patch.object(
+                executor._bash,
+                "aexecute",
+                AsyncMock(return_value=BashResult(stdout="ok", returncode=0)),
+            ),
+        ):
+            for _ in range(4):
+                _run_executor(executor, "memory_save", {"key": "k", "content": "v"})
+            assert prompt.call_count == 4
+            _run_executor(executor, "note_save", {"key": "k", "content": "v"})
+            assert prompt.call_count == 5
+            for _ in range(4):
+                _run_executor(executor, "run_bash", {"command": "npm install foo", "reason": "t"})
+            assert prompt.call_count == 9
+        assert executor._always_approved_tools == set()
+        assert executor._always_approved_categories == set()
+        assert save.call_count == 4
+
     def test_cost_always_adds_category(self) -> None:
         """When user responds 'a' to cost approval, 'cost' category is added."""
         executor = ToolExecutor()
@@ -149,7 +180,7 @@ class TestAlwaysApproval:
             patch.object(executor._approval, "prompt_with_always", return_value="a"),
             patch("core.agent.approval.console"),
         ):
-            approved = executor._approval.confirm_cost("analyze_subject", 1.50)
+            approved = asyncio.run(executor._approval.confirm_cost_async("analyze_subject", 1.50))
         assert approved is True
         assert "cost" in executor._always_approved_categories
 
@@ -170,7 +201,9 @@ class TestAlwaysApproval:
             patch.object(executor._approval, "prompt_with_always", return_value="a"),
             patch("core.agent.approval.console"),
         ):
-            approved = executor._approval.confirm_mcp("custom-server", "some_tool")
+            approved = asyncio.run(
+                executor._approval.confirm_mcp_async("custom-server", "some_tool")
+            )
         assert approved is True
         assert "mcp:custom-server" in executor._always_approved_categories
 

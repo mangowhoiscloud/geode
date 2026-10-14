@@ -94,11 +94,15 @@ def env_setup_wizard() -> bool:
         )
     )
 
-    try:
-        choice = console.input("  Choice [1/2/3]: ").strip()
-    except (KeyboardInterrupt, EOFError):
-        console.print("\n  [muted]Setup cancelled.[/muted]\n")
-        return False
+    while True:
+        try:
+            choice = console.input("  Choice [1/2/3]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n  [muted]Setup cancelled.[/muted]\n")
+            return False
+        if choice in ("1", "2", "3"):
+            break
+        console.print("  [warning]Enter 1, 2, or 3 (Ctrl+C to cancel).[/warning]")
 
     if choice == "1":
         configured = _wizard_subscription_path()
@@ -116,7 +120,7 @@ def env_setup_wizard() -> bool:
             "\n  [warning]Could not save the dry-run choice under GEODE_HOME.[/warning]\n"
         )
         return False
-    configured = _wizard_api_key_path()
+    configured = _wizard_api_key_path()  # choice == "2"
     if configured:
         clear_dry_run_opt_in()
     return configured

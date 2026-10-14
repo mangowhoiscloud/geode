@@ -87,58 +87,90 @@ it, leaving subsequent approvals waiting indefinitely.
 The shared acquisition is now shielded and a cancelled waiter releases a late
 grant. The regression calls the real async approval entry, cancels while queued,
 checks that its prompt never ran, then completes a subsequent approval. The old
-code failed this test with `TimeoutError`. Sync API compatibility remains.
+code failed this test with `TimeoutError`. The sync gate twins were later removed (below).
 Cancellation during an already-running blocking prompt is a separate lifecycle
 problem and is not claimed solved here.
 
-### Open: approval frequency silently changes permission
+### Implemented locally: one-time approval stays one-time
 
-`core/agent/approval.py::track_decision` promotes three `y` decisions into
-`_always_approved_tools`; `_auto_grant_reason` / `is_bash_auto_approved` consume
-that state. This is tool-wide rather than bound to the three approved commands.
-An offline callback reproduction confirmed a later unrelated write was then
-auto-approved. There is already an explicit `a` choice.
+Before: `core/agent/approval.py::track_decision` promoted three `y` decisions
+into `_always_approved_tools`, which `_auto_grant_reason` and
+`is_bash_auto_approved` consumed. An offline callback reproduction showed a
+later unrelated write was then auto-approved.
 
-Recommendation: remove implicit promotion and preserve explicit `a`, scoped
-denials, per-invocation sensitive-data consent and sandbox enforcement. This
-changes existing approval semantics, so it is recorded separately from the
-behavior-preserving cancellation fix. Required oracle: fourth `y` request still
-asks; explicit `a` retains the documented scope. Unchanged in this candidate.
+After: `track_decision` only counts consecutive denials (any approval resets
+the streak); `_tool_approval_counts` and `_AUTO_APPROVE_THRESHOLD` are gone.
+Explicit `a` keeps its existing scope (write/cost/bash category, `mcp:<server>`,
+or the declared tool), and explicit deny, three-strike auto-deny,
+per-invocation personal-data consent, HITL levels, skip-permissions, ToolPlan
+minima and sandbox checks are unchanged. Oracle:
+`tests/core/agent/test_hitl_level.py::TestAlwaysApproval::test_one_time_approvals_never_promote_to_always`
+drives `ToolExecutor.aexecute`; on the previous code the fourth write was
+auto-approved (`assert 3 == 4`).
 
-### Open: accepted settings without a consuming decision
+### Implemented locally: in-context slot knobs without a consumer
 
-`InContextSlot.rank_by` and `injection_point` are accepted fields, including
-`tool_descriptions`, but the inspected consumers in
-`core/agent/policy_injection/in_context_wiring.py` use fixed ranking and prepend
-tool hints to system text. The actual fields read are chiefly `max_entries`.
-This is opt-in middleware, not proof of overhead on every normal turn.
+`InContextSlot` now carries only `name` and `max_entries`, the field
+`in_context_wiring.py` reads. `rank_by`, `injection_point`,
+`INJECTION_*` and `VALID_INJECTION_POINTS` are retired as public controls.
+Compatibility is limited to activation that already worked: a saved file
+whose legacy values were valid (string `rank_by`; `injection_point` of
+`system_prompt` or `tool_descriptions`) still activates its slots by
+`max_entries`, with a debug-level note (the wiring reloads the policy on every
+call), and renders output identical to the canonical file. Previously invalid
+legacy values keep their old rejection through private checks: a non-string
+value rejects the whole file (strict override raises; graceful sources are
+ignored), and an unknown `injection_point` drops only that slot. To migrate,
+delete both keys. No such file was found in the repository, its history, or
+the operator-local path on this machine, which does not prove user-saved files
+never exist. An independent review caught an earlier draft of this change that
+activated previously invalid files; that draft was repaired before handoff.
+The slot kind is already
+reader-only (`_READER_ONLY_KINDS`, not in `TARGET_KINDS`), so the mutator
+never spent trials on these keys. Oracle:
+`test_legacy_slot_keys_render_the_same_fixed_output` renders an identical
+system prompt for a valid legacy file and the canonical `max_entries` file;
+`test_load_unknown_injection_point_drops_slot`,
+`test_load_non_string_legacy_key_rejects_file` and
+`test_strict_override_non_string_legacy_key_raises` pin the retained
+rejection.
 
-Recommendation: retire unsupported choices with compatibility handling for
-existing policy files; do not implement a generic injection framework merely
-to justify the knobs. Required oracle: existing supported output remains and
-unsupported settings no longer imply behavior they cannot select.
+### Implemented locally: auth recovery text and setup reset
 
-### Open: auth recovery text and reset semantics
+- `/login health` cooldown advice and the credential breadcrumb no longer
+  present plan `use` as a provider switch. `use` is described as same-provider
+  plan preference; provider changes point to `/model <model>` or, once the
+  user asks, `switch_model(model_hint=...)` (schema verified in
+  `core/tools/definitions.json`; it stages a session-scoped change). No
+  automatic cross-provider or PAYG fallback was added.
+- Expired OAuth health advice now follows the profile owner: native GEODE
+  OAuth → `/login openai`; imported `managed_by="codex-cli"` → `codex login`
+  then `/login refresh`. The breadcrumb already distinguished both.
+- `geode setup --reset` no longer unlinks `~/.geode/.env` or clears the
+  dry-run marker before entry. It reopens the credential wizard even when a
+  credential works. A successful entry replaces only the selected provider's
+  key through `save_api_key` and, like any successful setup, clears the
+  dry-run marker; cancellation or failure leaves `.env`, `auth.toml` and an
+  existing marker byte-identical. The later sandbox and Computer Use setup
+  steps keep their existing behavior; no claim is made that the whole command
+  leaves every machine setting unchanged. No real reset was executed.
+- The setup wizard re-asks on an empty or unknown choice instead of routing
+  it to API-key entry.
 
-- `/login health` and `credential_breadcrumb.py` suggest plan `use` as a
-  cross-provider fix. `_login_use` only changes routing for the plan's own
-  provider; `manage_login use` does not switch the current session model.
-  Point cross-provider recovery to the existing model-selection path instead.
-- Expired OAuth health guidance only recommends external `codex login`, while
-  GEODE-native OAuth is stored independently. Native versus imported credential
-  recovery should be distinguished, as the existing breadcrumb already does.
-- `core/cli/typer_commands.py::setup(reset=True)` unlinks the entire global
-  `.env`, even though registered credentials now live in `auth.toml` and `.env`
-  may contain unrelated integrations. No reset was executed during this audit.
-  Define a narrow reset contract and test unrelated-key preservation before
-  changing deletion behavior; do not expand deletion to all auth.toml contents.
+### Implemented locally: sync approval twins removed; Rust rewrite deferred
 
-### Defer: sync approval branch removal and a Rust rewrite
-
-The inspected runtime calls async approval methods; sync public methods and
-some source-text tests remain. Test-only visibility does not establish absence
-of external consumers. Move surviving behavioral oracles to async entries and
-confirm compatibility before deleting those methods.
+The sync `apply_safety_gates`, `confirm_write`, `confirm_cost`,
+`confirm_sensitive`, `confirm_mcp` and `request_bash_approval` had no
+production caller: `ApprovalWorkflow` is constructed only by `ToolExecutor`,
+which calls the async gates, and the class is not exported or documented as a
+plugin surface. The CHANGELOG had already recorded them as dead in production.
+They are deleted; the async gates are the single policy implementation.
+Behavioral oracles moved to the async entries, and source-text tests (lock
+placement, hook emission count) were replaced with behavior: parallel gates
+never overlap prompts, a queued caller observes an earlier `a`, and one gate
+emits one `TOOL_APPROVAL_REQUESTED`. Retained: sync `prompt_with_always`, the
+blocking terminal/IPC prompt owner run through `asyncio.to_thread`, and the
+`threading.Lock` behind `_with_approval_locks`, which spans event loops.
 
 No measured latency, memory, packaging or concurrency evidence justifies a full
 Rust rewrite. The inspected Codex Rust source also retains separate auth manager,
@@ -171,6 +203,13 @@ runtime reconstruction is claimed.
   and research evidence; total repository diff is not a net deletion.
 - A separate reviewer checked the frontier section against the collected primary
   sources and found no actionable claim errors. Render-gated Markdown lint passed.
+
+- Follow-up batch (approval promotion, slot schema, auth advice, setup reset,
+  sync twins): affected suites `tests/core/{agent,server,hooks,cli,auth,wiring,config}`
+  and `tests/evolve/scaffold_search` passed (5518 passed, 1 skipped, after the review repair); repo-wide
+  `ruff check`, `ruff format --check`, `mypy core/ evals/ evolve/ scripts/`
+  and `lint-imports` passed. New regressions were confirmed to fail on the
+  previous code. Log paths are in `artifacts/runtime-simplicity-20261014/`.
 
 No paid provider calls, OAuth round trip, full suite, benchmark, protected-branch
 merge, release, reinstall or runtime restart was performed. Offline checks do
