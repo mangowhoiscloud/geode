@@ -8,9 +8,10 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from core.config.policy_source import PolicySourcePaths, load_policy_source
+if TYPE_CHECKING:
+    from core.config.policy_source import PolicySourcePaths
 
 
 class ExtensionSurface(StrEnum):
@@ -153,6 +154,9 @@ def _policy_hash(value: Any) -> str:
 
 def load_extension_policy(sources: PolicySourcePaths | None) -> ExtensionPolicy:
     """Load the selected operator policy; absence is an empty fail-closed policy."""
+    # Importing ``core.config`` loads the routing manifest; defer it to the
+    # policy read so importing the adapter registry stays cheap.
+    from core.config.policy_source import load_policy_source
 
     def validate(value: Any, _path: Any) -> None:
         try:
@@ -172,6 +176,7 @@ def load_extension_policy(sources: PolicySourcePaths | None) -> ExtensionPolicy:
 
 def load_default_extension_policy() -> ExtensionPolicy:
     """Load the operator-owned global policy or an explicit strict override."""
+    from core.config.policy_source import PolicySourcePaths
     from core.paths import GLOBAL_EXTENSION_POLICY_PATH
 
     return load_extension_policy(
