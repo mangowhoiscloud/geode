@@ -53,8 +53,6 @@ def test_schema_coerce_accepts_tool_ranking_entry(monkeypatch: pytest.MonkeyPatc
             {
                 "tool_ranking": {
                     "max_entries": 4,
-                    "rank_by": "wilson_lb",
-                    "injection_point": "system_prompt",
                 }
             }
         ),
@@ -67,7 +65,6 @@ def test_schema_coerce_accepts_tool_ranking_entry(monkeypatch: pytest.MonkeyPatc
     cfg = slots.get(SLOT_TOOL_RANKING)
     assert isinstance(cfg, InContextSlot)
     assert cfg.max_entries == 4
-    assert cfg.rank_by == "wilson_lb"
 
 
 def test_wiring_no_sot_returns_input_identity(monkeypatch: pytest.MonkeyPatch):
@@ -94,8 +91,6 @@ def test_wiring_emits_ranking_block_when_episodes_qualify(
             {
                 "tool_ranking": {
                     "max_entries": 3,
-                    "rank_by": "wilson_lb",
-                    "injection_point": "system_prompt",
                 }
             }
         ),
@@ -134,13 +129,9 @@ def test_wiring_emits_both_blocks_under_dual_slot_config(
             {
                 "tool_hints": {
                     "max_entries": 3,
-                    "rank_by": "fail_rate",
-                    "injection_point": "system_prompt",
                 },
                 "tool_ranking": {
                     "max_entries": 3,
-                    "rank_by": "wilson_lb",
-                    "injection_point": "system_prompt",
                 },
             }
         ),
@@ -185,6 +176,50 @@ def test_wiring_emits_both_blocks_under_dual_slot_config(
     )
 
 
+def test_legacy_slot_keys_render_the_same_fixed_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """A saved policy with valid retired ``rank_by`` / ``injection_point``
+    values still activates its slots, and those keys change nothing: the
+    rendered system prompt is identical to the canonical ``max_entries`` file
+    (even ``tool_descriptions`` placement renders into the system prompt, as
+    it always did)."""
+    episodes = [
+        *[_FakeEpisode("ok_tool", True) for _ in range(20)],
+        *[_FakeEpisode("bad_tool", False, "boom") for _ in range(10)],
+    ]
+    monkeypatch.setattr(
+        "core.agent.policy_injection.tool_hints.load_recent_episodes",
+        lambda limit=200: list(episodes),
+    )
+    payloads = {
+        "canonical": {"tool_hints": {"max_entries": 3}, "tool_ranking": {"max_entries": 3}},
+        "legacy": {
+            "tool_hints": {
+                "max_entries": 3,
+                "rank_by": "success_rate",
+                "injection_point": "tool_descriptions",
+            },
+            "tool_ranking": {
+                "max_entries": 3,
+                "rank_by": "wilson_lb",
+                "injection_point": "system_prompt",
+            },
+        },
+    }
+    rendered: dict[str, str] = {}
+    for label, payload in payloads.items():
+        sot = tmp_path / f"{label}.json"
+        sot.write_text(json.dumps(payload), encoding="utf-8")
+        monkeypatch.setenv("GEODE_IN_CONTEXT_SLOTS_OVERRIDE", str(sot))
+        _messages, rendered[label] = in_context_wiring.apply_in_context_slots(
+            [{"role": "user", "content": "x"}], system="BASE"
+        )
+    assert "<tool-hints>" in rendered["canonical"]
+    assert "<tool-ranking>" in rendered["canonical"]
+    assert rendered["legacy"] == rendered["canonical"]
+
+
 def test_wiring_graceful_when_ledger_read_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """A loader exception → both slots silently no-op, system prompt intact."""
     sot = tmp_path / "in-context-slots.json"
@@ -193,8 +228,6 @@ def test_wiring_graceful_when_ledger_read_fails(monkeypatch: pytest.MonkeyPatch,
             {
                 "tool_ranking": {
                     "max_entries": 3,
-                    "rank_by": "wilson_lb",
-                    "injection_point": "system_prompt",
                 }
             }
         ),

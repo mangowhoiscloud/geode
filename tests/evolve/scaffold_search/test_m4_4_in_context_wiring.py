@@ -95,8 +95,6 @@ def test_exemplars_slot_prepends_few_shot_pool(monkeypatch: pytest.MonkeyPatch) 
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
                 max_entries=2,
-                rank_by="fitness_delta",
-                injection_point="system_prompt",
             )
         },
     )
@@ -141,8 +139,6 @@ def test_exemplars_slot_empty_pool_no_op(monkeypatch: pytest.MonkeyPatch) -> Non
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
                 max_entries=3,
-                rank_by="fitness_delta",
-                injection_point="system_prompt",
             )
         },
     )
@@ -170,8 +166,6 @@ def test_exemplars_slot_pool_failure_logged_not_raised(
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
                 max_entries=2,
-                rank_by="fitness_delta",
-                injection_point="system_prompt",
             )
         },
     )
@@ -202,8 +196,6 @@ def test_system_passthrough_when_no_slot_targets_it(monkeypatch: pytest.MonkeyPa
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
                 max_entries=1,
-                rank_by="fitness_delta",
-                injection_point="system_prompt",
             )
         },
     )
@@ -482,20 +474,14 @@ def test_stub_slots_do_not_break_when_configured(monkeypatch: pytest.MonkeyPatch
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,
                 max_entries=5,
-                rank_by="recency",
-                injection_point="system_prompt",
             ),
             SLOT_RUBRIC_EXCERPTS: InContextSlot(
                 name=SLOT_RUBRIC_EXCERPTS,
                 max_entries=3,
-                rank_by="regression_severity",
-                injection_point="system_prompt",
             ),
             SLOT_TOOL_HINTS: InContextSlot(
                 name=SLOT_TOOL_HINTS,
                 max_entries=5,
-                rank_by="success_rate",
-                injection_point="tool_descriptions",
             ),
         },
     )

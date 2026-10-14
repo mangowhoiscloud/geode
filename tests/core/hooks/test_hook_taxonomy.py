@@ -405,17 +405,32 @@ def test_activity_and_hook_store_schema_versions_are_pinned():
 
 
 def test_single_approval_requested_per_gate():
-    """The outer safety gates no longer double-emit TOOL_APPROVAL_REQUESTED
+    """The outer safety gate does not double-emit TOOL_APPROVAL_REQUESTED
     around confirm_* (which emits internally, with the richer payload) —
-    Codex LOW-2. Pin: 11 sync/async emission sites, all inside
-    confirm_*/request_*."""
-    import inspect
+    Codex LOW-2. Driven through the real async gate entry."""
+    import asyncio
 
-    from core.agent import approval as approval_mod
+    from core.agent.approval import ApprovalWorkflow
 
-    src = inspect.getsource(approval_mod)
-    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 11
-    gates_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates)
-    assert "TOOL_APPROVAL_REQUESTED" not in gates_src
-    gates_async_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates_async)
-    assert "TOOL_APPROVAL_REQUESTED" not in gates_async_src
+    fired: list[HookEvent] = []
+
+    class _Hooks:
+        def trigger(self, event: HookEvent, data: dict[str, Any] | None = None) -> list[Any]:
+            fired.append(event)
+            return []
+
+        async def trigger_async(
+            self, event: HookEvent, data: dict[str, Any] | None = None
+        ) -> list[Any]:
+            fired.append(event)
+            return []
+
+    hooks: Any = _Hooks()
+    workflow = ApprovalWorkflow(
+        hooks=hooks,
+        approval_callback=lambda _name, _detail, _level: "y",
+    )
+    for tool_name in ("memory_save", "petri_audit"):
+        fired.clear()
+        assert asyncio.run(workflow.apply_safety_gates_async(tool_name, {})) == (None, True)
+        assert fired.count(HookEvent.TOOL_APPROVAL_REQUESTED) == 1

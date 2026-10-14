@@ -150,9 +150,9 @@ class TestSubcommandRouter:
 
     def test_anthropic_login_prompts_for_api_key(self) -> None:
         _reset_state()
-        with patch("core.cli.commands.login._login_anthropic_api_key") as login_api_key:
+        with patch("core.cli.commands.login.prompt_api_key") as login_api_key:
             cmd_login("anthropic")
-        login_api_key.assert_called_once_with()
+            login_api_key.assert_called_once_with("anthropic")
 
     def test_anthropic_login_persists_the_live_adapter_key(self, tmp_path: Path) -> None:
         _reset_state()
@@ -528,7 +528,7 @@ def test_hidden_key_entry_uses_single_auth_owner(entry: str, tmp_path: Path) -> 
         patch("core.cli.commands.console") as console,
         patch("core.cli.commands._upsert_env", side_effect=AssertionError("no env writes")),
     ):
-        menu.return_value.show.side_effect = [1, 0]
+        menu.return_value.show.return_value = 1
         assert cmd_login(args)
     hidden.assert_called_once()
     console.input.assert_not_called()
@@ -731,7 +731,7 @@ def test_hidden_key_empty_or_cancel_preserves_saved_credential(
         patch("getpass.getpass") as hidden,
         patch("core.cli.commands.console"),
     ):
-        menu.return_value.show.side_effect = [1, 0]
+        menu.return_value.show.return_value = 1
         if input_result == "":
             hidden.return_value = ""
         else:
@@ -742,10 +742,7 @@ def test_hidden_key_empty_or_cancel_preserves_saved_credential(
     assert profile.key == "synthetic-old"
 
 
-@pytest.mark.parametrize("menu_choices", [[None], [1, None]])
-def test_add_menu_cancel_does_not_request_or_save_credential(
-    menu_choices: list[int | None],
-) -> None:
+def test_add_menu_cancel_does_not_request_or_save_credential() -> None:
     with (
         patch("sys.stdin.isatty", return_value=True),
         patch("core.cli.commands.login.TerminalMenu") as menu,
@@ -753,7 +750,41 @@ def test_add_menu_cancel_does_not_request_or_save_credential(
         patch("core.auth.auth_toml.save_api_key") as save,
         patch("core.cli.commands.console"),
     ):
-        menu.return_value.show.side_effect = menu_choices
+        menu.return_value.show.return_value = None
         assert cmd_login("add") is False
     hidden.assert_not_called()
     save.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "index,provider", [(1, "anthropic"), (2, "openai"), (3, "openrouter"), (4, "glm")]
+)
+def test_add_selects_provider_once_and_persists_key(index: int, provider: str) -> None:
+    from core.wiring.container import ensure_profile_store
+
+    _reset_state()
+    with (
+        patch("sys.stdin.isatty", return_value=True),
+        patch("core.cli.commands.login.TerminalMenu") as menu,
+        patch("getpass.getpass", return_value="synthetic-provider-key") as hidden,
+        patch("core.cli.commands.console"),
+    ):
+        menu.return_value.show.return_value = index
+        assert cmd_login("add")
+    menu.assert_called_once()
+    hidden.assert_called_once()
+    assert ensure_profile_store().get_pinned_active(provider).key == "synthetic-provider-key"
+
+
+def test_add_subscription_skips_api_key_input() -> None:
+    with (
+        patch("sys.stdin.isatty", return_value=True),
+        patch("core.cli.commands.login.TerminalMenu") as menu,
+        patch("core.cli.commands.login._login_oauth") as oauth,
+        patch("getpass.getpass") as hidden,
+    ):
+        menu.return_value.show.return_value = 0
+        assert cmd_login("add")
+    menu.assert_called_once()
+    oauth.assert_called_once_with("openai")
+    hidden.assert_not_called()

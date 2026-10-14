@@ -55,6 +55,19 @@ functional change.
 
 ### Fixed
 
+- **Approval cancellation.** Release a lock acquired after its awaiting request
+  was cancelled, so later tool approvals continue instead of waiting forever.
+- **Provider setup.** Offer OpenRouter alongside the other API-key providers
+  during initial setup and collect only the selected provider's hidden key.
+- **Setup menu input.** The setup wizard re-asks on an empty or unknown choice
+  instead of treating it as the API-key route; no key is requested or saved.
+- **Auth recovery advice.** `/login health` and the model-facing credential
+  note no longer present plan `use` as a provider switch (it only reorders
+  plans within one provider); provider switches point to `/model` or a
+  user-requested `switch_model`. Expired OAuth advice distinguishes native
+  `/login openai` from an imported Codex CLI token (`codex login`, then
+  `/login refresh`).
+
 - **Research resource routes.** Add a standalone publication collection and
   correct the Jev reader URL to `/research/jev-system1-offloading/`. Preserve
   shared homepage anchors and legacy reader/download addresses, and restore
@@ -62,7 +75,37 @@ functional change.
   Shorten collection selection URLs to the default report, `#jev`, or `#jevdb`,
   preserving historical selection links without duplicate history entries.
 
+### Removed
+
+- **Duplicate sync approval gates.** The unused synchronous
+  `ApprovalWorkflow.apply_safety_gates` / `confirm_write` / `confirm_cost` /
+  `confirm_sensitive` / `confirm_mcp` / `request_bash_approval` twins are
+  deleted; the async gates are the single policy implementation. The blocking
+  terminal prompt (`prompt_with_always`) stays as the prompt owner.
+
 ### Changed
+
+- **One-time approvals stay one-time.** Three `y` answers no longer promote a
+  tool to session-wide always-allow; only an explicit `a` grants a standing
+  allow. Consecutive-denial auto-deny, per-invocation personal-data consent,
+  HITL levels and skip-permissions are unchanged.
+- **`geode setup --reset` keeps credential files.** It reopens the credential
+  wizard even when a credential already works, instead of unlinking
+  `~/.geode/.env` and clearing the dry-run marker first. A successful entry
+  replaces only the selected provider's key (and clears the dry-run marker, as
+  any successful setup does); cancelling or failing leaves `.env`, `auth.toml`
+  and the marker as they were. The later sandbox and Computer Use steps are
+  unchanged.
+- **In-context slot policy schema.** `InContextSlot` exposes only the consumed
+  `max_entries`; ranking and placement stay fixed. Saved policies whose retired
+  `rank_by` / `injection_point` values were valid still load with identical
+  output (keys ignored; delete them to migrate). Previously invalid legacy
+  values keep their old rejection: a non-string value rejects the file, and an
+  unknown `injection_point` drops only that slot.
+
+- **Credential entry.** `/login add` selects ChatGPT sign-in or a provider API
+  key in one menu. Setup and direct Anthropic login share the same key-input
+  flow and existing credential persistence, validation and client invalidation.
 
 - **Restore light research readers.** GEODE, Jev Decision Offloading and JEVDB
   use their previous light reading workspaces, preserving source artifacts,
