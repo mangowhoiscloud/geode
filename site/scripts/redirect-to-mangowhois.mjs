@@ -105,7 +105,7 @@ const notFound = `<!doctype html>
 <script>(function(){
 var p=location.pathname,q=new URLSearchParams(location.search).get('lang'),en=q==='en';
 var site='https://mangowhois.ai'+(en?'/en':'');
-var u=site+'/products/geode/';
+var u=site+'/products/geode/'+(q==='ko'?'?lang=ko':'');
 var m=p.match(/^\\/geode\\/docs(?:\\/(.*?))?(?:\\.md|\\.html|\\/index\\.html)?\\/?$/);
 if(m){u=site+'/products/geode/docs/'+(m[1]?m[1].toLowerCase().replace(/_/g,'-')+'/':'');}
 else if(/^\\/geode\\/portfolio\\/versions\\//.test(p)){u=site+'/';}
@@ -118,7 +118,7 @@ location.replace(u);
 <h1>This page is not here</h1>
 <p>GEODE's landing and documentation moved to mangowhois.ai:</p>
 <ul>
-<li><a href="https://mangowhois.ai/en/products/geode/">GEODE</a> · <a href="https://mangowhois.ai/products/geode/" lang="ko">한국어</a></li>
+<li><a href="https://mangowhois.ai/en/products/geode/">GEODE</a> · <a href="https://mangowhois.ai/products/geode/?lang=ko" lang="ko">한국어</a></li>
 <li><a href="https://mangowhois.ai/en/products/geode/docs/">Documentation</a> · <a href="https://mangowhois.ai/products/geode/docs/" lang="ko">문서</a></li>
 <li><a href="https://mangowhoiscloud.github.io/geode/research/">Research</a> and the <a href="https://mangowhoiscloud.github.io/geode/self-improving/">experiment hub</a> remain here.</li>
 </ul>
