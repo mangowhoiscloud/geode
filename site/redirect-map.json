@@ -6,7 +6,7 @@
    "kind": "page",
    "default": "en",
    "to": {
-    "ko": "https://mangowhois.ai/products/geode/",
+    "ko": "https://mangowhois.ai/products/geode/?lang=ko",
     "en": "https://mangowhois.ai/en/products/geode/"
    },
    "note": "Product landing"
@@ -16,7 +16,7 @@
    "kind": "page",
    "default": "en",
    "to": {
-    "ko": "https://mangowhois.ai/products/geode/",
+    "ko": "https://mangowhois.ai/products/geode/?lang=ko",
     "en": "https://mangowhois.ai/en/products/geode/"
    },
    "note": "Alias of the landing"

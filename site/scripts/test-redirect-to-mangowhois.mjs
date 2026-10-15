@@ -58,6 +58,12 @@ try {
       assert.equal(navigate(html, entry.from, '?lang=ja'), target);
     } else assert.ok(read(path).includes(target));
   }
+  // Destination semantics matter: the original landing defaults to English,
+  // so the Korean request must survive as a query on the new host.
+  for (const path of ['index.html', 'portfolio/index.html']) {
+    assert.equal(navigate(read(path), '/geode/', '?lang=ko', '#install'), 'https://mangowhois.ai/products/geode/?lang=ko#install');
+    assert.equal(navigate(read(path), '/geode/'), 'https://mangowhois.ai/en/products/geode/');
+  }
   for (const path of retained) assert.equal(read(path), `preserve ${path}`);
   for (const path of ['index.txt', '__next._tree.txt', '404']) assert.ok(!existsSync(join(out, path)));
   assert.equal(read('sitemap.xml'), '<urlset><url><loc>https://mangowhoiscloud.github.io/geode/research/</loc></url></urlset>');
@@ -65,6 +71,10 @@ try {
   assert.equal(navigate(notFound, '/geode/docs/runtime/Agent_Loop/index.html', '?lang=en', '#setup'), 'https://mangowhois.ai/en/products/geode/docs/runtime/agent-loop/#setup');
   assert.equal(navigate(notFound, '/geode/docs/quick-start.md'), 'https://mangowhois.ai/products/geode/docs/quick-start/');
   assert.equal(navigate(notFound, '/geode/about/missing', '', '#other'), 'https://mangowhois.ai/#profile');
+  assert.equal(navigate(notFound, '/geode/missing', '?lang=ko', '#install'), 'https://mangowhois.ai/products/geode/?lang=ko#install');
+  assert.equal(navigate(notFound, '/geode/missing', '?lang=en', '#install'), 'https://mangowhois.ai/en/products/geode/#install');
+  assert.equal(navigate(notFound, '/geode/docs/quick-start.html', '?lang=ko', '#setup'), 'https://mangowhois.ai/products/geode/docs/quick-start/#setup');
+  assert.ok(notFound.includes('href="https://mangowhois.ai/products/geode/?lang=ko" lang="ko"'));
   const invalidMap = join(out, 'invalid-map.json');
   for (const badEntry of [
     { ...geode[0], from: '/geode/../outside/' },
