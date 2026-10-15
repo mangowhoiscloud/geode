@@ -1,0 +1,3187 @@
+{
+ "generated": "scripts/pages-migration-map.mjs",
+ "geode": [
+  {
+   "from": "/geode/",
+   "kind": "page",
+   "default": "en",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/",
+    "en": "https://mangowhois.ai/en/products/geode/"
+   },
+   "note": "Product landing"
+  },
+  {
+   "from": "/geode/portfolio/",
+   "kind": "page",
+   "default": "en",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/",
+    "en": "https://mangowhois.ai/en/products/geode/"
+   },
+   "note": "Alias of the landing"
+  },
+  {
+   "from": "/geode/portfolio/versions/v1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/portfolio/versions/v2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/portfolio/versions/v3/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/portfolio/versions/v4/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/portfolio/versions/v5/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/portfolio/versions/v6/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/portfolio/versions/v7/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/portfolio/versions/v8/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/portfolio/versions/v9/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/",
+    "en": "https://mangowhois.ai/en/"
+   },
+   "note": "Old personal portfolio version (not reintroduced): the portfolio home"
+  },
+  {
+   "from": "/geode/about/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/#profile",
+    "en": "https://mangowhois.ai/en/#profile"
+   },
+   "note": "Author page: the site profile"
+  },
+  {
+   "from": "/geode/docs/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/architecture/agentic-loop/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/architecture/agentic-loop/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/architecture/agentic-loop/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/architecture/overview/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/architecture/overview/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/architecture/overview/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/architecture/system-index/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/architecture/system-index/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/architecture/system-index/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/benchmarks/geo/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/benchmarks/geo/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/benchmarks/geo/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/benchmarks/mcpmark/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/benchmarks/mcpmark/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/benchmarks/mcpmark/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/benchmarks/tau2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/benchmarks/tau2/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/benchmarks/tau2/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/benchmarks/terminal-bench/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/benchmarks/terminal-bench/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/benchmarks/terminal-bench/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/capabilities/autoresearch/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/autoresearch/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/autoresearch/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/capabilities/co-scientist/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/co-scientist/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/co-scientist/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/capabilities/lineage/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/lineage/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/lineage/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/capabilities/outer-loop/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/outer-loop/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/outer-loop/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/capabilities/seed-pipeline/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/seed-pipeline/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/seed-pipeline/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/codebase-map/layer-graph/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/codebase-map/layer-graph/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/codebase-map/layer-graph/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/concepts/two-loops/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/concepts/two-loops/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/concepts/two-loops/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/config/basics/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/config/basics/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/config/basics/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/config/reference/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/config/reference/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/config/reference/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/develop/architecture/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/develop/architecture/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/develop/architecture/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/explanation/4-layer/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/explanation/4-layer/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/explanation/4-layer/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/explanation/ratchet/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/explanation/ratchet/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/explanation/ratchet/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/explanation/rsi-roadmap/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/explanation/rsi-roadmap/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/explanation/rsi-roadmap/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/explanation/self-hosting/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/explanation/self-hosting/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/explanation/self-hosting/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/guides/binding/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/binding/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/binding/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/guides/custom-tool/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/custom-tool/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/custom-tool/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/guides/debug-stuck-run/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/debug-stuck-run/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/debug-stuck-run/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/guides/llm-adapter/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/llm-adapter/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/llm-adapter/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/guides/publish-trajectory/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/publish-trajectory/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/publish-trajectory/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/guides/register-hook/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/register-hook/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/register-hook/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/harness/cli/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/harness/cli/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/harness/cli/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/harness/hooks/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/harness/hooks/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/harness/hooks/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/harness/lifecycle/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/harness/lifecycle/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/harness/lifecycle/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/harness/serve-gateway/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/harness/serve-gateway/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/harness/serve-gateway/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/ops/backlog-dispose/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/backlog-dispose/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/backlog-dispose/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/ops/cost/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/cost/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/cost/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/ops/long-running/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/long-running/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/long-running/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/ops/oauth/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/oauth/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/oauth/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/ops/release-pypi-lifecycle/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/release-pypi-lifecycle/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/release-pypi-lifecycle/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/overview/how-it-runs/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/overview/how-it-runs/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/overview/how-it-runs/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/petri/judge-dimensions/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/judge-dimensions/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/judge-dimensions/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/petri/overview/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/overview/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/overview/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/petri/run/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/run/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/run/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/petri/scenarios/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/scenarios/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/scenarios/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/quick-start/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/quick-start/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/quick-start/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/reference/changelog/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/changelog/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/changelog/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/reference/external-references/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/external-references/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/external-references/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/reference/frontier-comparison/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/frontier-comparison/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/frontier-comparison/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/reference/meta-harness-catalog/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/meta-harness-catalog/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/meta-harness-catalog/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/reference/petri-bundle-isolation/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/petri-bundle-isolation/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/petri-bundle-isolation/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/research/overview/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/research/overview/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/research/overview/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/run/google-workspace/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/google-workspace/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/google-workspace/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/run/messaging/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/messaging/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/messaging/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/run/pick-path/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/pick-path/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/pick-path/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/run/providers/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/providers/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/providers/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/run/schedule/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/schedule/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/schedule/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/run/serve/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/serve/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/serve/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/run/troubleshooting/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/troubleshooting/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/troubleshooting/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/auth/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/auth/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/auth/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/automation/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/automation/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/automation/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/computer-use/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/computer-use/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/computer-use/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/context/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/context/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/context/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/prompt-caching/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/prompt-caching/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/prompt-caching/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/prompt-hashing/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/prompt-hashing/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/prompt-hashing/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/prompt-system/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/prompt-system/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/prompt-system/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/providers/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/providers/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/providers/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/structured-output/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/structured-output/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/structured-output/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/system-prompt-modes/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/system-prompt-modes/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/system-prompt-modes/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/tool-calling/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/tool-calling/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/tool-calling/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/memory/5-tier/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/memory/5-tier/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/memory/5-tier/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/orchestration/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/orchestration/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/orchestration/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/research/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/research/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/research/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/scheduler/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/scheduler/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/scheduler/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/skills/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/skills/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/skills/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/tools/mcp/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/tools/mcp/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/tools/mcp/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/tools/protocol/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/tools/protocol/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/tools/protocol/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/runtime/ui/cli-latex/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/ui/cli-latex/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/ui/cli-latex/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/verification/evaluation/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/verification/evaluation/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/verification/evaluation/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/verification/observability/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/verification/observability/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/verification/observability/"
+   },
+   "note": "Docs page"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-000-3a579f33/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-000-3a579f33/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-000-3a579f33/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-000-ev-7b2e1f44/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-000-ev-7b2e1f44/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-000-ev-7b2e1f44/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-001-c13254be/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-001-c13254be/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-001-c13254be/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-001-dc8b5d00/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-001-dc8b5d00/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-001-dc8b5d00/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-002-1f988cf2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-002-1f988cf2/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-002-1f988cf2/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-002-9fce12f5/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-002-9fce12f5/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-002-9fce12f5/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-003-f4ce2b7a/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-003-f4ce2b7a/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-003-f4ce2b7a/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-003-f7af03d2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-003-f7af03d2/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-003-f7af03d2/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-004-8c46fc25/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-004-8c46fc25/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-004-8c46fc25/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-005-8500ea57/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-005-8500ea57/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-005-8500ea57/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-006-d5313e4d/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-006-d5313e4d/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-006-d5313e4d/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/frontier-2612-bt-broken_tool_use/frontier-2612-bt-007-4452ca27/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-007-4452ca27/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/frontier-2612-bt-broken-tool-use/frontier-2612-bt-007-4452ca27/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-000-594b5c0c/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-000-594b5c0c/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-000-594b5c0c/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-001-b0a469ea/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-001-b0a469ea/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-001-b0a469ea/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-001-evo-7c3f1a82/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-001-evo-7c3f1a82/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-001-evo-7c3f1a82/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-002-3f2cef5b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-002-3f2cef5b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-002-3f2cef5b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-002-evolve-a7c4d9e2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-002-evolve-a7c4d9e2/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-002-evolve-a7c4d9e2/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-003-0edeab89/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-003-0edeab89/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-003-0edeab89/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-004-e6ee6071/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-004-e6ee6071/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-004-e6ee6071/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-005-1ee522ee/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-005-1ee522ee/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-005-1ee522ee/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-006-1fbe50c4/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-006-1fbe50c4/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-006-1fbe50c4/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-006-21d2c52b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-006-21d2c52b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-006-21d2c52b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-007-9b4d9257/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-007-9b4d9257/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-007-9b4d9257/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-008-fa28b643/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-008-fa28b643/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-008-fa28b643/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-008e-d15d1693/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-008e-d15d1693/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-008e-d15d1693/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-009-007e52fe/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-009-007e52fe/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-009-007e52fe/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-010-81d4d13a/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-010-81d4d13a/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-010-81d4d13a/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-011-00818a03/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-011-00818a03/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-011-00818a03/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-011-4d7a2b9e/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-011-4d7a2b9e/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-011-4d7a2b9e/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-012-13e58db3/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-012-13e58db3/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-012-13e58db3/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-013-0d82ea2c/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-013-0d82ea2c/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-013-0d82ea2c/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-1-redundant_tool_invocation/gen-2605-1-014-354b1157/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-014-354b1157/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-1-redundant-tool-invocation/gen-2605-1-014-354b1157/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-000-3eccf591/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-000-3eccf591/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-000-3eccf591/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-000e-7a8b3c2d/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-000e-7a8b3c2d/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-000e-7a8b3c2d/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-001-e1163221/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-001-e1163221/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-001-e1163221/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-002-3423103f/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-002-3423103f/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-002-3423103f/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-003-ac89a36e/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-003-ac89a36e/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-003-ac89a36e/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-003e-7b3a2f91/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-003e-7b3a2f91/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-003e-7b3a2f91/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-004-2c071fc1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-004-2c071fc1/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-004-2c071fc1/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-005-451e6063/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-005-451e6063/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-005-451e6063/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-005-7a3f0b2c/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-005-7a3f0b2c/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-005-7a3f0b2c/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-006-d52b6714/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-006-d52b6714/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-006-d52b6714/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-006-e869ae30/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-006-e869ae30/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-006-e869ae30/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-007-6d0c27f3/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-007-6d0c27f3/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-007-6d0c27f3/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-008-ff906419/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-008-ff906419/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-008-ff906419/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-008e-3b7a9f1c/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-008e-3b7a9f1c/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-008e-3b7a9f1c/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-009-1192c133/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-009-1192c133/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-009-1192c133/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-010-9c13ec3d/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-010-9c13ec3d/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-010-9c13ec3d/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-011-b32b7b92/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-011-b32b7b92/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-011-b32b7b92/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-012-17e7f0a9/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-012-17e7f0a9/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-012-17e7f0a9/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-013-54fced92/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-013-54fced92/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-013-54fced92/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-2-redundant_tool_invocation/gen-2605-2-014-510faa52/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-014-510faa52/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-2-redundant-tool-invocation/gen-2605-2-014-510faa52/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-000-5f02a401/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-000-5f02a401/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-000-5f02a401/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-001-3a2b8831/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-001-3a2b8831/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-001-3a2b8831/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-002-59743f9d/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-002-59743f9d/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-002-59743f9d/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-002-59743f9d-evo-a4f1c2e8/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-002-59743f9d-evo-a4f1c2e8/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-002-59743f9d-evo-a4f1c2e8/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-003-8ddb31d0/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-003-8ddb31d0/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-003-8ddb31d0/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-003-e7a4c2b9/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-003-e7a4c2b9/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-003-e7a4c2b9/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-004-36893e53/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-004-36893e53/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-004-36893e53/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-005-0ce25ac8/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-005-0ce25ac8/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-005-0ce25ac8/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-005-0ce25ac8-evo-f4a91c3b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-005-0ce25ac8-evo-f4a91c3b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-005-0ce25ac8-evo-f4a91c3b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-006-6ecf2412/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-006-6ecf2412/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-006-6ecf2412/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-006-6ecf2412-evo-8e0c5d9e/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-006-6ecf2412-evo-8e0c5d9e/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-006-6ecf2412-evo-8e0c5d9e/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-007-d8b5c1fd/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-007-d8b5c1fd/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-007-d8b5c1fd/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-008-89487678/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-008-89487678/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-008-89487678/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-009-e243aa10/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-009-e243aa10/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-009-e243aa10/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-010-6c4bfe63/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-010-6c4bfe63/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-010-6c4bfe63/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-011-bce85652/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-011-bce85652/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-011-bce85652/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-012-2424a70c/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-012-2424a70c/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-012-2424a70c/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-013-fd6b0d2b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-013-fd6b0d2b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-013-fd6b0d2b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-013-fd6b0d2b-evo-a7b4c2e1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-013-fd6b0d2b-evo-a7b4c2e1/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-013-fd6b0d2b-evo-a7b4c2e1/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-3-broken_tool_use/gen-2605-3-014-7b0e221d/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-014-7b0e221d/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-3-broken-tool-use/gen-2605-3-014-7b0e221d/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-000-e8001352/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-000-e8001352/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-000-e8001352/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-001-c5dfe623/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-001-c5dfe623/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-001-c5dfe623/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-002-32d67763/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-002-32d67763/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-002-32d67763/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-003-e2b9759a/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-003-e2b9759a/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-003-e2b9759a/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-003-evo1-f866935e/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-003-evo1-f866935e/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-003-evo1-f866935e/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-004-c4e5770b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-004-c4e5770b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-004-c4e5770b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-004-evo1-2443837b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-004-evo1-2443837b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-004-evo1-2443837b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-005-29c3f084/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-005-29c3f084/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-005-29c3f084/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-005-evo1-a4f8b2c1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-005-evo1-a4f8b2c1/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-005-evo1-a4f8b2c1/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-006-f1907f32/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-006-f1907f32/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-006-f1907f32/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-007-b63155fc/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-007-b63155fc/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-007-b63155fc/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-008-b09d7758/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-008-b09d7758/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-008-b09d7758/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-009-1ceb75e0/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-009-1ceb75e0/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-009-1ceb75e0/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-009-c860d8ec/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-009-c860d8ec/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-009-c860d8ec/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-010-91e734c9/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-010-91e734c9/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-010-91e734c9/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-010-evo1-7d2c4a91/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-010-evo1-7d2c4a91/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-010-evo1-7d2c4a91/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-011-d553fcf3/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-011-d553fcf3/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-011-d553fcf3/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-012-7dde8796/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-012-7dde8796/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-012-7dde8796/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-013-88b524d2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-013-88b524d2/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-013-88b524d2/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen-2605-4-unfaithful_thinking/gen-2605-4-014-d036c9a0/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-014-d036c9a0/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen-2605-4-unfaithful-thinking/gen-2605-4-014-d036c9a0/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-broken_tool_use/gen1-000-a047886e/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-000-a047886e/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-000-a047886e/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-broken_tool_use/gen1-001-d4b78b3d/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-001-d4b78b3d/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-001-d4b78b3d/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-broken_tool_use/gen1-002-f4580bc8/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-002-f4580bc8/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-002-f4580bc8/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-broken_tool_use/gen1-003-dbbfc17c/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-003-dbbfc17c/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-003-dbbfc17c/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-broken_tool_use/gen1-004-46ce8bd3/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-004-46ce8bd3/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-broken-tool-use/gen1-004-46ce8bd3/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-000-83b2299b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-000-83b2299b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-000-83b2299b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-000-d6a12862/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-000-d6a12862/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-000-d6a12862/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-000-e9ce510a/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-000-e9ce510a/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-000-e9ce510a/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-000-evo-a4f3c812/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-000-evo-a4f3c812/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-000-evo-a4f3c812/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-001-56634935/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-001-56634935/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-001-56634935/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-001-767efd96/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-001-767efd96/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-001-767efd96/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-001-cb93ebd8/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-001-cb93ebd8/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-001-cb93ebd8/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-002-2a282eaf/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-2a282eaf/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-2a282eaf/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-002-7fb9bcfe/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-7fb9bcfe/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-7fb9bcfe/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-002-evo-7c3d4e1f/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-evo-7c3d4e1f/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-evo-7c3d4e1f/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-002-evo-b99a66f2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-evo-b99a66f2/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-evo-b99a66f2/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-002-evo-f4a7cd96/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-evo-f4a7cd96/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-002-evo-f4a7cd96/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-003-b452ee89/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-003-b452ee89/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-003-b452ee89/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-003-d5bf35f7/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-003-d5bf35f7/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-003-d5bf35f7/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-003e-c8f2a9d1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-003e-c8f2a9d1/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-003e-c8f2a9d1/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-004-4106863e/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-004-4106863e/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-004-4106863e/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-004-ec7ef183/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-004-ec7ef183/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-004-ec7ef183/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-005-a7b3c4d1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-a7b3c4d1/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-a7b3c4d1/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-005-a8e33e5b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-a8e33e5b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-a8e33e5b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-005-b8c4d5e2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-b8c4d5e2/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-b8c4d5e2/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-005-evo-b963b824/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-evo-b963b824/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-evo-b963b824/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-005-f92dcb88/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-f92dcb88/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-005-f92dcb88/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-006-8eef7bf1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-006-8eef7bf1/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-006-8eef7bf1/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-006-9f71db57/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-006-9f71db57/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-006-9f71db57/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-007-b99d8492/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007-b99d8492/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007-b99d8492/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-007-d5bfee58/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007-d5bfee58/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007-d5bfee58/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-007-d983cb89/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007-d983cb89/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007-d983cb89/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-007e-c4a2f80b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007e-c4a2f80b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007e-c4a2f80b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-007e-d8b3f190/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007e-d8b3f190/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-007e-d8b3f190/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-008-75bee405/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-008-75bee405/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-008-75bee405/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-008-cc9a0e93/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-008-cc9a0e93/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-008-cc9a0e93/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-009-b40dd1ed/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-009-b40dd1ed/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-009-b40dd1ed/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-009-b4dbc978/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-009-b4dbc978/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-009-b4dbc978/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-009-dfa27990/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-009-dfa27990/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-009-dfa27990/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-010-2c14031f/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-010-2c14031f/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-010-2c14031f/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-010-8645a85b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-010-8645a85b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-010-8645a85b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-011-18c3f274/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-011-18c3f274/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-011-18c3f274/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-011-18c3f274-dcae201d/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-011-18c3f274-dcae201d/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-011-18c3f274-dcae201d/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-011-3e68a170/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-011-3e68a170/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-011-3e68a170/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-012-11fe6eba/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-012-11fe6eba/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-012-11fe6eba/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-012-b3533b08/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-012-b3533b08/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-012-b3533b08/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-012e-7a3f1c9b/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-012e-7a3f1c9b/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-012e-7a3f1c9b/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-012e-f208edd1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-012e-f208edd1/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-012e-f208edd1/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-013-1a10f405/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-013-1a10f405/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-013-1a10f405/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-013-ccda5eec/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-013-ccda5eec/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-013-ccda5eec/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-014-0c037d67/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014-0c037d67/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014-0c037d67/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-014-667ad9fa/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014-667ad9fa/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014-667ad9fa/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-014e-a3f2b71c/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014e-a3f2b71c/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014e-a3f2b71c/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-014e-b4d8e2f5/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014e-b4d8e2f5/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014e-b4d8e2f5/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-014e-c7d9b3a1/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014e-c7d9b3a1/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014e-c7d9b3a1/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs/petri/seeds/gen1-redundant_tool_invocation/gen1-014e-e7a2c9d4/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014e-e7a2c9d4/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/gen1-redundant-tool-invocation/gen1-014e-e7a2c9d4/"
+   },
+   "note": "Seed candidate"
+  },
+  {
+   "from": "/geode/docs.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/overview/how-it-runs.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/overview/how-it-runs/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/overview/how-it-runs/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/architecture/overview.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/architecture/overview/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/architecture/overview/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/quick-start.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/quick-start/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/quick-start/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/run/pick-path.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/pick-path/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/pick-path/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/run/providers.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/providers/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/providers/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/run/serve.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/serve/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/serve/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/run/google-workspace.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/google-workspace/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/google-workspace/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/concepts/two-loops.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/concepts/two-loops/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/concepts/two-loops/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/architecture/agentic-loop.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/architecture/agentic-loop/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/architecture/agentic-loop/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/context.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/context/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/context/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/memory/5-tier.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/memory/5-tier/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/memory/5-tier/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/prompt-system.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/prompt-system/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/prompt-system/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/tools/protocol.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/tools/protocol/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/tools/protocol/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/harness/hooks.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/harness/hooks/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/harness/hooks/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/providers.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/providers/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/providers/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/tool-calling.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/tool-calling/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/tool-calling/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/structured-output.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/structured-output/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/structured-output/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/orchestration.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/orchestration/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/orchestration/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/skills.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/skills/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/skills/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/research/overview.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/research/overview/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/research/overview/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/capabilities/autoresearch.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/autoresearch/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/autoresearch/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/capabilities/co-scientist.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/co-scientist/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/co-scientist/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/capabilities/seed-pipeline.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/seed-pipeline/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/seed-pipeline/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/capabilities/outer-loop.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/outer-loop/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/outer-loop/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/verification/evaluation.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/verification/evaluation/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/verification/evaluation/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/petri/overview.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/overview/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/overview/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/petri/scenarios.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/scenarios/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/scenarios/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/petri/run.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/run/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/run/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/petri/judge-dimensions.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/judge-dimensions/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/judge-dimensions/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/petri/seeds.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/petri/seeds/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/petri/seeds/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/capabilities/lineage.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/capabilities/lineage/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/capabilities/lineage/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/harness/serve-gateway.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/harness/serve-gateway/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/harness/serve-gateway/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/run/messaging.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/messaging/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/messaging/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/run/schedule.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/schedule/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/schedule/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/scheduler.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/scheduler/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/scheduler/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/harness/lifecycle.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/harness/lifecycle/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/harness/lifecycle/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/ops/long-running.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/long-running/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/long-running/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/ops/cost.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/cost/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/cost/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/verification/observability.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/verification/observability/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/verification/observability/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/run/troubleshooting.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/run/troubleshooting/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/run/troubleshooting/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/benchmarks/geo.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/benchmarks/geo/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/benchmarks/geo/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/benchmarks/terminal-bench.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/benchmarks/terminal-bench/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/benchmarks/terminal-bench/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/benchmarks/tau2.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/benchmarks/tau2/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/benchmarks/tau2/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/benchmarks/mcpmark.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/benchmarks/mcpmark/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/benchmarks/mcpmark/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/guides/custom-tool.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/custom-tool/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/custom-tool/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/guides/register-hook.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/register-hook/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/register-hook/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/guides/publish-trajectory.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/publish-trajectory/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/publish-trajectory/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/guides/llm-adapter.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/llm-adapter/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/llm-adapter/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/guides/binding.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/binding/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/binding/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/guides/debug-stuck-run.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/guides/debug-stuck-run/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/guides/debug-stuck-run/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/config/basics.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/config/basics/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/config/basics/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/config/reference.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/config/reference/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/config/reference/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/auth.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/auth/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/auth/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/ops/oauth.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/oauth/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/oauth/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/system-prompt-modes.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/system-prompt-modes/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/system-prompt-modes/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/prompt-caching.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/prompt-caching/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/prompt-caching/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/llm/prompt-hashing.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/llm/prompt-hashing/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/llm/prompt-hashing/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/tools/mcp.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/tools/mcp/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/tools/mcp/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/reference/frontier-comparison.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/frontier-comparison/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/frontier-comparison/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/reference/external-references.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/external-references/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/external-references/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/reference/meta-harness-catalog.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/meta-harness-catalog/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/meta-harness-catalog/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/harness/cli.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/harness/cli/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/harness/cli/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/research.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/research/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/research/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/automation.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/automation/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/automation/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/computer-use.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/computer-use/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/computer-use/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/runtime/ui/cli-latex.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/runtime/ui/cli-latex/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/runtime/ui/cli-latex/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/reference/changelog.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/changelog/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/changelog/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/reference/petri-bundle-isolation.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/reference/petri-bundle-isolation/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/reference/petri-bundle-isolation/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/develop/architecture.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/develop/architecture/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/develop/architecture/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/architecture/system-index.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/architecture/system-index/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/architecture/system-index/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/explanation/4-layer.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/explanation/4-layer/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/explanation/4-layer/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/explanation/self-hosting.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/explanation/self-hosting/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/explanation/self-hosting/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/explanation/rsi-roadmap.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/explanation/rsi-roadmap/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/explanation/rsi-roadmap/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/explanation/ratchet.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/explanation/ratchet/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/explanation/ratchet/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/ops/release-pypi-lifecycle.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/release-pypi-lifecycle/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/release-pypi-lifecycle/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/ops/backlog-dispose.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/ops/backlog-dispose/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/ops/backlog-dispose/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/docs/codebase-map/layer-graph.md",
+   "kind": "text",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/docs/codebase-map/layer-graph/",
+    "en": "https://mangowhois.ai/en/products/geode/docs/codebase-map/layer-graph/"
+   },
+   "note": "Markdown twin"
+  },
+  {
+   "from": "/geode/llms.txt",
+   "kind": "text",
+   "default": "en",
+   "to": {
+    "ko": "https://mangowhois.ai/products/geode/llms.txt",
+    "en": "https://mangowhois.ai/products/geode/llms.txt"
+   },
+   "note": "Docs index for agents"
+  }
+ ],
+ "eco2": [
+  {
+   "from": "/eco2/",
+   "kind": "page",
+   "default": "ko",
+   "to": {
+    "ko": "https://mangowhois.ai/eco2/",
+    "en": "https://mangowhois.ai/en/eco2/"
+   },
+   "note": "Project record: the Eco² work on the site"
+  }
+ ]
+}
