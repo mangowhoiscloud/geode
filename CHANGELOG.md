@@ -122,6 +122,11 @@ functional change.
 
 ### Changed
 
+- **Public documentation destination.** Publish the moved landing and docs
+  routes as redirects to `mangowhois.ai`, preserving language and fragments.
+  Retain research readers, replay, experiment archives and PDFs on GitHub
+  Pages, and save the complete static export before applying redirects.
+
 - **Model lifecycle (2026-10-14).** GPT-5.5 (retired 2026-10-14) and
   GPT-5.3-Codex-Spark (retired 2026-09-14) are rejected on the Codex
   subscription before credential or network access, with the documented
