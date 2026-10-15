@@ -126,6 +126,9 @@ functional change.
   routes as redirects to `mangowhois.ai`, preserving language and fragments.
   Retain research readers, replay, experiment archives and PDFs on GitHub
   Pages, and save the complete static export before applying redirects.
+  Relocate that complete export to `/products/geode/` by changing owned URL
+  prefixes only, preserving the original design, Next.js interactions,
+  language queries, route spellings and binary assets with a hash manifest.
 
 - **Model lifecycle (2026-10-14).** GPT-5.5 (retired 2026-10-14) and
   GPT-5.3-Codex-Spark (retired 2026-09-14) are rejected on the Codex
