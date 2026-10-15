@@ -129,6 +129,8 @@ functional change.
   Relocate that complete export to `/products/geode/` by changing owned URL
   prefixes only, preserving the original design, Next.js interactions,
   language queries, route spellings and binary assets with a hash manifest.
+  Keep explicit Korean landing requests as `?lang=ko` in the redirect map
+  and unknown-path fallback, since the preserved landing defaults to English.
 
 - **Model lifecycle (2026-10-14).** GPT-5.5 (retired 2026-10-14) and
   GPT-5.3-Codex-Spark (retired 2026-09-14) are rejected on the Codex
