@@ -178,6 +178,10 @@ uv run python scripts/merge_pr.py --pr <PR#> --merge
 ```
 
 The guard chooses merge for feature-to-develop PRs and develop-to-main promotion.
+It also admits a same-repository topic-to-main PR only as the roadmap §0.3
+tracking closure: the diff from current main may modify only the roadmap, and
+GitHub's exact base/head blobs must pass the roadmap checker with at least one
+`IN_DEVELOP` → `DONE` transition. It never admits other topic-to-main content.
 It requires the current main SHA to be an ancestor of the admitted PR head and
 rechecks that SHA before the write. A refusal never permits an unguarded merge.
 Record its merge SHA and receipt.
