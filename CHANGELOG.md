@@ -49,6 +49,11 @@ functional change.
 
 ### Added
 
+- **Research desktop navigation.** Recognize one bounded horizontal wheel
+  stroke per scene inside artwork, with direction and momentum guards. Keep
+  native scrolling, zoom, nested controls, and mobile touch navigation; widen
+  the existing desktop pager targets and add the existing neutral focus fill.
+
 - **Research reader touch navigation.** Swipe artwork left or right to move
   between GEODE, Jev, and JEVDB scenes. Preserve scene URLs, language, browser
   history, vertical scrolling, pinch zoom, and taps on full-size image links.

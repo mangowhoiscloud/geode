@@ -92,8 +92,37 @@ at full size. Swipes never add history at the first/last boundary.
 
 The canvas permits `pan-y pinch-zoom`; at a zoomed visual viewport it restores
 `auto` for panning. Do not disable selection, browser zoom or vertical scroll.
-No mouse drag or trackpad-wheel interception applies. Buttons, keyboard,
+No mouse drag interception applies. Buttons, keyboard,
 language links and accessible scene announcements remain available.
+
+### Reader desktop navigation (2026-10-13, local review)
+
+A fine-pointer horizontal wheel stroke on artwork selects one whole scene.
+`src/lib/reader-wheel.mjs` owns this optional desktop input; the existing touch
+recognizer is unchanged. React binds it for the canvas lifetime, using Effect
+Events to read the current scene without resetting the momentum lock on render.
+The frozen Jev projection uses the same recognizer and existing `show()` owner.
+
+Only cancelable pixel-mode events without modifiers or pressed buttons qualify.
+The stroke must start horizontally (at least 2:1), accumulate 96 wheel-delta
+pixels within 500ms, and retain its direction. One scene is selected per stroke;
+280ms without wheel input ends the stroke and a 650ms minimum interval prevents
+separated momentum tails from immediately advancing again. These are input
+heuristics, not hardware or OS gesture identification.
+
+Outside the artwork, at the first/last scene boundary, within the viewport's
+outer 24px, on nested controls or a horizontal scroller, input remains native.
+Vertical/diagonal onset, selection, dragging, a modal, zoom, or keyboard/history
+interruption cancels pending navigation. Modifier-wheel zoom is never captured.
+A claimed horizontal tail stays locked across the reader's own scroll-to-top.
+Do not add global overscroll suppression or mouse-drag navigation. WheelEvent
+has no standard physical-device or OS back/forward gesture identifier; do not
+claim this replaces testing on actual trackpads and target browsers.
+
+Existing pager buttons keep their position, 44px height, labels and blue focus
+ring. On fine pointers at widths of at least 768px, their minimum width is 72px
+and keyboard focus uses the existing neutral hover fill. No new controls,
+animation, palette, artwork, layout system or dependency is introduced.
 
 ### Research route ownership (2026-10-12)
 
@@ -117,7 +146,7 @@ The old homepage Research hashes and `/resaerch/jev-system1-offloading/` use
 replacement navigation, preserving language and scene without a Back loop.
 The frozen Jev publication remains checked in at its historical location.
 `npm run build` runs `export-research-routes.mjs` after Next static export:
-it projects routes/history and touch navigation, and rebases file references to the old served
+it projects routes/history and touch/desktop navigation, and rebases file references to the old served
 asset addresses. No PDF, scene source, font, image, or video is regenerated.
 Validate canonical and compatibility behavior against `site/out`, not Next dev.
 

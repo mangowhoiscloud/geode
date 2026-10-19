@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachReaderSwipe } from "../src/lib/reader-swipe.mjs";
+import { attachReaderWheel } from "../src/lib/reader-wheel.mjs";
 
 export const legacyPath = "/geode/resaerch/jev-system1-offloading/";
 export const readerPath = "/geode/research/jev-system1-offloading/";
@@ -24,6 +25,9 @@ export function projectReader(source) {
   html = replaceRequired(html, '.reader-home{font-weight:700;', '.reader-home{white-space:nowrap;flex-shrink:0;font-weight:700;');
   html = replaceRequired(html, "href='/geode/?lang='+(english?'en':'ko');", "href='/geode/research/'+(english?'?lang=en':'')+'#jev';");
   html = replaceRequired(html, "jump(s.id);history.replaceState(null,'','#'+s.id);", "jump(s.id);");
+  html = html.replace("</style>", `
+@media(min-width:768px) and (hover:hover) and (pointer:fine){.reader-pager button{min-width:72px}.reader-navigation .reader-pager button:focus-visible{background:var(--surface-card)}}
+</style>`);
   // The frozen film's show() owns all scene navigation (TOC, keyboard, overview,
   // and pager). Project that boundary once; builds within a scene stay local.
   return html.replace("</script>", `
@@ -42,6 +46,9 @@ if(!renderMode) (${attachReaderSwipe.toString()})(stage,direction=>{
  const next=state.index+direction;
  if(!state.overview&&next>=0&&next<slides.length)show(next);
 });
+if(!renderMode) (${attachReaderWheel.toString()})(stage,
+ direction=>!state.overview&&state.index+direction>=0&&state.index+direction<slides.length,
+ direction=>show(state.index+direction));
 </script>`);
 }
 
