@@ -12,6 +12,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from core.mcp.calendar_port import CalendarReadError
 from core.tools.base import tool_error
 
 
@@ -79,12 +80,23 @@ class CalendarListEventsTool:
         if end is None and start is not None:
             end = start + timedelta(days=7)
 
-        events = await adapter.alist_events(
-            start=start,
-            end=end,
-            calendar_name=kwargs.get("calendar_name"),
-            max_results=kwargs.get("max_results", 20),
-        )
+        try:
+            events = await adapter.alist_events(
+                start=start,
+                end=end,
+                calendar_name=kwargs.get("calendar_name"),
+                max_results=kwargs.get("max_results", 20),
+            )
+        except CalendarReadError as exc:
+            if not exc.partial:
+                return tool_error(
+                    f"Calendar read failed: {'; '.join(exc.failures)}",
+                    error_type="connection",
+                    hint="The schedule is unknown, not empty. Check calendar login/MCP status.",
+                )
+            result = _events_result(exc.events)
+            result["result"].update(partial=True, failed_sources=exc.failures)
+            return result
 
         return _events_result(events)
 

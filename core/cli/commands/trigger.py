@@ -1,50 +1,62 @@
-"""``/trigger`` slash command — manage event/cron triggers.
+"""``/trigger`` slash command — list or manually fire registered triggers.
 
-Hosts ``cmd_trigger``. Extracted from the monolithic
-``core/cli/commands.py`` (Tier 3 #9) — every function body is preserved
-byte-identical from the legacy module.
+Renders the composed :class:`TriggerManager` (owned by the runtime's
+SchedulerService); the console output is display only, never the dispatch.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 log = logging.getLogger(__name__)
 
 
-def cmd_trigger(args: str) -> None:
-    """Handle /trigger command — manage event/cron triggers.
+def cmd_trigger(args: str, *, scheduler_service: Any = None) -> None:
+    """Handle /trigger command.
 
-    /trigger           → list active triggers
-    /trigger list      → list active triggers
-    /trigger fire <ev> → manually fire an event
+    /trigger           → list registered triggers
+    /trigger list      → list registered triggers
+    /trigger fire <id> → manually fire a registered trigger
     """
     from core.cli import commands as _pkg
 
-    arg = args.strip().lower()
+    console = _pkg.console
+    manager = getattr(scheduler_service, "trigger_manager", None)
+    parts = args.strip().split(None, 1)
+    sub = parts[0].lower() if parts else "list"
 
-    if not arg or arg == "list":
-        _pkg.console.print()
-        _pkg.console.print("  [header]Trigger Manager[/header]")
-        _pkg.console.print("  [muted]Triggers are wired to HookSystem at priority 70.[/muted]")
-        _pkg.console.print()
-        _pkg.console.print("  Event-based: CUSUM drift → auto-snapshot, model evaluation")
-        _pkg.console.print("  Cron-based:  Managed via /schedule templates")
-        _pkg.console.print()
-        _pkg.console.print("  [muted]Use /trigger fire <event> to manually dispatch.[/muted]")
-        _pkg.console.print()
+    if sub not in ("list", "fire") or (sub == "fire" and len(parts) < 2):
+        console.print("  [warning]Usage: /trigger [list|fire <trigger_id>][/warning]")
+        console.print()
+        return
+    if manager is None:
+        console.print("  [warning]Trigger manager not available[/warning]")
+        console.print()
         return
 
-    parts = arg.split(None, 1)
-    if parts[0] == "fire" and len(parts) > 1:
-        event_name = parts[1]
-        _pkg.console.print(f"  [warning]Cannot fire event: {event_name}[/warning]")
-        _pkg.console.print(
-            "  [muted]Manual event dispatch requires a running TriggerManager "
-            "instance (available in GeodeRuntime, not standalone REPL).[/muted]"
-        )
-        _pkg.console.print()
+    if sub == "list":
+        triggers = manager.inventory()
+        console.print()
+        console.print("  [header]Triggers[/header]")
+        if not triggers:
+            console.print("  [muted]No triggers registered.[/muted]")
+        for t in triggers:
+            state = "[success]ON[/success]" if t["enabled"] else "[muted]OFF[/muted]"
+            detail = t["cron_expr"] or t["event_name"]
+            console.print(f"  {state}  [label]{t['trigger_id']}[/label] {t['type']} {detail}")
+        console.print()
         return
 
-    _pkg.console.print("  [warning]Usage: /trigger [list|fire <event>][/warning]")
-    _pkg.console.print()
+    trigger_id = parts[1].strip()
+    try:
+        result = manager.fire_manual(trigger_id)
+    except KeyError:
+        console.print(f"  [warning]Unknown trigger: {trigger_id}[/warning]")
+        console.print()
+        return
+    if result.success:
+        console.print(f"  [success]Fired: {trigger_id}[/success]")
+    else:
+        console.print(f"  [warning]Trigger failed: {result.error}[/warning]")
+    console.print()

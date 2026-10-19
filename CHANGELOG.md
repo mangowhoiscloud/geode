@@ -111,9 +111,56 @@ functional change.
   language and selected pages when navigating browser history.
   Shorten collection selection URLs to the default report, `#jev`, or `#jevdb`,
   preserving historical selection links without duplicate history entries.
+- **Truthful tool outcomes.** `trigger_event` lists and fires the runtime's
+  real `TriggerManager` (unknown, disabled or callback-less triggers are
+  errors). `schedule_job` rejects malformed mutations instead of answering with
+  a listing. `memory_save`, `note_save` and `manage_rule` report the project
+  memory owner's real result (written, already recorded, missing file,
+  invalid, conflict, not found, failed), and `memory_search` searches by query
+  and tier. `generate_report` writes the requested markdown, JSON or HTML,
+  keeps the supplied findings and data, leaves an absent score unknown instead
+  of `0.0`, and returns the saved path, size and digest.
+- **MCP failure envelopes.** Notification and calendar adapters treat
+  `isError` and transport errors as failures: no `sent`/`created`/deleted
+  success, no event without an ID, and a failed calendar read is an error
+  rather than an empty schedule (a partial multi-source read is labelled with
+  its failed sources). Calendar sync skips pushing when existing events
+  cannot be read.
+- **Scheduler store and run lifecycle.** Every job change reloads the store
+  under a cross-process `flock` before writing, so concurrent instances no
+  longer lose additions or resurrect deleted or paused jobs; an unreadable or
+  malformed store is refused and left byte-identical. A run is claimed in the
+  store with a `run_id`, owner process and manual/scheduled provenance after
+  re-checking eligibility; one occurrence fires once, elapsed time never takes
+  over a live run, a manual run does not consume a scheduled occurrence, and a
+  stale outcome cannot settle a newer run. Queued action runs settle only from
+  the turn's real termination after the session state is saved; a failed
+  required write leaves the run claimed and unsettled.
+- **Project memory integrity.** PROJECT.md and rule changes lock a separate
+  inode, reload, validate and write atomically, so concurrent threads and
+  processes do not lose updates and unreadable content is left unchanged.
+  Symlinked or project-escaping memory and rule paths are neither read into
+  context nor written, and nothing is created outside the project.
+- **Collaboration mailbox.** Message admission uses a checkpointed,
+  recipient-scoped receipt instead of searching message text for
+  `mailbox_id=` markers, so quoted text can no longer suppress and
+  acknowledge a real message. A full child inbox rejects new input instead of
+  evicting accepted messages, and a new child is refused while its parent's
+  completions would not fit, so every child result stays deliverable.
+- **Promotion coverage.** Scaffold-search promotion (gate, bootstrap and random
+  control arm) requires every weighted dimension to be measured in both the
+  audit and the baseline; a missing dimension is unknown, not a best-case score.
+  NaN and infinite dimension scores are dropped at extraction and rejected
+  before scoring, so they can no longer pass the bootstrap floor, the margin or
+  the random arm. Weights, margins and thresholds are unchanged.
+- **Petri split judge.** A live `--judge-mode split` audit is refused before
+  dispatch; split remains a cost preview.
 
 ### Removed
 
+- **CLI memory action module.** `core/cli/memory_handler.py` and the module
+  hook globals it alone used are deleted; `manage_rule` uses the injected
+  project memory owner directly.
 - **Duplicate sync approval gates.** The unused synchronous
   `ApprovalWorkflow.apply_safety_gates` / `confirm_write` / `confirm_cost` /
   `confirm_sensitive` / `confirm_mcp` / `request_bash_approval` twins are
@@ -121,6 +168,15 @@ functional change.
   terminal prompt (`prompt_with_always`) stays as the prompt owner.
 
 ### Changed
+
+- **Rule mutations require approval.** `manage_rule` is a write tool (cached
+  approval) rather than an auto-approved safe tool, because rules persist
+  into later system prompts.
+- **Scheduler dispatch callback.** `on_job_fired` receives a fifth `run_id`
+  argument and reports outcomes through `record_run_outcome`; a legacy
+  four-argument callback still works and its runs settle as `dispatched`
+  (outcome unknown). `SchedulerLock` is a non-reentrant `flock` and its
+  `session_id` argument is ignored.
 
 - **Model lifecycle (2026-10-14).** GPT-5.5 (retired 2026-10-14) and
   GPT-5.3-Codex-Spark (retired 2026-09-14) are rejected on the Codex

@@ -31,7 +31,7 @@ def build_middleware_registry(*, events: Any = None, policy_sources: Any = None)
 
 
 def build_runtime(
-    scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
+    scheduler_callback: Callable[[str, str, bool, str, str], None] | None = None,
 ) -> Any:
     """Build the gateway runtime."""
     from core.runtime import GeodeRuntime

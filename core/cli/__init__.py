@@ -64,28 +64,10 @@ from core.cli.typer_serve import _build_runtime_for_serve as _build_runtime_for_
 from core.cli.welcome import _render_readiness_compact as _render_readiness_compact
 from core.cli.welcome import _render_welcome_brand as _render_welcome_brand
 from core.cli.welcome import _welcome_screen as _welcome_screen
-from core.hooks import HookEvent, HookSystem
-from core.hooks.dispatch import fire_hook
 from core.ui.console import console
 from core.wiring.runtime import serve
 
 log = logging.getLogger(__name__)
-
-# Hook system module-level variable for memory event firing (P1.5)
-_hooks_ctx: HookSystem | None = None
-
-
-def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
-    """Fire a hook event if HookSystem is wired (or no-op)."""
-    fire_hook(_hooks_ctx, event, data)
-
-
-def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None:
-    """Handle memory-related actions (P0-A + P1-B). Delegates to memory_handler module."""
-    from core.cli.memory_handler import handle_memory_action
-
-    handle_memory_action(intent, user_text, is_offline, fire_hook=_fire_hook)
-
 
 # ---------------------------------------------------------------------------
 # Thin REPL — delegates to geode serve via IPC

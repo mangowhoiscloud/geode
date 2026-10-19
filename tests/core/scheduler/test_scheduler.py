@@ -792,7 +792,8 @@ class TestActionQueue:
         )
         svc.add_job(job)
         result = svc.run_now("act1")
-        assert result["status"] == "ok"
+        # Queued for a session: the run stays open until its outcome is settled.
+        assert result["status"] == "dispatched"
         assert not q.empty()
         queued_id, queued_action, queued_isolated = q.get_nowait()
         assert queued_id == "act1"
@@ -827,7 +828,8 @@ class TestActionQueue:
         tmp_store: Path,
         tmp_log_dir: Path,
     ) -> None:
-        """SchedulerService without action_queue must not raise when action is set."""
+        """Without a dispatch path an action run fails visibly instead of raising
+        or reporting a success that ran nothing."""
         svc = SchedulerService(store_path=tmp_store, log_dir=tmp_log_dir)
         job = ScheduledJob(
             job_id="noq1",
@@ -837,7 +839,8 @@ class TestActionQueue:
         )
         svc.add_job(job)
         result = svc.run_now("noq1")
-        assert result["status"] == "ok"
+        assert result["status"] == "error"
+        assert "dispatch path" in result["error"]
 
     def test_non_isolated_enqueued(
         self,
@@ -980,12 +983,12 @@ class TestAgentId:
         assert loaded.agent_id == "research-agent"
 
     def test_agent_id_passed_to_callback(self, tmp_store: Path, tmp_log_dir: Path) -> None:
-        """on_job_fired should receive agent_id as 4th argument."""
-        fired: list[tuple[str, str, bool, str]] = []
+        """on_job_fired receives agent_id 4th and the run fence 5th."""
+        fired: list[tuple[str, str, bool, str, str]] = []
         svc = SchedulerService(
             store_path=tmp_store,
             log_dir=tmp_log_dir,
-            on_job_fired=lambda jid, act, iso, aid: fired.append((jid, act, iso, aid)),
+            on_job_fired=lambda jid, act, iso, aid, rid: fired.append((jid, act, iso, aid, rid)),
             enable_jitter=False,
         )
         job = ScheduledJob(
@@ -998,7 +1001,8 @@ class TestAgentId:
         svc.add_job(job)
         svc.run_now("agt-fire")
         assert len(fired) == 1
-        assert fired[0] == ("agt-fire", "do stuff", True, "my-agent")
+        assert fired[0][:4] == ("agt-fire", "do stuff", True, "my-agent")
+        assert fired[0][4]
 
     def test_empty_agent_id_default(self, svc: SchedulerService) -> None:
         """Default agent_id should be empty string."""

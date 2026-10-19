@@ -21,9 +21,9 @@ from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
 from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
-from core.memory.project import ProjectMemory
+from core.memory.project import MemoryWrite, ProjectMemory
 from core.memory.session import InMemorySessionStore
-from core.tools.base import tool_error
+from core.tools.base import ToolErrorType, tool_error
 
 log = logging.getLogger(__name__)
 
@@ -335,15 +335,14 @@ class MemorySaveTool(_AsyncExecuteMixin):
         else:
             store.set(session_id, data)
 
-        # Persistent write to MEMORY.md (P1.5)
+        # Persistent write to MEMORY.md (P1.5): report the owner's real outcome.
+        persistent_outcome = ""
         if persistent:
             proj = self._services.project_memory
-            if proj is not None:
-                from core.memory.project import ProjectMemory
-
-                if isinstance(proj, ProjectMemory):
-                    insight = str(data.get("content", data))
-                    proj.add_insight(insight)
+            if isinstance(proj, ProjectMemory):
+                persistent_outcome = str(proj.record_insight(str(data.get("content", data))))
+            else:
+                persistent_outcome = "unavailable"
 
         self._fire_hook(HookEvent.MEMORY_SAVED, {"key": session_id, "persistent": persistent})
 
@@ -356,6 +355,7 @@ class MemorySaveTool(_AsyncExecuteMixin):
                 "ephemeral": ephemeral,
                 "merged": merge,
                 "persistent": persistent,
+                "persistent_outcome": persistent_outcome,
                 "keys_stored": list(data.keys()),
             }
         }
@@ -580,14 +580,28 @@ class NoteSaveTool(_AsyncExecuteMixin):
                 hint="Project memory initializes from .geode/memory/. Check directory exists.",
             )
 
-        note_text = f"**{key}**: {content}"
-        proj.add_insight(note_text)
-        return {
-            "result": {
-                "saved": True,
-                "key": key,
-            }
+        outcome = proj.record_insight(f"**{key}**: {content}")
+        if outcome is MemoryWrite.APPLIED:
+            return {"result": {"saved": True, "key": key}}
+        if outcome is MemoryWrite.UNCHANGED:
+            return {"result": {"saved": False, "unchanged": True, "key": key}}
+        failures: dict[MemoryWrite, tuple[ToolErrorType, str]] = {
+            MemoryWrite.NOT_FOUND: (
+                "not_found",
+                "Run `geode init` to create .geode/memory/PROJECT.md.",
+            ),
+            MemoryWrite.INVALID: ("validation", "Notes must be one line of 10-500 characters."),
         }
+        error_type, hint = failures.get(
+            outcome,
+            ("internal", "Project memory could not be read or written; it was left unchanged."),
+        )
+        return tool_error(
+            f"Note '{key}' was not saved ({outcome}).",
+            error_type=error_type,
+            recoverable=outcome is MemoryWrite.INVALID,
+            hint=hint,
+        )
 
 
 class NoteReadTool(_AsyncExecuteMixin):

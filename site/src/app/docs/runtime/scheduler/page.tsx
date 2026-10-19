@@ -50,11 +50,21 @@ export default function Page() {
             <p>
               <code>SchedulerService</code>(<code>core/scheduler/service.py</code>)가
               작업 목록을 <code>.geode/scheduled_tasks.json</code>에 저장합니다.
-              쓰기는 임시 파일 작성 후 <code>os.replace</code>로 원자적으로
-              바꾸고, 같은 디렉터리의 <code>scheduled_tasks.lock</code>으로
-              다중 프로세스 경합을 막습니다(<code>core/scheduler/lock.py</code>).
-              데몬 시작 시 저장된 작업을 다시 읽고, 꺼져 있던 동안 놓친 발화를
-              복구합니다.
+              모든 변경은 같은 디렉터리의 <code>scheduled_tasks.lock</code>(별도
+              inode의 <code>flock</code>, <code>core/scheduler/lock.py</code>)을
+              잡고 저장소를 다시 읽은 뒤 적용하고, 임시 파일과{" "}
+              <code>os.replace</code>로 기록합니다. 그래서 다른 인스턴스의 추가,
+              삭제, 일시정지가 오래된 메모리 사본에 덮이지 않습니다. 읽을 수 없는
+              저장소는 바꾸지 않고 오류로 거부합니다. 데몬 시작 시 저장된 작업을
+              다시 읽고, 꺼져 있던 동안 놓친 발화를 복구합니다.
+            </p>
+            <p>
+              실행은 저장소에 run 클레임(<code>run_id</code>, 소유 프로세스, 수동
+              또는 예약 구분)으로 먼저 기록됩니다. 같은 발생분은 한 번만
+              클레임되고, 클레임 직전에 활성 여부와 스케줄을 다시 확인합니다.
+              경과 시간만으로는 클레임을 넘기지 않으며, 소유 프로세스가 종료된
+              것이 관측될 때만 이전 run을 <code>interrupted</code>로 기록합니다.
+              수동 실행은 다음 예약 발생분을 소모하지 않습니다.
             </p>
 
             <h2>발화</h2>
@@ -73,7 +83,11 @@ fire_at = nominal + jitter`}</pre>
               프롬프트는 SCHEDULER 모드 세션(wall-clock 300초 상한, headless
               도구 차단)으로 실행되고, 트리거 시점에{" "}
               <code>RuntimeEvent.TRIGGER_FIRED</code>가 발화됩니다
-              (<code>core/scheduler/triggers.py</code>).
+              (<code>core/scheduler/triggers.py</code>). 큐에 넣는 순간은{" "}
+              <code>dispatched</code>일 뿐이고, 세션 종료 상태가 저장된 뒤에야
+              실제 결과(<code>ok</code>, <code>paused</code>, <code>error</code>,{" "}
+              <code>cancelled</code>)로 정산됩니다. 필요한 저장이 실패하면 run은
+              정산되지 않은 채 클레임으로 남습니다.
             </p>
 
             <h2>설정 손잡이</h2>
@@ -169,11 +183,23 @@ fire_at = nominal + jitter`}</pre>
             <p>
               <code>SchedulerService</code> (<code>core/scheduler/service.py</code>)
               stores the job list at <code>.geode/scheduled_tasks.json</code>.
-              Writes go to a temp file and land via <code>os.replace</code>, and
-              a <code>scheduled_tasks.lock</code> in the same directory guards
-              against multi-process races (<code>core/scheduler/lock.py</code>).
-              On daemon start the service reloads saved jobs and recovers fires
-              missed while it was down.
+              Every change takes <code>scheduled_tasks.lock</code> in the same
+              directory (a <code>flock</code> on its own inode,{" "}
+              <code>core/scheduler/lock.py</code>), reloads the store, applies the
+              operation, and writes through a temp file and{" "}
+              <code>os.replace</code>, so a stale in-memory copy cannot overwrite
+              another instance&apos;s additions, deletions, or pauses. An
+              unreadable store is refused and left unchanged. On daemon start the
+              service reloads saved jobs and recovers fires missed while it was
+              down.
+            </p>
+            <p>
+              A run is first recorded in the store as a claim (<code>run_id</code>,
+              owning process, manual or scheduled). One occurrence is claimed once,
+              after re-checking that the job is still enabled and due. Elapsed time
+              never hands a claim over: a previous run is recorded as{" "}
+              <code>interrupted</code> only once its owning process is observed
+              gone. A manual run does not consume the next scheduled occurrence.
             </p>
 
             <h2>Firing</h2>
@@ -192,7 +218,12 @@ fire_at = nominal + jitter`}</pre>
               prompt runs as a SCHEDULER-mode session (300-second wall-clock
               cap, headless tool denial), and{" "}
               <code>RuntimeEvent.TRIGGER_FIRED</code> fires at trigger time
-              (<code>core/scheduler/triggers.py</code>).
+              (<code>core/scheduler/triggers.py</code>). Queueing the prompt only
+              marks the run <code>dispatched</code>; it settles with its real
+              outcome (<code>ok</code>, <code>paused</code>, <code>error</code>,{" "}
+              <code>cancelled</code>) after the session&apos;s terminal state is
+              saved. If a required write fails, the run stays claimed and
+              unsettled.
             </p>
 
             <h2>Configuration knobs</h2>
