@@ -100,6 +100,20 @@ functional change.
 
 ### Fixed
 
+- **Eco² links.** The about page and RSI roadmap link to the moved Eco²
+  case page at `mangowhois.ai/eco2/`; the retired GitHub Pages address
+  returned 404.
+
+- **Guarded roadmap closure merges.** `scripts/merge_pr.py` now admits the
+  roadmap §0.3 tracking-only topic → `main` PR instead of rejecting every
+  non-promotion main target. Admission additionally requires the current-main
+  diff to modify only `docs/architecture/extensibility-roadmap.md`, reads both
+  exact-commit blobs from GitHub and verifies their git blob ids, proves from
+  the commits' Git trees that the file stays a regular `100644` blob, then runs the
+  existing roadmap checker and requires at least one `IN_DEVELOP` → `DONE`
+  closure. Every existing protection, check, ancestry, double-snapshot and
+  merge-parent requirement is unchanged. Receipts name the `flow` and, for
+  closures, the blob ids and closed GAPs.
 - **Current models in evaluations.** Petri and seed-generation roles now admit
   current catalog offerings (opt-in `current_models = true`; pinned defaults
   and custom `allowed_models` unchanged), so explicit GPT-6/6.1 and Claude 5.5
@@ -301,6 +315,8 @@ functional change.
 
 ### Security
 
+- Lock `mcp` at 1.30.0 to address CVE-2026-59951 reported by the runtime
+  dependency audit; the declared `mcp>=1.28,<2` range is unchanged.
 - Lock the site's optional sharp dependency at 0.35.5 and its prebuilt libvips
   packages at 1.3.4 to address GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889),
   restoring the dependency audit without changing Next.js or the ESLint patch.

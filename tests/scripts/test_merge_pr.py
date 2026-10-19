@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
 import json
 import subprocess
 from typing import Any
 
 import pytest
 from scripts import merge_pr
+
+from tests.scripts.test_check_architecture_roadmap import (
+    ROADMAP,
+    _add_evidence_row,
+    _replace_ledger_cell,
+)
 
 
 def _evidence(head: str = "a" * 40, base: str = "b" * 40) -> dict[str, Any]:
@@ -197,6 +205,12 @@ class _GitHub:
             return copy.deepcopy(self.current["workflows"])
         if endpoint.endswith(f"/commits/{'d' * 40}"):
             return copy.deepcopy(self.current["merge_commit"])
+        if "/git/" in endpoint:
+            return copy.deepcopy(self.current["git"][endpoint.split("/git/", 1)[1]])
+        if "/contents/" in endpoint:
+            path, ref = endpoint.split("/contents/", 1)[1].split("?ref=")
+            assert path == merge_pr.TRACKING_PATH
+            return copy.deepcopy(self.current["contents"][ref])
         if "/compare/" in endpoint:
             main_sha = self.current["main"]["commit"]["sha"]
             assert endpoint.endswith(f"/compare/{main_sha}...{self.current['pr']['head']['sha']}")
@@ -726,3 +740,348 @@ def test_gh_boundary_hides_raw_errors_and_never_mutates(monkeypatch, capsys, fai
     assert "SECRET_FIXTURE" not in output.out + output.err
     assert json.loads(output.out)["decision"] == "blocked"
     assert len(calls) == (0 if failure == "executable" else 1)
+
+
+def _close(text: str, *gap_ids: str, evidence: bool = True) -> str:
+    for gap_id in gap_ids:
+        text = _replace_ledger_cell(text, gap_id, 6, "`DONE`")
+        if evidence:
+            text = _add_evidence_row(
+                text,
+                "### 10.2 Main closure evidence",
+                (
+                    f"| {gap_id} | [#2767](https://github.com/mangowhoiscloud/geode/pull/2767) | "
+                    f'`{"c" * 40}` | `uv run pytest tests/ -m "not live"` — RESULT: PASS | '
+                    "compatibility verified | public docs synced |"
+                ),
+            )
+    return text
+
+
+CLOSED_R01 = _close(ROADMAP, "GOV-001", "GOV-003")
+
+
+def _content(text: str) -> dict[str, Any]:
+    data = text.encode()
+    return {
+        "type": "file",
+        "path": merge_pr.TRACKING_PATH,
+        "encoding": "base64",
+        "size": len(data),
+        "sha": hashlib.sha1(b"blob %d\0" % len(data) + data, usedforsecurity=False).hexdigest(),
+        "content": base64.encodebytes(data).decode(),  # GitHub wraps its base64 lines
+    }
+
+
+def _tracking(head_text: str = CLOSED_R01, base_text: str = ROADMAP, **kwargs) -> dict[str, Any]:
+    data = _evidence(**kwargs)
+    _retarget(data, "codex/roadmap-closure", "main")
+    head, base = _content(head_text), _content(base_text)
+    data["pr"]["changed_files"] = 1
+    data["comparison"]["files"] = [
+        {"filename": merge_pr.TRACKING_PATH, "status": "modified", "sha": head["sha"]}
+    ]
+    data["contents"] = {data["pr"]["base"]["sha"]: base, data["pr"]["head"]["sha"]: head}
+    data["git"] = {}
+    for side, content in (("base", base), ("head", head)):
+        commit = data["pr"][side]["sha"]
+        data["git"][f"commits/{commit}"] = {"sha": commit, "tree": {"sha": _oid(side, "root")}}
+        _tree(
+            data,
+            side,
+            "root",
+            ("README.md", "100644", "blob", "1" * 40),
+            ("docs", *_dir(side, "docs")),
+        )
+        _tree(data, side, "docs", ("architecture", *_dir(side, "architecture")))
+        _tree(
+            data,
+            side,
+            "architecture",
+            ("extensibility-roadmap.md", "100644", "blob", content["sha"]),
+            ("other.md", "100644", "blob", "2" * 40),
+        )
+    return data
+
+
+def _oid(side: str, name: str) -> str:
+    return hashlib.sha1(f"{side}:{name}".encode(), usedforsecurity=False).hexdigest()
+
+
+def _dir(side: str, name: str) -> tuple[str, str, str]:
+    return ("040000", "tree", _oid(side, name))
+
+
+def _tree(data: dict[str, Any], side: str, name: str, *rows: tuple[str, str, str, str]) -> None:
+    data["git"][f"trees/{_oid(side, name)}"] = {
+        "sha": _oid(side, name),
+        "truncated": False,
+        "tree": [dict(zip(("path", "mode", "type", "sha"), row, strict=True)) for row in rows],
+    }
+
+
+def _roadmap_row(data: dict[str, Any], side: str = "head") -> dict[str, Any]:
+    tree = data["git"][f"trees/{_oid(side, 'architecture')}"]["tree"]
+    return next(row for row in tree if row["path"] == "extensibility-roadmap.md")
+
+
+def test_tracking_closure_is_admitted_with_unchanged_merge_protection(monkeypatch, capsys) -> None:
+    data = _tracking()
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["decision"] == "merged" and receipt["flow"] == "tracking"
+    assert receipt["tracking"] == {
+        "path": "docs/architecture/extensibility-roadmap.md",
+        "base_blob": data["contents"]["b" * 40]["sha"],
+        "head_blob": data["contents"]["a" * 40]["sha"],
+        "closed_gaps": ["GOV-001", "GOV-003"],
+    }
+    assert len(receipt["checks"]) == 10 and receipt["merge_parents"] == ["b" * 40, "a" * 40]
+    assert github.reads == 2 and len(github.mutations) == 1
+
+
+def test_existing_flows_are_labelled_without_tracking_proof(monkeypatch, capsys) -> None:
+    promotion = _evidence()
+    _retarget(promotion, "develop", "main")
+    for data, flow in ((_evidence(), "feature"), (promotion, "promotion")):
+        monkeypatch.setattr(merge_pr, "_gh", _GitHub(data))
+        assert merge_pr.main(["--pr", "3319"]) == 0
+        receipt = json.loads(capsys.readouterr().out)
+        assert receipt["flow"] == flow and "tracking" not in receipt
+
+
+def _gov003_dependency_added(text: str) -> str:
+    return _replace_ledger_cell(text, "GOV-003", 5, "GOV-001, GOV-002")
+
+
+@pytest.mark.parametrize(
+    "head_text",
+    [
+        pytest.param(ROADMAP + "\n", id="no_closure"),
+        pytest.param(_close(ROADMAP, "GOV-001"), id="partial_package"),
+        pytest.param(_close(ROADMAP, "GOV-001", "GOV-003", evidence=False), id="missing_10_2"),
+        pytest.param(_close(ROADMAP, "GOV-002", "VER-003"), id="pre_promotion_in_progress"),
+        pytest.param(
+            _replace_ledger_cell(CLOSED_R01, "GOV-002", 6, "`IN_DEVELOP`"), id="extra_status"
+        ),
+        pytest.param(_gov003_dependency_added(CLOSED_R01), id="dependency_edge"),
+        pytest.param(
+            CLOSED_R01.replace(
+                "This roadmap is an execution ledger, not a proposal archive.",
+                "This roadmap is optional prose, not an execution ledger.",
+                1,
+            ),
+            id="prose",
+        ),
+        pytest.param(
+            "\n".join(
+                line
+                for line in CLOSED_R01.splitlines()
+                if not line.startswith("| R0.2 | GOV-002, VER-003 |")
+            ),
+            id="claim_removed",
+        ),
+        pytest.param("not a roadmap\n", id="unparsable"),
+    ],
+)
+def test_tracking_rejects_non_closure_roadmap_changes(monkeypatch, capsys, head_text: str) -> None:
+    github = _GitHub(_tracking(head_text))
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["decision"] == "blocked" and receipt["flow"] == "tracking"
+    assert github.mutations == []
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "extra_file",
+        "runtime_file",
+        "changed_files_mismatch",
+        "files_missing",
+        "files_empty",
+        "renamed",
+        "added",
+        "removed",
+        "head_blob_unbound",
+        "blob_tampered",
+        "size_mismatch",
+        "bad_base64",
+        "non_ascii_base64",
+        "not_utf8",
+        "truncated_encoding",
+        "symlink",
+        "content_missing",
+        "stale_base",
+        "check_failed",
+    ],
+)
+def test_tracking_requires_exact_roadmap_only_proof(monkeypatch, capsys, defect: str) -> None:
+    data = _tracking()
+    files, contents = data["comparison"]["files"], data["contents"]
+    head = contents["a" * 40]
+    if defect == "extra_file":
+        files.append(
+            {"filename": "core/agent/loop/agent_loop.py", "status": "modified", "sha": "e" * 40}
+        )
+        data["pr"]["changed_files"] = 2
+    elif defect == "runtime_file":
+        files[0]["filename"] = "core/agent/loop/agent_loop.py"
+    elif defect == "changed_files_mismatch":
+        data["pr"]["changed_files"] = 2
+    elif defect == "files_missing":
+        data["comparison"].pop("files")
+    elif defect == "files_empty":
+        files.clear()
+    elif defect == "renamed":
+        files[0].update(status="renamed", previous_filename="docs/old.md")
+    elif defect in {"added", "removed"}:
+        files[0]["status"] = defect
+    elif defect == "head_blob_unbound":
+        files[0]["sha"] = "e" * 40
+    elif defect == "blob_tampered":
+        tampered = _content(CLOSED_R01 + "x")
+        head["content"] = tampered["content"]
+        head["size"] = tampered["size"]
+    elif defect == "size_mismatch":
+        head["size"] += 1
+    elif defect == "bad_base64":
+        head["content"] = "!!!"
+    elif defect == "non_ascii_base64":
+        head["content"] = "\u00e9"
+    elif defect == "not_utf8":
+        raw = b"\xff\xfe"
+        head.update(
+            content=base64.b64encode(raw).decode(),
+            size=len(raw),
+            sha=hashlib.sha1(b"blob 2\0" + raw, usedforsecurity=False).hexdigest(),
+        )
+        files[0]["sha"] = head["sha"]
+    elif defect == "truncated_encoding":
+        head.update(encoding="none", content="")
+    elif defect == "symlink":
+        head["type"] = "symlink"
+    elif defect == "content_missing":
+        contents.pop("b" * 40)
+    elif defect == "stale_base":
+        data["main"]["commit"]["sha"] = "e" * 40
+        data["comparison"]["base_commit"]["sha"] = "e" * 40
+        data["comparison"]["merge_base_commit"]["sha"] = "e" * 40
+    else:
+        data["checks"]["check_runs"][0]["conclusion"] = "failure"
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert json.loads(capsys.readouterr().out)["decision"] == "blocked"
+    assert github.mutations == []
+
+
+@pytest.mark.parametrize("drift", ["head", "content"])
+def test_tracking_snapshot_drift_never_merges(monkeypatch, drift: str) -> None:
+    first = _tracking()
+    if drift == "head":
+        second = _tracking(head="e" * 40)
+    else:
+        second = _tracking(
+            _close(ROADMAP, "GOV-001", "GOV-003").replace(
+                "compatibility verified", "compatibility re-verified"
+            )
+        )
+    github = _GitHub(first, second)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    assert github.mutations == []
+
+
+@pytest.mark.parametrize(
+    "head,base,fork",
+    [
+        ("main", "main", False),
+        ("sync/main-into-develop", "main", False),
+        ("codex/roadmap-closure", "main", True),
+        ("codex/roadmap-closure", "release", False),
+    ],
+)
+def test_tracking_candidate_excludes_protected_sync_and_fork_heads(
+    monkeypatch, capsys, head: str, base: str, fork: bool
+) -> None:
+    data = _tracking()
+    _retarget(data, head, base)
+    if fork:
+        data["pr"]["head"]["repo"]["full_name"] = "external/fork"
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["decision"] == "blocked" and "flow" not in receipt
+    assert github.reads == 1 and github.mutations == []
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "executable",
+        "base_executable",
+        "mode_only",
+        "symlink",
+        "submodule",
+        "entry_unbound",
+        "parent_is_blob",
+        "parent_mode",
+        "truncated",
+        "truncated_missing",
+        "tree_identity",
+        "tree_not_list",
+        "path_missing",
+        "path_ambiguous",
+        "commit_identity",
+        "commit_missing",
+        "tree_missing",
+    ],
+)
+def test_tracking_requires_regular_roadmap_tree_entry(monkeypatch, capsys, defect: str) -> None:
+    data = _tracking(ROADMAP if defect == "mode_only" else CLOSED_R01)
+    trees, row = data["git"], _roadmap_row(data)
+    architecture = trees[f"trees/{_oid('head', 'architecture')}"]
+    root = trees[f"trees/{_oid('head', 'root')}"]
+    if defect in {"executable", "mode_only"}:
+        row["mode"] = "100755"
+    elif defect == "base_executable":
+        _roadmap_row(data, "base")["mode"] = "100755"
+    elif defect == "symlink":
+        row["mode"] = "120000"
+    elif defect == "submodule":
+        row.update(mode="160000", type="commit")
+    elif defect == "entry_unbound":
+        row["sha"] = "e" * 40
+    elif defect == "parent_is_blob":
+        root["tree"][1].update(mode="100644", type="blob")
+    elif defect == "parent_mode":
+        root["tree"][1]["mode"] = "100644"
+    elif defect == "truncated":
+        architecture["truncated"] = True
+    elif defect == "truncated_missing":
+        architecture.pop("truncated")
+    elif defect == "tree_identity":
+        architecture["sha"] = "e" * 40
+    elif defect == "tree_not_list":
+        architecture["tree"] = {"extensibility-roadmap.md": row}
+    elif defect == "path_missing":
+        architecture["tree"].remove(row)
+    elif defect == "path_ambiguous":
+        architecture["tree"].append(dict(row))
+    elif defect == "commit_identity":
+        trees[f"commits/{'a' * 40}"]["sha"] = "e" * 40
+    elif defect == "commit_missing":
+        trees.pop(f"commits/{'a' * 40}")
+    else:
+        trees.pop(f"trees/{_oid('head', 'docs')}")
+    github = _GitHub(data)
+    monkeypatch.setattr(merge_pr, "_gh", github)
+    assert merge_pr.main(["--pr", "3319", "--merge"]) == 1
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["decision"] == "blocked" and receipt["flow"] == "tracking"
+    assert github.mutations == []
