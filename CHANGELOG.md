@@ -67,6 +67,10 @@ functional change.
 
 ### Fixed
 
+- **Eco² links.** The about page and RSI roadmap link to the moved Eco²
+  case page at `mangowhois.ai/eco2/`; the retired GitHub Pages address
+  returned 404.
+
 - **Guarded roadmap closure merges.** `scripts/merge_pr.py` now admits the
   roadmap §0.3 tracking-only topic → `main` PR instead of rejecting every
   non-promotion main target. Admission additionally requires the current-main
@@ -214,6 +218,8 @@ functional change.
 
 ### Security
 
+- Lock `mcp` at 1.30.0 to address CVE-2026-59951 reported by the runtime
+  dependency audit; the declared `mcp>=1.28,<2` range is unchanged.
 - Lock the site's optional sharp dependency at 0.35.5 and its prebuilt libvips
   packages at 1.3.4 to address GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889),
   restoring the dependency audit without changing Next.js or the ESLint patch.
