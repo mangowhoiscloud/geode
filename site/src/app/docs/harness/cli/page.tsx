@@ -196,6 +196,8 @@ export default function Page() {
                 <tr><td><code>/skill &lt;name&gt;</code></td><td></td><td>daemon</td><td>스킬 호출. <code>context:fork</code> 서브에이전트 실행 지원</td><td><code>core/cli/commands/skills.py</code></td></tr>
                 <tr><td><code>/cost</code></td><td></td><td>daemon</td><td>LLM 비용 대시보드와 예산</td><td><code>core/cli/commands/cost.py</code></td></tr>
                 <tr><td><code>/resume</code></td><td></td><td>daemon</td><td>중단된 세션 재개</td><td><code>core/cli/commands/session.py</code></td></tr>
+                <tr><td><code>/fork [sid]</code></td><td></td><td>daemon</td><td>완료된 turn 시점에서 새 일시정지 세션을 분기. 대화 기록과 모델 설정만 복사하고 아무것도 시작하지 않음</td><td><code>core/memory/session_peers.py</code></td></tr>
+                <tr><td><code>/send &lt;sid&gt; &lt;msg&gt;</code></td><td></td><td>daemon</td><td>같은 프로젝트의 다른 root 세션에 메시지를 큐잉. 대상은 깨우지 않으며 다음 turn에 신뢰되지 않는 데이터로 읽음</td><td><code>core/memory/session_peers.py</code></td></tr>
                 <tr><td><code>/context</code></td><td><code>/ctx</code></td><td>daemon</td><td>조립된 컨텍스트 계층 표시</td><td><code>core/cli/commands/session.py</code></td></tr>
                 <tr><td><code>/apply</code></td><td></td><td>daemon</td><td>지원서 관리</td><td><code>core/cli/commands/session.py</code></td></tr>
                 <tr><td><code>/compact</code></td><td></td><td>daemon</td><td>대화 컨텍스트 압축</td><td><code>core/cli/commands/session.py</code></td></tr>
@@ -460,6 +462,8 @@ export default function Page() {
                 <tr><td><code>/skill &lt;name&gt;</code></td><td></td><td>daemon</td><td>Invoke a skill; supports <code>context:fork</code> sub-agent execution</td><td><code>core/cli/commands/skills.py</code></td></tr>
                 <tr><td><code>/cost</code></td><td></td><td>daemon</td><td>LLM cost dashboard and budget</td><td><code>core/cli/commands/cost.py</code></td></tr>
                 <tr><td><code>/resume</code></td><td></td><td>daemon</td><td>Resume an interrupted session</td><td><code>core/cli/commands/session.py</code></td></tr>
+                <tr><td><code>/fork [sid]</code></td><td></td><td>daemon</td><td>Fork a completed turn into a new paused session; copies conversation history and model settings only and starts nothing</td><td><code>core/memory/session_peers.py</code></td></tr>
+                <tr><td><code>/send &lt;sid&gt; &lt;msg&gt;</code></td><td></td><td>daemon</td><td>Queue a message for another root session of this project; the target is not woken and reads it as untrusted data at its next turn</td><td><code>core/memory/session_peers.py</code></td></tr>
                 <tr><td><code>/context</code></td><td><code>/ctx</code></td><td>daemon</td><td>Show the assembled context tiers</td><td><code>core/cli/commands/session.py</code></td></tr>
                 <tr><td><code>/apply</code></td><td></td><td>daemon</td><td>Manage job applications</td><td><code>core/cli/commands/session.py</code></td></tr>
                 <tr><td><code>/compact</code></td><td></td><td>daemon</td><td>Compact the conversation context</td><td><code>core/cli/commands/session.py</code></td></tr>

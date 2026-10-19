@@ -802,6 +802,8 @@ class CLIPoller:
                 return ipc_error_response(exc)
 
         if msg_type == "command":
+            if str(msg.get("cmd") or "").casefold() == "/fork":
+                return await self._handle_fork_command(msg, loop)
             if str(msg.get("cmd") or "").casefold() in {"/goal", "/compact", "/model"}:
                 lane_queue = self._services.lane_queue
                 if lane_queue is not None:
@@ -1280,6 +1282,32 @@ class CLIPoller:
                 "output": buf.getvalue() if buf is not None else "",
             }
 
+    async def _handle_fork_command(self, msg: dict[str, Any], loop: Any) -> dict[str, Any]:
+        """Fork only while this daemon does not run the source's turn.
+
+        A source turn in this daemon holds its session Lane; a non-blocking
+        acquire either serializes the cut or refuses a busy source. Turns
+        owned by another process are excluded by the checkpoint cut itself.
+        """
+        source = str(msg.get("args") or "").split(maxsplit=1)[:1]
+        source_id = source[0] if source else str(getattr(loop, "_session_id", "") or "")
+        lane_queue = self._services.lane_queue
+        session_lane = getattr(lane_queue, "session_lane", None)
+        if session_lane is None or not source_id:
+            return await self._handle_command_on_server(msg, loop)
+        if not await session_lane.try_acquire_async(source_id):
+            return {
+                "type": "command_result",
+                "cmd": msg.get("cmd", ""),
+                "status": "error",
+                "error_type": "busy",
+                "message": f"Session {source_id} is running a turn; fork after it completes",
+            }
+        try:
+            return await self._handle_command_on_server(msg, loop)
+        finally:
+            session_lane.manual_release(source_id)
+
     async def _handle_resume(
         self,
         msg: dict[str, Any],
@@ -1358,6 +1386,7 @@ class CLIPoller:
                 "user_input": state.user_input,
                 "message_count": len(state.messages),
                 "cognitive_state": loop.cognitive_state.to_snapshot(),
+                "lineage": dict(state.lineage),
             }
         except Exception as exc:
             log.warning(

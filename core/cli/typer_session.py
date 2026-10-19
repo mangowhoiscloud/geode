@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
 session_app = typer.Typer(
     name="session",
-    help="List, export, and migrate persisted agent sessions.",
+    help="List, export, fork, message, and migrate persisted agent sessions.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -77,6 +77,7 @@ class _SessionRow:
     messages: int
     model: str
     user_input: str
+    fork_of: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +164,7 @@ def _rows_from_index(db_path: Path, limit: int) -> list[_SessionRow]:
             messages=meta.message_count,
             model=meta.model,
             user_input=meta.user_input,
+            fork_of=meta.source_session_id,
         )
         for meta in metas
     ]
@@ -208,6 +210,11 @@ def _rows_from_scan(base: Path, limit: int) -> list[_SessionRow]:
                 messages=msg_count,
                 model=str(data.get("model", "")),
                 user_input=str(data.get("user_input", "")),
+                fork_of=(
+                    str(data["lineage"].get("source_session_id", ""))
+                    if isinstance(data.get("lineage"), dict)
+                    else ""
+                ),
             )
         )
     rows.sort(key=lambda row: row.updated_at, reverse=True)
@@ -233,9 +240,10 @@ def session_list(
 
     sid_w = max(len("SESSION_ID"), *(len(row.session_id) for row in rows))
     model_w = max(len("MODEL"), *(len(row.model) for row in rows))
+    fork_w = max(len("FORK_OF"), *(len(row.fork_of) for row in rows))
     header = (
         f"{'SESSION_ID':<{sid_w}} {'STATUS':<9} {'UPDATED':<19} "
-        f"{'ROUNDS':>6} {'MSGS':>5} {'MODEL':<{model_w}} INPUT"
+        f"{'ROUNDS':>6} {'MSGS':>5} {'MODEL':<{model_w}} {'FORK_OF':<{fork_w}} INPUT"
     )
     typer.echo(header)
     typer.echo("-" * len(header))
@@ -243,9 +251,71 @@ def session_list(
         typer.echo(
             f"{row.session_id:<{sid_w}} {row.status:<9} {_iso_local(row.updated_at):<19} "
             f"{row.rounds:>6d} {row.messages:>5d} {row.model:<{model_w}} "
+            f"{row.fork_of or '-':<{fork_w}} "
             f"{_preview(row.user_input, _INPUT_PREVIEW_CHARS)}"
         )
     typer.echo(f"\n{len(rows)} session(s) in {base}.")
+
+
+# ---------------------------------------------------------------------------
+# ``geode session fork`` / ``send`` / ``message-status`` (R6.9)
+# ---------------------------------------------------------------------------
+
+
+@session_app.command("fork")
+def session_fork(
+    source: Annotated[str, typer.Argument(help="Source session id (exact or unique prefix).")],
+    sessions_dir: str = typer.Option("", "--sessions-dir", help="Override the sessions dir."),
+) -> None:
+    """Fork a completed turn into a new paused session. Starts nothing."""
+    from core.memory.session_peers import SessionPrincipal, describe_lineage, fork_session
+
+    base = _resolve_base_dir(sessions_dir)
+    try:
+        receipt = fork_session(
+            SessionPrincipal(operator_intent=True),
+            _resolve_session_id(base, source),
+            sessions_dir=base,
+        )
+    except ValueError as exc:
+        typer.echo(f"Fork refused: {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"{receipt.session_id} paused — {describe_lineage(receipt.lineage)}")
+    typer.echo(f"Resume with: geode --resume {receipt.session_id}")
+
+
+@session_app.command("send")
+def session_send(
+    target: Annotated[str, typer.Argument(help="Target root session id (exact).")],
+    message: Annotated[str, typer.Argument(help="Message text; read as untrusted peer data.")],
+    sessions_dir: str = typer.Option("", "--sessions-dir", help="Override the sessions dir."),
+) -> None:
+    """Queue a message for a root session. Does not start or wake it."""
+    from core.memory.session_peers import SessionPrincipal, send_peer_message
+
+    try:
+        receipt = send_peer_message(
+            SessionPrincipal(operator_intent=True),
+            target,
+            message,
+            sessions_dir=_resolve_base_dir(sessions_dir),
+        )
+    except ValueError as exc:
+        typer.echo(f"Send refused: {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(json.dumps(receipt.to_dict(), sort_keys=True))
+
+
+@session_app.command("message-status")
+def session_message_status(
+    message_id: Annotated[int, typer.Argument(help="Message id returned by send.")],
+    sessions_dir: str = typer.Option("", "--sessions-dir", help="Override the sessions dir."),
+) -> None:
+    """Show queued/applied/unknown; applied is not turn or task completion."""
+    from core.memory.session_peers import peer_message_status
+
+    state = peer_message_status(message_id, sessions_dir=_resolve_base_dir(sessions_dir))
+    typer.echo(json.dumps(state, sort_keys=True))
 
 
 # ---------------------------------------------------------------------------

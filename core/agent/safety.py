@@ -100,6 +100,9 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "document_ingest",
         "edit_file",
         "write_file",
+        # R6.9: cross-session input and new persistent sessions.
+        "send_session_message",
+        "fork_session",
     }
 )
 
@@ -111,7 +114,11 @@ COMPUTER_USE_TOOLS: frozenset[str] = frozenset({"computer", "computer_use"})
 COLLABORATION_TOOLS: frozenset[str] = frozenset(
     {"spawn_agent", "list_agents", "wait_agent", "interrupt_agent", "send_message", "followup_task"}
 )
-SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset({"delegate_task", *COLLABORATION_TOOLS})
+# R6.9 root-session operations; children keep only their R6.5 parent route.
+SESSION_PEER_TOOLS: frozenset[str] = frozenset({"send_session_message", "fork_session"})
+SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset(
+    {"delegate_task", *COLLABORATION_TOOLS, *SESSION_PEER_TOOLS}
+)
 
 # Compatibility denials for tools outside a BoundToolPlan (native hosted,
 # transient, and MCP routes). Plan-owned tools derive their minimum from

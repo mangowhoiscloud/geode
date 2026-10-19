@@ -246,6 +246,7 @@ def save_checkpoint(
             user_input=user_input,
             loop_guards=collect_guard_state(loop),
             pending_verification=dict(getattr(loop, "_pending_verification", {}) or {}),
+            parent_session_id=str(getattr(loop, "_parent_session_id", "") or ""),
         )
         if strict_messages:
             loop._checkpoint.save(state, strict_messages=True)

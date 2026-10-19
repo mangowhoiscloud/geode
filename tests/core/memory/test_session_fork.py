@@ -1,0 +1,378 @@
+"""R6.9 COLLAB-005: persistent forks through SessionCheckpoint/SessionManager."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import sqlite3
+import threading
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+from core.agent.conversation import ConversationContext
+from core.agent.loop._phases import _repair_incomplete_tool_round
+from core.config.session import SessionModelConfig
+from core.memory import session_checkpoint
+from core.memory.collaboration import CollaborationStore
+from core.memory.session_checkpoint import (
+    SessionCheckpoint,
+    SessionForkError,
+    SessionState,
+    completed_turn_boundaries,
+)
+from core.memory.session_manager import SessionManager
+from core.memory.session_peers import SessionPrincipal, fork_session
+from core.observability.session_timeline import SessionTimeline
+
+OPERATOR = SessionPrincipal(operator_intent=True)
+SETTINGS = SessionModelConfig(model="gpt-test", effort="high", source="payg")
+
+
+def _turn(n: int, *, tools: int = 0) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": f"task {n}", "metadata": {"origin": "user_input"}}
+    ]
+    for t in range(tools):
+        call_id = f"call-{n}-{t}"
+        messages.append(
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": call_id, "name": "run_bash", "input": {}}],
+                "metadata": {"effect_operations": {call_id: {"operation_id": f"op-{call_id}"}}},
+            }
+        )
+        messages.append(
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": call_id}]}
+        )
+    messages.append({"role": "assistant", "content": f"done {n}"})
+    return messages
+
+
+def _save(base: Path, session_id: str, messages: list[dict[str, Any]], **fields: Any) -> None:
+    SessionCheckpoint(base).save(
+        SessionState(
+            session_id=session_id,
+            model="gpt-test",
+            provider="openai",
+            model_settings=SETTINGS,
+            messages=messages,
+            cognitive_state={"goal": "source-only"},
+            loop_guards={"active_plan": {"steps": []}, "reflection_requires_redaction": True},
+            **fields,
+        )
+    )
+
+
+def _source_fingerprint(base: Path, session_id: str) -> tuple[Any, ...]:
+    with sqlite3.connect(base / "sessions.db") as conn:
+        rows = conn.execute(
+            "SELECT seq, role, content, metadata FROM messages WHERE session_id = ? ORDER BY seq",
+            (session_id,),
+        ).fetchall()
+        events = conn.execute(
+            "SELECT * FROM session_events WHERE session_id = ? ORDER BY 1", (session_id,)
+        ).fetchall()
+    files = tuple((p.name, p.read_bytes()) for p in sorted((base / session_id).iterdir()))
+    return rows, events, files
+
+
+def _balanced(messages: list[dict[str, Any]]) -> bool:
+    return bool(messages) and completed_turn_boundaries(messages)[-1] == len(messages)
+
+
+@pytest.fixture
+def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    from core import paths
+
+    monkeypatch.setattr(paths, "resolve_sessions_dir", lambda: tmp_path)
+    return tmp_path
+
+
+def test_operator_fork_copies_only_history_and_settings(project: Path) -> None:
+    _save(project, "s-src", [*_turn(1, tools=2), *_turn(2)])
+    timeline = SessionTimeline(
+        "s-src", db_path=project / "sessions.db", projection_path=project / "e.jsonl"
+    )
+    timeline.record_user_message("task 1")
+    before = _source_fingerprint(project, "s-src")
+
+    receipt = fork_session(OPERATOR, "s-src")
+    fork = SessionCheckpoint(project).load(receipt.session_id)
+
+    assert fork is not None and receipt.session_id not in {"s-src", ""}
+    assert receipt.to_dict()["turn_started"] is False and fork.status == "paused"
+    assert fork.lineage["source_session_id"] == "s-src"
+    assert fork.lineage["source_generation"] == 1
+    assert fork.lineage["source_message_count"] == 8 == len(fork.messages)
+    assert fork.lineage["forked_by"] == "operator" and len(fork.lineage["source_digest"]) == 64
+    assert (fork.model, fork.provider, fork.model_settings) == ("gpt-test", "openai", SETTINGS)
+    assert fork.round_idx == 0 and fork.cognitive_state == {} and fork.pending_verification == {}
+    # Only the monotone redaction restriction survives; plans/approvals do not.
+    assert fork.loop_guards == {"reflection_requires_redaction": True}
+    assert all("effect_operations" not in m.get("metadata", {}) for m in fork.messages)
+    assert _source_fingerprint(project, "s-src") == before
+
+    meta = SessionManager(project / "sessions.db").get(receipt.session_id)
+    assert meta is not None and (meta.source_session_id, meta.source_message_count) == ("s-src", 8)
+    assert receipt.session_id in {s.session_id for s in SessionCheckpoint(project).list_resumable()}
+
+    # Each side appends independently; later fork saves keep the lineage.
+    _save(project, receipt.session_id, [*fork.messages, *_turn(3)])
+    resumed = SessionCheckpoint(project).load(receipt.session_id)
+    assert resumed is not None and resumed.lineage == fork.lineage
+    assert _source_fingerprint(project, "s-src") == before
+
+
+def test_bounded_truncation_keeps_balanced_groups_and_never_redispatches(project: Path) -> None:
+    history = [message for n in range(12) for message in _turn(n, tools=n % 3)]
+    _save(project, "s-long", history)
+    state = SessionCheckpoint(project).fork_completed_turn(
+        "s-long", forked_by="operator", max_messages=9
+    )
+    assert len(state.messages) <= 9 and state.messages[0]["content"].startswith("task ")
+    assert _balanced(state.messages)
+    assert state.lineage["source_window_start"] > 0
+
+    recovered: list[Any] = []
+    loop = SimpleNamespace(
+        context=ConversationContext(messages=list(state.messages)),
+        _session_id=state.session_id,
+        _checkpoint=SessionCheckpoint(project),
+        _tool_processor=SimpleNamespace(
+            _executor=SimpleNamespace(
+                _effect_receipts=SimpleNamespace(recover=lambda **kw: recovered.append(kw))
+            )
+        ),
+        _save_checkpoint=lambda *_a, **_k: recovered.append("save"),
+    )
+    _repair_incomplete_tool_round(loop, "resume")
+    assert recovered == [] and loop.context.messages == state.messages
+
+    with pytest.raises(SessionForkError, match="bound"):
+        SessionCheckpoint(project).fork_completed_turn(
+            "s-long", forked_by="operator", max_messages=2
+        )
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        [{"role": "user", "content": "new turn", "metadata": {"origin": "user_input"}}],
+        [{"role": "assistant", "content": [{"type": "tool_use", "id": "x", "name": "n"}]}],
+    ],
+)
+def test_busy_or_incomplete_source_is_rejected(project: Path, tail: list[dict[str, Any]]) -> None:
+    _save(project, "s-busy", [*_turn(1), *tail])
+    with pytest.raises(SessionForkError, match="in-flight"):
+        fork_session(OPERATOR, "s-busy")
+    _save(project, "s-pending", _turn(1), pending_verification={"candidate": "x"})
+    with pytest.raises(SessionForkError, match="pending external verification"):
+        fork_session(OPERATOR, "s-pending")
+    assert sorted(p.name for p in project.iterdir() if p.is_dir()) == ["s-busy", "s-pending"]
+
+
+def test_self_fork_from_inside_its_turn_cuts_at_the_last_completed_turn(project: Path) -> None:
+    in_flight = {"role": "assistant", "content": [{"type": "tool_use", "id": "f", "name": "f"}]}
+    _save(project, "s-self", [*_turn(1), *_turn(2, tools=1), _turn(3)[0], in_flight])
+    receipt = fork_session(SessionPrincipal(session_id="s-self"), "")
+    assert receipt.lineage["source_message_count"] == 6
+    assert receipt.lineage["forked_by"] == "session:s-self"
+    with pytest.raises(SessionForkError, match="in-flight"):
+        fork_session(OPERATOR, "s-self")
+
+
+def test_ownership_rules_for_roots_children_and_gateways(
+    project: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    store = CollaborationStore(project / "sessions.db")
+    for sid in ("s-a", "s-b", "s-gw-123", "agent_done", "agent_live"):
+        _save(project, sid, _turn(1))
+    store.begin_run(task_id="agent_done", parent_session_id="s-a", task_type="analyze")
+    store.finish_run(parent_session_id="s-a", task_id="agent_done", generation=1, status="failed")
+    store.begin_run(task_id="agent_live", parent_session_id="s-a", task_type="analyze")
+    other = tmp_path_factory.mktemp("foreign")
+    _save(other, "s-foreign", _turn(1))
+
+    refused = [
+        (SessionPrincipal(session_id="s-a"), "s-b", "only itself"),
+        (SessionPrincipal(session_id="s-b"), "agent_done", "owning parent"),
+        (SessionPrincipal(session_id="agent_done", parent_session_id="s-a"), "agent_done", "child"),
+        (SessionPrincipal(session_id="agent_done"), "agent_done", "child session cannot"),
+        (SessionPrincipal(session_id="s-a"), "agent_live", "still running"),
+        (OPERATOR, "agent_live", "still running"),
+        (OPERATOR, "s-gw-123", "gateway"),
+        (OPERATOR, "s-foreign", "unknown source"),
+        (SessionPrincipal(session_id="s-a"), "../s-b", "unknown source"),
+        (SessionPrincipal(), "s-a", "no backend-bound session"),
+    ]
+    for principal, source, reason in refused:
+        with pytest.raises(SessionForkError, match=reason):
+            fork_session(principal, source)
+    assert sorted(p.name for p in project.iterdir() if p.is_dir()) == [
+        "agent_done",
+        "agent_live",
+        "s-a",
+        "s-b",
+        "s-gw-123",
+    ]
+
+    by_parent = fork_session(SessionPrincipal(session_id="s-a"), "agent_done")
+    by_operator = fork_session(OPERATOR, "agent_done")
+    root = fork_session(OPERATOR, "s-b")
+    loaded = [SessionCheckpoint(project).load(r.session_id) for r in (by_parent, by_operator)]
+    # A fork of a child is a new root session; it inherits no parent scope.
+    assert all(state is not None and state.parent_session_id == "" for state in loaded)
+    assert root.lineage["source_session_id"] == "s-b"
+    assert not store.is_child_session(by_parent.session_id)
+
+
+def test_symlinked_source_is_refused(project: Path, tmp_path_factory) -> None:
+    outside = tmp_path_factory.mktemp("outside")
+    _save(outside, "s-real", _turn(1))
+    (project / "s-link").symlink_to(outside / "s-real")
+    # The authority check never resolves a symlinked id; the owner refuses it too.
+    with pytest.raises(SessionForkError, match="unknown source"):
+        fork_session(OPERATOR, "s-link")
+    with pytest.raises(SessionForkError, match="symlink"):
+        SessionCheckpoint(project).fork_completed_turn("s-link", forked_by="operator")
+    assert sorted(p.name for p in project.iterdir()) == ["s-link"]
+
+
+def test_failed_publication_leaves_no_visible_partial_session(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _save(project, "s-src", _turn(1, tools=1))
+    before = _source_fingerprint(project, "s-src")
+    original = session_checkpoint.atomic_write_json
+
+    def failing_write(path: Path, data: Any, **kwargs: Any) -> None:
+        if path.name == "state.json" and path.parent.name != "s-src":
+            raise OSError("disk full")
+        original(path, data, **kwargs)
+
+    monkeypatch.setattr(session_checkpoint, "atomic_write_json", failing_write)
+    with pytest.raises(OSError, match="disk full"):
+        fork_session(OPERATOR, "s-src")
+    assert [p.name for p in project.iterdir() if p.is_dir()] == ["s-src"]
+    with sqlite3.connect(project / "sessions.db") as conn:
+        assert conn.execute("SELECT DISTINCT session_id FROM messages").fetchall() == [("s-src",)]
+        assert conn.execute("SELECT session_id FROM sessions").fetchall() == [("s-src",)]
+    assert _source_fingerprint(project, "s-src") == before
+
+
+def test_crashed_publisher_orphan_is_removed_under_the_lock(project: Path) -> None:
+    _save(project, "s-src", _turn(1))
+    orphan = project / "s-orphan"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src")
+    SessionManager(project / "sessions.db").upsert_messages("s-orphan", _turn(9))
+    _save(project, "s-committed", _turn(2))
+    (project / "s-committed" / ".fork-pending").write_text("s-src")
+
+    assert SessionCheckpoint(project).cleanup(max_age_hours=10_000) == 1
+    assert not orphan.exists()
+    assert SessionManager(project / "sessions.db").get_messages("s-orphan") == []
+    assert not (project / "s-committed" / ".fork-pending").exists()
+    assert SessionCheckpoint(project).load("s-committed") is not None
+
+
+def test_cancelled_caller_observes_complete_publication(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _save(project, "s-src", _turn(1))
+    entered = threading.Event()
+    release = threading.Event()
+    original = SessionCheckpoint._sync_messages_to_db
+
+    def blocking_sync(
+        self: SessionCheckpoint, state: SessionState, *, strict: bool = False
+    ) -> None:
+        if state.session_id != "s-src":
+            entered.set()
+            release.wait(5)
+        original(self, state, strict=strict)
+
+    monkeypatch.setattr(SessionCheckpoint, "_sync_messages_to_db", blocking_sync)
+
+    async def scenario() -> Any:
+        worker = asyncio.ensure_future(asyncio.to_thread(fork_session, OPERATOR, "s-src"))
+        caller = asyncio.ensure_future(asyncio.shield(worker))
+        await asyncio.to_thread(entered.wait, 5)
+        caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await caller
+        assert not worker.done()  # persistence is still running after the cancel
+        release.set()
+        return await worker
+
+    receipt = asyncio.run(scenario())
+    published = SessionCheckpoint(project).load(receipt.session_id)
+    assert published is not None and not (project / receipt.session_id / ".fork-pending").exists()
+
+
+def test_fork_racing_source_appends_always_takes_one_committed_cut(project: Path) -> None:
+    history = _turn(0)
+    _save(project, "s-race", history)
+    stop = threading.Event()
+
+    def append_turns() -> None:
+        n = 1
+        while not stop.is_set() and n < 40:
+            # Mid-turn and completed-turn saves interleave as in a live loop.
+            _save(project, "s-race", [*history, *_turn(n, tools=1)[:2]])
+            history.extend(_turn(n, tools=1))
+            _save(project, "s-race", list(history))
+            n += 1
+
+    writer = threading.Thread(target=append_turns)
+    writer.start()
+    forks: list[SessionState] = []
+    refusals = 0
+    try:
+        for _ in range(30):
+            try:
+                receipt = fork_session(OPERATOR, "s-race")
+            except SessionForkError:
+                refusals += 1
+                continue
+            loaded = SessionCheckpoint(project).load(receipt.session_id)
+            assert loaded is not None
+            forks.append(loaded)
+    finally:
+        stop.set()
+        writer.join()
+    final = SessionCheckpoint(project).load("s-race")
+    assert final is not None and forks and refusals + len(forks) == 30
+    for fork in forks:
+        cut = fork.lineage["source_message_count"]
+        assert _balanced(fork.messages)
+        assert [m["content"] for m in fork.messages] == [m["content"] for m in final.messages[:cut]]
+
+
+def test_legacy_checkpoint_and_index_load_unchanged(tmp_path: Path) -> None:
+    session_dir = tmp_path / "s-old"
+    session_dir.mkdir()
+    (session_dir / "state.json").write_text(
+        json.dumps({"session_id": "s-old", "status": "paused", "updated_at": 1.0})
+    )
+    (session_dir / "messages.json").write_text(json.dumps(_turn(1)))
+    with sqlite3.connect(tmp_path / "sessions.db") as conn:
+        conn.execute(
+            """CREATE TABLE sessions (session_id TEXT PRIMARY KEY, created_at REAL NOT NULL,
+               updated_at REAL NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+               model TEXT NOT NULL DEFAULT '', provider TEXT NOT NULL DEFAULT 'anthropic',
+               user_input TEXT NOT NULL DEFAULT '', round_count INTEGER NOT NULL DEFAULT 0,
+               message_count INTEGER NOT NULL DEFAULT 0)"""
+        )
+        conn.execute("INSERT INTO sessions VALUES ('s-old', 1, 1, 'paused', 'm', 'p', 'i', 2, 2)")
+
+    for _ in range(2):  # additive migration is idempotent
+        manager = SessionManager(tmp_path / "sessions.db")
+        meta = manager.get("s-old")
+        manager.close()
+        assert meta is not None and (meta.round_count, meta.source_session_id) == (2, "")
+    state = SessionCheckpoint(tmp_path).load("s-old")
+    assert state is not None and state.lineage == {} and state.parent_session_id == ""
+    assert [m["content"] for m in state.messages] == ["task 1", "done 1"]

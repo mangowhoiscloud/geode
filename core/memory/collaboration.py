@@ -35,6 +35,15 @@ _RETENTION_SECONDS = 7 * 24 * 60 * 60
 _MAX_TERMINAL_RUNS = 200
 _MAX_UNREAD_PER_RECIPIENT = 1_000
 _MAX_CONSUMED_MESSAGES = 1_000
+# R6.9 peer input between same-project root sessions. Admission is refused at
+# the bound; accepted unread peer rows are never evicted to make room.
+PEER_MESSAGE_KIND = "peer_message"
+_MAX_UNREAD_PEER_MESSAGES = 200
+
+
+class PeerMessageError(ValueError):
+    """A peer message was refused before any mailbox row was written."""
+
 
 _RUNS_SQL = """\
 CREATE TABLE IF NOT EXISTS collaboration_runs (
@@ -163,6 +172,106 @@ class CollaborationStore:
     @property
     def owner_id(self) -> str:
         return _OWNER_ID
+
+    @property
+    def scope_key(self) -> str:
+        """Stable identity of this project-local store for process-local controls."""
+        return str(self._db_path.resolve())
+
+    def is_child_session(self, session_id: str) -> bool:
+        """Return whether *session_id* is a durable R6.5 child task of any parent."""
+        if not session_id:
+            return False
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM collaboration_runs WHERE task_id = ?", (session_id,)
+            ).fetchone()
+        return row is not None
+
+    def child_run(self, task_id: str) -> CollaborationRun | None:
+        """Return a retained child run by task id, whichever parent owns it."""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT parent_session_id FROM collaboration_runs WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+        return None if row is None else self.get_run(str(row["parent_session_id"]), task_id)
+
+    def append_peer_message(
+        self,
+        *,
+        sender_session_id: str,
+        recipient_session_id: str,
+        message: str,
+    ) -> int:
+        """Durably queue one peer message, or raise before writing anything.
+
+        Callers resolve sender and recipient authority first; this transaction
+        re-checks the child exclusion and the unread bound atomically with the
+        insert, so a concurrent spawn or a full mailbox cannot slip through.
+        """
+        if not sender_session_id or not recipient_session_id:
+            raise PeerMessageError("sender and recipient sessions are required")
+        if sender_session_id == recipient_session_id:
+            raise PeerMessageError("a session cannot message itself")
+        with self._transaction() as conn:
+            child = conn.execute(
+                "SELECT task_id FROM collaboration_runs WHERE task_id IN (?, ?) LIMIT 1",
+                (sender_session_id, recipient_session_id),
+            ).fetchone()
+            if child is not None:
+                raise PeerMessageError(
+                    "child sessions cannot send or receive peer messages; "
+                    "use the owning parent's child tools"
+                )
+            unread = conn.execute(
+                """SELECT COUNT(*) FROM collaboration_mailbox
+                   WHERE recipient_session_id = ? AND kind = ? AND consumed_at IS NULL""",
+                (recipient_session_id, PEER_MESSAGE_KIND),
+            ).fetchone()
+            if unread is not None and int(unread[0]) >= _MAX_UNREAD_PEER_MESSAGES:
+                raise PeerMessageError(
+                    f"recipient already holds {_MAX_UNREAD_PEER_MESSAGES} unread peer "
+                    "messages; retry after it admits them"
+                )
+            payload = bound_session_payload({"message": message})
+            cursor = conn.execute(
+                """INSERT INTO collaboration_mailbox
+                       (sender_session_id, recipient_session_id, kind, payload_json, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    sender_session_id,
+                    recipient_session_id,
+                    PEER_MESSAGE_KIND,
+                    json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+                    time.time(),
+                ),
+            )
+            return int(cursor.lastrowid or 0)
+
+    def peer_message_state(self, message_id: int) -> dict[str, Any] | None:
+        """Return ``queued`` or ``applied`` for one retained peer message.
+
+        ``applied`` means the recipient acknowledged the row after its own
+        checkpoint persisted it; it never means a turn or task completed.
+        ``None`` means unknown: never accepted, or acknowledged and pruned.
+        """
+        with self._connection() as conn:
+            row = conn.execute(
+                """SELECT id, sender_session_id, recipient_session_id, created_at, consumed_at
+                   FROM collaboration_mailbox WHERE id = ? AND kind = ?""",
+                (message_id, PEER_MESSAGE_KIND),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "message_id": int(row["id"]),
+            "sender_session_id": str(row["sender_session_id"]),
+            "recipient_session_id": str(row["recipient_session_id"]),
+            "status": "queued" if row["consumed_at"] is None else "applied",
+            "queued_at": float(row["created_at"]),
+            "applied_at": None if row["consumed_at"] is None else float(row["consumed_at"]),
+        }
 
     def begin_run(
         self,
@@ -490,6 +599,7 @@ class CollaborationStore:
             """DELETE FROM collaboration_mailbox WHERE id IN (
                    SELECT id FROM collaboration_mailbox
                    WHERE recipient_session_id = ? AND consumed_at IS NULL
+                     AND kind != 'peer_message'
                    ORDER BY id DESC LIMIT -1 OFFSET ?
                )""",
             (recipient_session_id, _MAX_UNREAD_PER_RECIPIENT),

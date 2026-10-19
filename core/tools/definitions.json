@@ -748,6 +748,49 @@
     }
   },
   {
+    "name": "send_session_message",
+    "description": "Queues a message for another existing root session of this project. The result is a durable queued receipt only: the target is not started or woken, and reads the message as untrusted data at its next turn.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16000
+        }
+      },
+      "required": [
+        "session_id",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "fork_session",
+    "description": "Creates a new paused session from the last completed turn of this session, or of one of its finished child tasks. The fork copies conversation history and model settings only and starts nothing.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "source_session_id": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "create_goal",
     "description": "Create a persistent multi-turn goal only when explicitly requested by the user or system. Do not infer a goal from an ordinary task or research request. Set token_budget only when the user explicitly requests one. Fails while an active goal exists; a stopped goal may be explicitly restarted with a new goal ID.",
     "category": "planning",

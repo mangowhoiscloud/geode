@@ -78,6 +78,7 @@ COMPLETED, ERROR}; PAUSED → {ACTIVE, PAUSED, COMPLETED, ERROR}(재파킹
 | ACTIVE → ERROR | 스케줄러 드레인 타임아웃/미처리 예외 |
 | PAUSED → ACTIVE | ask 답변 → continuation의 매 턴 save |
 | COMPLETED/ERROR → ACTIVE | `reopen()` 전용 (IPC id 지정 resume) |
+| 부재 → PAUSED (새 fork id) | 상태 락 아래의 `SessionCheckpoint.fork_completed_turn`. `state.json`을 마지막에 커밋한 뒤 `fork` 원장 엣지를 기록하며, 원본 머신은 읽기만 함 |
 
 ## 머신 상태의 내용물
 

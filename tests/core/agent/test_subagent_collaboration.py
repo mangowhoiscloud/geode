@@ -311,7 +311,8 @@ def test_interrupt_and_resume_generation(tmp_path) -> None:
 
         from core.agent import sub_agent
 
-        sub_agent._background_interrupting.add("child-2")
+        # A stale flag on the exact key the next generation reuses must be cleared.
+        sub_agent._background_interrupting.add((store.scope_key, "parent-1", "child-2", 2))
         runner.started = asyncio.Event()
         runner.release = asyncio.Event()
         runner.cancelled = False
@@ -841,5 +842,35 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         assert effects == [mutation_id, mutation_id]
         assert final_verifications == [research_id, verify_id, mutation_id, mutation_id]
         assert len(reflection_requests) == 4
+
+    asyncio.run(scenario())
+
+
+def test_same_child_id_in_two_project_stores_keeps_separate_controls(tmp_path) -> None:
+    async def scenario() -> None:
+        runners = (_ControlledRunner(), _ControlledRunner())
+        stores = (
+            CollaborationStore(tmp_path / "a" / "sessions.db"),
+            CollaborationStore(tmp_path / "b" / "sessions.db"),
+        )
+        managers = [
+            SubAgentManager(runner, action_handlers={}, collaboration_store=store)
+            for runner, store in zip(runners, stores, strict=True)
+        ]
+        for manager in managers:
+            await manager.aspawn(
+                [SubTask("agent_same", "inspect", "analyze")], parent_session_id="parent"
+            )
+        await asyncio.gather(*(runner.started.wait() for runner in runners))
+
+        # Project A's interrupt must not reach project B's live worker.
+        assert managers[0].interrupt_task("parent", "agent_same")
+        stopped = await managers[0].wait_for_task("parent", "agent_same", timeout_s=1)
+        assert stopped is not None and stopped.status == "interrupted"
+        assert stores[1].get_run("parent", "agent_same").status == "running"
+
+        runners[1].release.set()
+        finished = await managers[1].wait_for_task("parent", "agent_same", timeout_s=1)
+        assert finished is not None and finished.status == "completed"
 
     asyncio.run(scenario())
