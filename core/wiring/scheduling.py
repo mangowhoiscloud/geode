@@ -26,7 +26,7 @@ def build_scheduling(
     *,
     hooks: HookSystem,
     feature_registrar: Callable[[TriggerManager, HookSystem], None] | None = None,
-    on_job_fired: Callable[[str, str, bool, str], None] | None = None,
+    on_job_fired: Callable[[str, str, bool, str, str], None] | None = None,
 ) -> dict[str, Any]:
     """Build the scheduler stack and wire its hook handlers.
 

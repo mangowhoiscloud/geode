@@ -42,6 +42,10 @@ def _job_to_dict(job: ScheduledJob) -> dict[str, Any]:
         "last_status": job.last_status,
         "last_duration_ms": job.last_duration_ms,
         "running_since_ms": job.running_since_ms,
+        "run_id": job.run_id,
+        "run_owner": job.run_owner,
+        "run_kind": job.run_kind,
+        "last_scheduled_at_ms": job.last_scheduled_at_ms,
     }
 
 
@@ -80,4 +84,8 @@ def _job_from_dict(data: dict[str, Any]) -> ScheduledJob:
         last_status=data.get("last_status", ""),
         last_duration_ms=data.get("last_duration_ms", 0.0),
         running_since_ms=data.get("running_since_ms"),
+        run_id=data.get("run_id", ""),
+        run_owner=data.get("run_owner", ""),
+        run_kind=data.get("run_kind", ""),
+        last_scheduled_at_ms=data.get("last_scheduled_at_ms"),
     )

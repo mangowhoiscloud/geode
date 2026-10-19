@@ -217,11 +217,38 @@ class TriggerManager:
             triggers = [t for t in triggers if t.trigger_type == trigger_type]
         return triggers
 
+    def inventory(self) -> list[dict[str, Any]]:
+        """Bounded, callback-free projection of the registered triggers."""
+        return [
+            {
+                "trigger_id": t.trigger_id,
+                "type": t.trigger_type.value,
+                "name": t.name,
+                "enabled": t.enabled,
+                "cron_expr": t.cron_expr,
+                "event_name": t.event_name,
+                "has_callback": t.callback is not None,
+            }
+            for t in self.list_triggers()
+        ]
+
     def fire_manual(self, trigger_id: str, data: dict[str, Any] | None = None) -> TriggerResult:
-        """Manually fire a trigger (F1)."""
+        """Manually fire a trigger (F1).
+
+        A disabled trigger or one without a callback has nothing to execute, so
+        it reports a failed result instead of a success with no effect.
+        """
         config = self._triggers.get(trigger_id)
         if config is None:
             raise KeyError(f"Trigger '{trigger_id}' not found")
+        if not config.enabled or config.callback is None:
+            reason = "is disabled" if not config.enabled else "has no callback"
+            return TriggerResult(
+                trigger_id=trigger_id,
+                trigger_type=config.trigger_type,
+                success=False,
+                error=f"Trigger '{trigger_id}' {reason}",
+            )
 
         return self._execute_trigger(config, data or {})
 

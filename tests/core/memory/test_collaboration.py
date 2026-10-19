@@ -303,17 +303,101 @@ def test_resume_rejects_active_or_foreign_child(tmp_path) -> None:
         )
 
 
-def test_unread_mailbox_keeps_only_the_newest_bounded_items(tmp_path, monkeypatch) -> None:
+def test_full_mailbox_rejects_new_input_without_evicting_accepted_items(
+    tmp_path, monkeypatch
+) -> None:
     from core.memory import collaboration
 
     monkeypatch.setattr(collaboration, "_MAX_UNREAD_PER_RECIPIENT", 2)
     store = CollaborationStore(tmp_path / "sessions.db")
     store.begin_run(task_id="child-1", parent_session_id="parent-1", task_type="analyze")
-    for index in range(3):
+    for index in range(2):
         store.append_message_if_active(
             parent_session_id="parent-1",
             task_id="child-1",
             message=str(index),
         )
+    with pytest.raises(collaboration.MailboxFullError):
+        store.append_message_if_active(
+            parent_session_id="parent-1", task_id="child-1", message="overflow"
+        )
+    assert [item.payload["message"] for item in store.read_mailbox("child-1")] == ["0", "1"]
 
-    assert [item.payload["message"] for item in store.read_mailbox("child-1")] == ["1", "2"]
+    # Draining makes room again; the retried input is then accepted.
+    store.ack_mailbox("child-1", [store.read_mailbox("child-1")[0].id])
+    assert store.append_message_if_active(
+        parent_session_id="parent-1", task_id="child-1", message="retry"
+    )
+    assert [item.payload["message"] for item in store.read_mailbox("child-1")] == ["1", "retry"]
+
+
+def test_completion_results_survive_inbox_saturation_and_run_pruning(tmp_path, monkeypatch) -> None:
+    """Review 8: every accepted child result stays recoverable exactly once."""
+    from core.memory import collaboration
+
+    monkeypatch.setattr(collaboration, "_MAX_UNREAD_PER_RECIPIENT", 1)
+    monkeypatch.setattr(collaboration, "_MAX_TERMINAL_RUNS", 1)
+    store = CollaborationStore(tmp_path / "sessions.db")
+    delivered: list[str] = []
+    for index in range(3):
+        child = f"child-{index}"
+        try:
+            store.begin_run(task_id=child, parent_session_id="parent", task_type="analyze")
+        except collaboration.MailboxFullError:
+            # Backpressure at admission: drain the parent's completions, then retry.
+            items = store.read_mailbox("parent")
+            delivered.extend(item.payload["task_id"] for item in items)
+            store.ack_mailbox("parent", [item.id for item in items])
+            store.begin_run(task_id=child, parent_session_id="parent", task_type="analyze")
+        assert store.finish_run(
+            parent_session_id="parent", task_id=child, generation=1, status="completed"
+        )
+    items = store.read_mailbox("parent")
+    delivered.extend(item.payload["task_id"] for item in items)
+    assert sorted(delivered) == ["child-0", "child-1", "child-2"]
+
+
+def test_full_inbox_rejects_a_new_child_before_any_run_state(tmp_path, monkeypatch) -> None:
+    from core.memory import collaboration
+
+    monkeypatch.setattr(collaboration, "_MAX_UNREAD_PER_RECIPIENT", 1)
+    store = CollaborationStore(tmp_path / "sessions.db")
+    store.begin_run(task_id="a", parent_session_id="p", task_type="analyze")
+    with pytest.raises(collaboration.MailboxFullError):
+        store.begin_run(task_id="b", parent_session_id="p", task_type="analyze")
+    assert store.get_run("p", "b") is None
+    # The running child still completes with its notice queued.
+    assert store.finish_run(parent_session_id="p", task_id="a", generation=1, status="completed")
+    assert [item.payload["task_id"] for item in store.read_mailbox("p")] == ["a"]
+
+
+def test_concurrent_sends_at_the_bound_accept_exactly_the_limit(tmp_path, monkeypatch) -> None:
+    import threading
+
+    from core.memory import collaboration
+
+    monkeypatch.setattr(collaboration, "_MAX_UNREAD_PER_RECIPIENT", 5)
+    store = CollaborationStore(tmp_path / "sessions.db")
+    store.begin_run(task_id="child-1", parent_session_id="parent-1", task_type="analyze")
+    accepted: list[int] = []
+    rejected: list[str] = []
+    barrier = threading.Barrier(6)
+
+    def send(n: int) -> None:
+        barrier.wait()
+        try:
+            item = store.append_message_if_active(
+                parent_session_id="parent-1", task_id="child-1", message=f"m{n}"
+            )
+            assert item is not None
+            accepted.append(item)
+        except collaboration.MailboxFullError:
+            rejected.append(f"m{n}")
+
+    threads = [threading.Thread(target=send, args=(n,)) for n in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    assert len(accepted) == 5 and len(rejected) == 1
+    assert sorted(item.id for item in store.read_mailbox("child-1")) == sorted(accepted)

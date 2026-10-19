@@ -9,7 +9,7 @@ Sub-modules:
                           `ScheduledJob`, `OnJobFired`, constants
 - :mod:`serialization`  — `_job_to_dict`, `_job_from_dict`
 - :mod:`core.observability.run_log` — `JobRunLog` (bounded per-job JSONL)
-- :mod:`lock`           — `SchedulerLock`, `_is_pid_alive` (O_EXCL pattern)
+- :mod:`lock`           — `SchedulerLock` (flock on a separate lock-file inode)
 - :mod:`jitter`         — `_compute_jitter_frac`, `_jittered_next_run`
 - :mod:`timezone`       — `_parse_hhmm`, `_now_minutes`, `_cron_tuple_for_tz`
 - :mod:`service`        — `SchedulerService` (the central engine)
@@ -24,7 +24,7 @@ Supports:
 - Active Hours: timezone-aware quiet-hours window with midnight wrap-around
 - Per-job JSONL run log with auto-pruning
 - Atomic JSON store (tmp + rename pattern)
-- O_EXCL lock file + PID liveness probe (claude-code pattern)
+- Locked reload-mutate-persist store transactions with fenced run claims
 - Deterministic per-job jitter (thundering herd prevention)
 - Session-only tasks (durable flag)
 - Missed task recovery
@@ -36,7 +36,7 @@ from __future__ import annotations
 from core.observability.run_log import JobRunLog
 from core.scheduler.factory import create_scheduler
 from core.scheduler.jitter import _compute_jitter_frac, _jittered_next_run
-from core.scheduler.lock import SchedulerLock, _is_pid_alive
+from core.scheduler.lock import SchedulerLock
 from core.scheduler.models import (
     DEFAULT_JITTER_FRACTION,
     DEFAULT_LOG_DIR,
@@ -71,7 +71,6 @@ __all__ = [
     "SchedulerService",
     "_compute_jitter_frac",
     "_cron_tuple_for_tz",
-    "_is_pid_alive",
     "_jittered_next_run",
     "_job_from_dict",
     "_job_to_dict",

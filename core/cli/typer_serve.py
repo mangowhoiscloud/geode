@@ -255,13 +255,15 @@ def _serve(
     # The serve shell supplies the callback; the runtime owns the scheduler.
     import queue as _queue_mod
 
-    _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str]] = _queue_mod.Queue()
+    _sched_queue: _queue_mod.Queue[tuple[str, str, bool, str, str]] = _queue_mod.Queue()
 
     # Build runtime (wires env, notifications, gateway + MCP startup)
     # MCP startup is now inside _build_gateway() via mcp.startup()
     runtime = _build_runtime_for_serve(
         runtime_builder,
-        scheduler_callback=lambda jid, act, iso, aid: _sched_queue.put((jid, act, iso, aid)),
+        scheduler_callback=lambda jid, act, iso, aid, rid: _sched_queue.put(
+            (jid, act, iso, aid, rid)
+        ),
     )
     if runtime is None:
         console.print("  [warning]Runtime initialization failed.[/warning]")
@@ -324,11 +326,6 @@ def _serve(
         scheduler_service=runtime.scheduler_service,
         user_profile=runtime.user_profile,
     )
-
-    # Wire module-level hooks so _fire_hook() works in serve mode
-    import core.cli as _cli_pkg
-
-    _cli_pkg._hooks_ctx = _gw_services.hook_system
 
     # --- Runtime-owned scheduler daemon (drained in the serve loop) ---
     _sched_svc = runtime.scheduler_service
@@ -606,9 +603,22 @@ def _serve(
                 session_lane=_serve_session_lane,
                 global_lane=_serve_global_lane,
                 force_isolated=True,
-                on_complete=lambda result, *, job_id: log.info("scheduled:%s completed", job_id),
+                on_complete=lambda result, *, job_id: log.info(
+                    "scheduled:%s settled (%s)",
+                    job_id,
+                    getattr(result, "termination_reason", "unknown"),
+                ),
                 on_dispatch=lambda jid: log.info("scheduled:%s dispatched", jid),
                 on_skip=lambda jid: log.warning("scheduled:%s skipped (slots full)", jid),
+                on_settle=(
+                    (
+                        lambda jid, rid, status, error: _sched_svc.record_run_outcome(
+                            jid, rid, status, error=error
+                        )
+                    )
+                    if _sched_svc is not None
+                    else None
+                ),
             )
             if _serve_session_lane:
                 _serve_session_lane.cleanup_idle()
@@ -710,7 +720,7 @@ run_serve = _serve
 def _build_runtime_for_serve(
     runtime_builder: Callable[..., Any] | None = None,
     *,
-    scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
+    scheduler_callback: Callable[[str, str, bool, str, str], None] | None = None,
 ) -> Any:
     """Minimal runtime init for serve mode without REPL."""
     try:

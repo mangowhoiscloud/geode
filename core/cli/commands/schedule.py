@@ -157,12 +157,11 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
             return
         result.job.action = action_text
         try:
-            scheduler_service.add_job(result.job)
+            scheduler_service.create_job(result.job)
         except ValueError as exc:
             console.print(f"  [warning]{exc}[/warning]")
             console.print()
             return
-        scheduler_service.save()
         console.print(f"  [success]Created: {result.job.job_id}[/success]")
         console.print(f"  Schedule: {_format_schedule_desc(result.job)}")
         console.print(f"  Action: {action_text[:80]}")
@@ -175,9 +174,8 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
             console.print("  [warning]Scheduler not available[/warning]")
             console.print()
             return
-        removed = scheduler_service.remove_job(target_id)
+        removed = scheduler_service.delete_job(target_id)
         if removed:
-            scheduler_service.save()  # persist deletion immediately
             console.print(f"  [success]Deleted: {target_id}[/success]")
         else:
             console.print(f"  [warning]Job not found: {target_id}[/warning]")
@@ -232,9 +230,8 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
 
         # Dynamic jobs
         if scheduler_service is not None:
-            updated = scheduler_service.update_job(target_id, enabled=new_state)
+            updated = scheduler_service.set_job_enabled(target_id, new_state)
             if updated:
-                scheduler_service.save()
                 label = "enabled" if new_state else "disabled"
                 console.print(f"  [success]{target_id}: {label}[/success]")
                 console.print()
@@ -258,9 +255,16 @@ def cmd_schedule(args: str, *, scheduler_service: _Any = None) -> None:
 
         # Dynamic jobs
         if scheduler_service is not None:
-            result = scheduler_service.run_now(target_id)
-            if result.get("status") == "error":
-                console.print(f"  [warning]{result.get('error', 'Unknown error')}[/warning]")
+            try:
+                run_result = scheduler_service.run_now(target_id)
+            except KeyError:
+                run_result = {"status": "error", "error": f"Job not found: {target_id}"}
+            status = run_result.get("status")
+            if status in ("error", "skipped"):
+                reason = run_result.get("error") or run_result.get("reason") or "Unknown error"
+                console.print(f"  [warning]{reason}[/warning]")
+            elif status == "dispatched":
+                console.print(f"  [success]Dispatched: {target_id}[/success]")
             else:
                 console.print(f"  [success]Executed: {target_id}[/success]")
             console.print()

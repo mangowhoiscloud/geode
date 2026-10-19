@@ -3281,7 +3281,9 @@ cron 매칭은 `core/scheduler/triggers.py`의 최소 구현 `CronParser`가 담
 
 ## 영속화
 
-`SchedulerService`(`core/scheduler/service.py`)가 작업 목록을 `.geode/scheduled_tasks.json`에 저장합니다. 쓰기는 임시 파일 작성 후 `os.replace`로 원자적으로 바꾸고, 같은 디렉터리의 `scheduled_tasks.lock`으로 다중 프로세스 경합을 막습니다(`core/scheduler/lock.py`). 데몬 시작 시 저장된 작업을 다시 읽고, 꺼져 있던 동안 놓친 발화를 복구합니다.
+`SchedulerService`(`core/scheduler/service.py`)가 작업 목록을 `.geode/scheduled_tasks.json`에 저장합니다. 모든 변경은 같은 디렉터리의 `scheduled_tasks.lock`(별도 inode의 `flock`, `core/scheduler/lock.py`)을 잡고 저장소를 다시 읽은 뒤 적용하고, 임시 파일과 `os.replace`로 기록합니다. 그래서 다른 인스턴스의 추가, 삭제, 일시정지가 오래된 메모리 사본에 덮이지 않습니다. 읽을 수 없는 저장소는 바꾸지 않고 오류로 거부합니다. 데몬 시작 시 저장된 작업을 다시 읽고, 꺼져 있던 동안 놓친 발화를 복구합니다.
+
+실행은 저장소에 run 클레임(`run_id`, 소유 프로세스, 수동 또는 예약 구분)으로 먼저 기록됩니다. 같은 발생분은 한 번만 클레임되고, 클레임 직전에 활성 여부와 스케줄을 다시 확인합니다. 경과 시간만으로는 클레임을 넘기지 않으며, 소유 프로세스가 종료된 것이 관측될 때만 이전 run을 `interrupted`로 기록합니다. 수동 실행은 다음 예약 발생분을 소모하지 않습니다.
 
 ## 발화
 
@@ -3294,7 +3296,7 @@ jitter = min(frac * interval * 0.1, 15min)  # 전방 오프셋
 fire_at = nominal + jitter
 ```
 
-같은 작업은 재시작 후에도 항상 같은 오프셋에 발화하고, 같은 정각을 공유하는 다른 작업들은 시간상 분산됩니다. 발화된 작업의 액션 프롬프트는 SCHEDULER 모드 세션(wall-clock 300초 상한, headless 도구 차단)으로 실행되고, 트리거 시점에 `RuntimeEvent.TRIGGER_FIRED`가 발화됩니다 (`core/scheduler/triggers.py`).
+같은 작업은 재시작 후에도 항상 같은 오프셋에 발화하고, 같은 정각을 공유하는 다른 작업들은 시간상 분산됩니다. 발화된 작업의 액션 프롬프트는 SCHEDULER 모드 세션(wall-clock 300초 상한, headless 도구 차단)으로 실행되고, 트리거 시점에 `RuntimeEvent.TRIGGER_FIRED`가 발화됩니다 (`core/scheduler/triggers.py`). 큐에 넣는 순간은 `dispatched`일 뿐이고, 세션 종료 상태가 저장된 뒤에야 실제 결과(`ok`, `paused`, `error`, `cancelled`)로 정산됩니다. 필요한 저장이 실패하면 run은 정산되지 않은 채 클레임으로 남습니다.
 
 ## 설정 손잡이
 
@@ -7488,8 +7490,8 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 600 |
-| 테스트 Python 파일 | 770 |
+| 프로덕션 Python 파일 | 599 |
+| 테스트 Python 파일 | 778 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 84 / 84 / 84 / 84 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

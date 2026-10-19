@@ -17,15 +17,76 @@ Directory structure:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from core.memory.atomic_write import atomic_write_text
+from core.memory.atomic_write import atomic_write_text, exclusive_file_lock
 from core.skills._frontmatter import _FRONTMATTER_RE
 
 log = logging.getLogger(__name__)
+
+_LOCK_FILENAME = ".memory.lock"
+_MAX_RULE_NAME = 64
+
+
+class MemoryWrite(StrEnum):
+    """Outcome of one ProjectMemory mutation; only ``APPLIED`` changed a file."""
+
+    APPLIED = "applied"
+    UNCHANGED = "unchanged"  # idempotent: the same insight is already recorded
+    NOT_FOUND = "not_found"  # PROJECT.md or the named rule does not exist
+    CONFLICT = "conflict"  # create of a rule that already exists
+    INVALID = "invalid"  # rejected input, unsafe name, or symlinked/escaping target
+    FAILED = "failed"  # existing content unreadable, lock timeout, or write error
+
+
+class _OutsideTierError(Exception):
+    """The project memory tier is a symlink or resolves outside the project."""
+
+
+class _UnreadableError(Exception):
+    """An existing file could not be read; it must be left byte-identical."""
+
+
+def _contained(path: Path, root: Path) -> bool:
+    """True when *path* is a non-symlink whose parent resolves under *root*."""
+    if path.is_symlink():
+        return False
+    try:
+        return path.parent.resolve().is_relative_to(root.resolve())
+    except OSError:
+        return False
+
+
+def _read_text(path: Path, root: Path) -> str | None:
+    """Read a tier file without following a symlink out of its tier.
+
+    Returns None when the file is absent; raises :class:`_UnreadableError` when it
+    exists but is a symlink, escapes *root*, or cannot be read or decoded.
+    """
+    if not path.exists() and not path.is_symlink():
+        return None
+    if not _contained(path, root):
+        raise _UnreadableError(f"{path} is a symlink or outside {root}")
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, encoding="utf-8") as handle:
+            return handle.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise _UnreadableError(f"{path}: {exc}") from exc
+
+
+def _safe_rule_name(name: str) -> str | None:
+    """Filesystem-safe rule stem, or None when nothing meaningful remains."""
+    safe_name = re.sub(r"[^\w\-]", "-", name.lower().strip())
+    if not safe_name.strip("-") or len(safe_name) > _MAX_RULE_NAME:
+        return None
+    return safe_name
+
 
 # MEMORY.md max lines loaded into context (SOT: 200)
 MAX_MEMORY_LINES = 200
@@ -114,7 +175,9 @@ class ProjectMemory:
         # `GEODE_HOME` is the SoT for the user-home tier.
         from core.paths import GEODE_HOME, PROJECT_GEODE_DIR
 
-        root = project_root or Path(".")
+        # Resolved once so a later chdir cannot redirect reads or writes.
+        root = (project_root or Path(".")).resolve()
+        self._root = root
         self._geode_dir = root / PROJECT_GEODE_DIR
         self._global_geode_dir = GEODE_HOME
         self._memory_dir = self._geode_dir / "memory"
@@ -136,25 +199,66 @@ class ProjectMemory:
         """Check if MEMORY.md exists."""
         return self._memory_file.exists()
 
+    def _tier_contained(self) -> bool:
+        """``.geode`` (and its memory/rules dirs, if present) stays in the project.
+
+        Checked before any lock file or directory is created, so a symlinked
+        tier never receives even a rejected write.
+        """
+        for directory in (self._geode_dir, self._memory_dir, self._rules_dir):
+            if directory.is_symlink():
+                return False
+            if directory.exists() and not directory.resolve().is_relative_to(self._root):
+                return False
+        return True
+
+    def _project_lock(self) -> Any:
+        if not self._tier_contained():
+            raise _OutsideTierError(f"{self._geode_dir} resolves outside {self._root}")
+        return exclusive_file_lock(self._geode_dir / _LOCK_FILENAME)
+
     def load_memory(self, max_lines: int = MAX_MEMORY_LINES) -> str:
         """Load MEMORY.md content (first N lines for context window efficiency).
 
-        Cascade: project .geode/memory/ → global ~/.geode/memory/
+        Cascade: project .geode/memory/ → global ~/.geode/memory/. A symlinked
+        or tier-escaping file is never followed into the prompt.
         """
-        target = self._memory_file
-        if not target.exists():
-            global_file = self._global_memory_dir / "PROJECT.md"
-            if global_file.exists():
-                target = global_file
-            else:
+        for target, root in (
+            (self._memory_file, self._root),
+            (self._global_memory_dir / "PROJECT.md", self._global_geode_dir),
+        ):
+            try:
+                content = _read_text(target, root)
+            except _UnreadableError as exc:
+                log.warning("Failed to read MEMORY.md: %s", exc)
                 return ""
+            if content is not None:
+                return "\n".join(content.split("\n")[:max_lines])
+        return ""
+
+    def _rule_files(self) -> dict[str, Path]:
+        """Rule files by stem: global first, project overrides; symlinks skipped."""
+        rule_files: dict[str, Path] = {}
+        for rules_dir, root in (
+            (self._global_rules_dir, self._global_geode_dir),
+            (self._rules_dir, self._root),
+        ):
+            if not rules_dir.is_dir():
+                continue
+            for f in sorted(rules_dir.glob("*.md")):
+                if _contained(f, root):
+                    rule_files[f.stem] = f
+                else:
+                    log.warning("Skipping rule outside its memory tier: %s", f)
+        return rule_files
+
+    def _read_rule(self, rule_file: Path) -> str | None:
+        root = self._root if rule_file.parent == self._rules_dir else self._global_geode_dir
         try:
-            content = target.read_text(encoding="utf-8")
-            lines = content.split("\n")[:max_lines]
-            return "\n".join(lines)
-        except OSError as e:
-            log.warning("Failed to read MEMORY.md: %s", e)
-            return ""
+            return _read_text(rule_file, root)
+        except _UnreadableError as exc:
+            log.warning("Skipping unreadable rule: %s", exc)
+            return None
 
     def load_rules(self, context: str = "*") -> list[dict[str, Any]]:
         """Load matching rules from .geode/rules/*.md.
@@ -168,21 +272,10 @@ class ProjectMemory:
         Returns:
             List of dicts with 'name', 'paths', 'content' for each matching rule.
         """
-        # Collect rule files: global first, project overrides
-        rule_files: dict[str, Path] = {}
-        for rules_dir in (self._global_rules_dir, self._rules_dir):
-            if rules_dir.exists():
-                for f in sorted(rules_dir.glob("*.md")):
-                    rule_files[f.stem] = f  # project overrides global by name
-
-        if not rule_files:
-            return []
-
         matched: list[dict[str, Any]] = []
-        for rule_file in rule_files.values():
-            try:
-                raw = rule_file.read_text(encoding="utf-8")
-            except OSError:
+        for rule_file in self._rule_files().values():
+            raw = self._read_rule(rule_file)
+            if raw is None:
                 continue
 
             # Parse YAML frontmatter (canonical regex from _frontmatter.py)
@@ -208,26 +301,50 @@ class ProjectMemory:
         return matched
 
     def add_insight(self, insight: str) -> bool:
+        """Compatibility form of :meth:`record_insight`: True only when written."""
+        return self.record_insight(insight) is MemoryWrite.APPLIED
+
+    def record_insight(self, insight: str) -> MemoryWrite:
         """Add an insight to the '## 최근 인사이트' section of MEMORY.md.
 
-        - Dedup: same date + same subject substring -> skip (return False)
+        Runs as one locked reload → validate → modify → atomic write, so
+        concurrent writers (threads or processes) never lose each other's
+        entries, and an unreadable existing file is left byte-identical.
+
+        - Dedup: the same text, or same date + same ``[subject]``, is UNCHANGED
         - Newest-first: new entry prepended at top of section
         - Rotation: keeps only MAX_INSIGHTS entries, oldest dropped
-
-        Returns True if successfully written, False otherwise.
         """
-        if not self._memory_file.exists():
-            log.warning("MEMORY.md does not exist — cannot add insight")
-            return False
-
         if not _is_valid_insight(insight):
-            return False
-
+            return MemoryWrite.INVALID
+        if not self._tier_contained() or not _contained(self._memory_file, self._root):
+            log.warning("Refusing MEMORY.md outside the project: %s", self._memory_file)
+            return MemoryWrite.INVALID
         try:
-            content = self._memory_file.read_text(encoding="utf-8")
-        except OSError:
-            return False
+            with self._project_lock():
+                try:
+                    content = _read_text(self._memory_file, self._root)
+                except _UnreadableError as exc:
+                    log.warning("MEMORY.md unreadable; left unchanged: %s", exc)
+                    return MemoryWrite.FAILED
+                if content is None:
+                    log.warning("MEMORY.md does not exist — cannot add insight")
+                    return MemoryWrite.NOT_FOUND
+                updated = self._with_insight(content, insight.strip())
+                if updated is None:
+                    return MemoryWrite.UNCHANGED
+                atomic_write_text(self._memory_file, updated)
+        except _OutsideTierError:
+            return MemoryWrite.INVALID
+        except (OSError, TimeoutError) as e:
+            log.warning("Failed to write MEMORY.md: %s", e)
+            return MemoryWrite.FAILED
+        log.info("Added insight to MEMORY.md: %s", insight)
+        return MemoryWrite.APPLIED
 
+    @staticmethod
+    def _with_insight(content: str, insight: str) -> str | None:
+        """Return MEMORY.md with *insight* added, or None when already present."""
         timestamp = datetime.now().strftime("%Y-%m-%d")
         entry = f"- {timestamp}: {insight}"
 
@@ -264,6 +381,10 @@ class ProjectMemory:
         while existing_lines and existing_lines[-1].strip() == "":
             existing_lines.pop()
 
+        # Idempotent: the exact same insight text is already recorded.
+        if any(line.split(": ", 1)[-1] == insight for line in existing_lines):
+            return None
+
         # Dedup: skip if same date + same subject substring already exists.
         ip_token = ""
         if insight.startswith("[") and "]" in insight:
@@ -273,7 +394,7 @@ class ProjectMemory:
             for line in existing_lines:
                 if timestamp in line and f"[{ip_token}]" in line:
                     log.debug("Dedup: insight for [%s] on %s already exists", ip_token, timestamp)
-                    return False
+                    return None
 
         # Prepend new entry (newest-first)
         existing_lines.insert(0, entry)
@@ -298,15 +419,7 @@ class ProjectMemory:
         # Reassemble
         insight_block = "\n".join(existing_lines)
         remainder = "\n".join(remainder_lines)
-        content = before + insight_block + "\n" + remainder
-
-        try:
-            atomic_write_text(self._memory_file, content)
-            log.info("Added insight to MEMORY.md: %s", insight)
-            return True
-        except OSError as e:
-            log.warning("Failed to write MEMORY.md: %s", e)
-            return False
+        return before + insight_block + "\n" + remainder
 
     def purge_bad_insights(self) -> int:
         """Remove existing insight entries that fail the quality gate.
@@ -314,14 +427,26 @@ class ProjectMemory:
         Scans both '## Recent Insights' and '## 최근 인사이트' sections.
         Returns the number of entries removed.
         """
-        if not self._memory_file.exists():
-            return 0
-
         try:
-            content = self._memory_file.read_text(encoding="utf-8")
-        except OSError:
+            with self._project_lock():
+                try:
+                    content = _read_text(self._memory_file, self._root)
+                except _UnreadableError:
+                    return 0
+                if content is None:
+                    return 0
+                content, total_removed = self._without_bad_insights(content)
+                if total_removed == 0:
+                    return 0
+                atomic_write_text(self._memory_file, content)
+        except (_OutsideTierError, OSError, TimeoutError) as e:
+            log.warning("Failed to purge insights: %s", e)
             return 0
+        log.info("Purged %d bad insights from MEMORY.md", total_removed)
+        return total_removed
 
+    @staticmethod
+    def _without_bad_insights(content: str) -> tuple[str, int]:
         markers = ("## 최근 인사이트", "## Recent Insights")
         total_removed = 0
 
@@ -367,104 +492,94 @@ class ProjectMemory:
             content = before + insight_block + "\n" + remainder
             total_removed += removed
 
-        if total_removed == 0:
-            return 0
-
-        try:
-            atomic_write_text(self._memory_file, content)
-            log.info("Purged %d bad insights from MEMORY.md", total_removed)
-        except OSError as e:
-            log.warning("Failed to purge insights: %s", e)
-            return 0
-
-        return total_removed
+        return content, total_removed
 
     # ------------------------------------------------------------------
     # Rule CRUD (P0-B: agent-driven rule management)
     # ------------------------------------------------------------------
 
-    def create_rule(self, name: str, paths: list[str], content: str) -> bool:
-        """Create a new rule file in .geode/rules/.
+    def change_rule(
+        self,
+        action: str,
+        name: str,
+        *,
+        paths: list[str] | None = None,
+        content: str = "",
+    ) -> MemoryWrite:
+        """Create, update, or delete one project rule under the memory lock.
 
-        Args:
-            name: Rule name (used as filename, e.g. 'dark-fantasy').
-            paths: Glob patterns for subject matching.
-            content: Rule body in markdown.
-
-        Returns True if created, False if already exists or write failed.
+        ``create`` reports CONFLICT for an existing rule; ``update``/``delete``
+        report NOT_FOUND for an absent one. Symlinked rule files, a rules
+        directory resolving outside the project, and names that sanitize to
+        nothing are INVALID; an unreadable rule being updated stays unchanged.
         """
-        self._rules_dir.mkdir(parents=True, exist_ok=True)
-        safe_name = re.sub(r"[^\w\-]", "-", name.lower().strip())
+        safe_name = _safe_rule_name(name)
+        if safe_name is None or action not in ("create", "update", "delete"):
+            return MemoryWrite.INVALID
+        if not self._tier_contained():
+            log.warning("Refusing rule write: %s resolves outside the project", self._geode_dir)
+            return MemoryWrite.INVALID
         rule_path = self._rules_dir / f"{safe_name}.md"
-
-        if rule_path.exists():
-            log.warning("Rule '%s' already exists — use update_rule()", safe_name)
-            return False
-
-        paths_yaml = "\n".join(f'  - "{p}"' for p in paths)
-        frontmatter = f"---\nname: {safe_name}\npaths:\n{paths_yaml}\n---\n\n"
         try:
-            atomic_write_text(rule_path, frontmatter + content)
-            log.info("Created rule: %s", rule_path)
-            return True
-        except OSError as e:
-            log.warning("Failed to create rule '%s': %s", safe_name, e)
-            return False
+            with self._project_lock():
+                self._rules_dir.mkdir(parents=True, exist_ok=True)
+                if not _contained(rule_path, self._root):
+                    log.warning("Refusing rule outside the project: %s", rule_path)
+                    return MemoryWrite.INVALID
+                exists = rule_path.exists()
+                if action == "create":
+                    if exists:
+                        log.warning("Rule '%s' already exists — use update_rule()", safe_name)
+                        return MemoryWrite.CONFLICT
+                    paths_yaml = "\n".join(f'  - "{p}"' for p in paths or [])
+                    frontmatter = f"---\nname: {safe_name}\npaths:\n{paths_yaml}\n---\n\n"
+                    atomic_write_text(rule_path, frontmatter + content)
+                elif not exists:
+                    log.warning("Rule '%s' not found", safe_name)
+                    return MemoryWrite.NOT_FOUND
+                elif action == "update":
+                    try:
+                        raw = _read_text(rule_path, self._root) or ""
+                    except _UnreadableError as exc:
+                        log.warning("Rule unreadable; left unchanged: %s", exc)
+                        return MemoryWrite.FAILED
+                    fm_match = _FRONTMATTER_RE.match(raw)
+                    frontmatter_block = raw[: fm_match.start(2)] if fm_match else ""
+                    atomic_write_text(rule_path, frontmatter_block + content)
+                else:
+                    rule_path.unlink()
+        except _OutsideTierError:
+            return MemoryWrite.INVALID
+        except (OSError, TimeoutError) as e:
+            log.warning("Failed to %s rule '%s': %s", action, safe_name, e)
+            return MemoryWrite.FAILED
+        log.info("Rule %s: %s", action, rule_path)
+        return MemoryWrite.APPLIED
+
+    def create_rule(self, name: str, paths: list[str], content: str) -> bool:
+        """Create a new rule file in .geode/rules/; True only when created."""
+        return self.change_rule("create", name, paths=paths, content=content) is MemoryWrite.APPLIED
 
     def update_rule(self, name: str, content: str) -> bool:
-        """Update an existing rule's content (preserves frontmatter).
-
-        Returns True if updated, False if not found or write failed.
-        """
-        safe_name = re.sub(r"[^\w\-]", "-", name.lower().strip())
-        rule_path = self._rules_dir / f"{safe_name}.md"
-
-        if not rule_path.exists():
-            log.warning("Rule '%s' not found — use create_rule()", safe_name)
-            return False
-
-        try:
-            raw = rule_path.read_text(encoding="utf-8")
-        except OSError:
-            return False
-
-        fm_match = _FRONTMATTER_RE.match(raw)
-        frontmatter_block = raw[: fm_match.start(2)] if fm_match else ""
-
-        try:
-            atomic_write_text(rule_path, frontmatter_block + content)
-            log.info("Updated rule: %s", rule_path)
-            return True
-        except OSError as e:
-            log.warning("Failed to update rule '%s': %s", safe_name, e)
-            return False
+        """Update an existing rule's content (preserves frontmatter); True when updated."""
+        return self.change_rule("update", name, content=content) is MemoryWrite.APPLIED
 
     def delete_rule(self, name: str) -> bool:
         """Delete a rule file. Returns True if deleted, False if not found."""
-        safe_name = re.sub(r"[^\w\-]", "-", name.lower().strip())
-        rule_path = self._rules_dir / f"{safe_name}.md"
-
-        if not rule_path.exists():
-            return False
-
-        try:
-            rule_path.unlink()
-            log.info("Deleted rule: %s", safe_name)
-            return True
-        except OSError as e:
-            log.warning("Failed to delete rule '%s': %s", safe_name, e)
-            return False
+        return self.change_rule("delete", name) is MemoryWrite.APPLIED
 
     def list_rules(self) -> list[dict[str, Any]]:
-        """List all rules with name, paths, and content preview."""
-        if not self._rules_dir.exists():
+        """List project rules with name, paths, and content preview."""
+        if not self._rules_dir.is_dir():
             return []
 
         rules: list[dict[str, Any]] = []
         for rule_file in sorted(self._rules_dir.glob("*.md")):
-            try:
-                raw = rule_file.read_text(encoding="utf-8")
-            except OSError:
+            if not _contained(rule_file, self._root):
+                log.warning("Skipping rule outside the project: %s", rule_file)
+                continue
+            raw = self._read_rule(rule_file)
+            if raw is None:
                 continue
 
             fm_match = _FRONTMATTER_RE.match(raw)
@@ -501,11 +616,20 @@ class ProjectMemory:
         """
         if self._memory_file.exists():
             return False
+        if not self._tier_contained():
+            raise PermissionError(f"{self._geode_dir} resolves outside {self._root}")
 
         self._memory_dir.mkdir(parents=True, exist_ok=True)
         self._rules_dir.mkdir(parents=True, exist_ok=True)
+        with self._project_lock():
+            if self._memory_file.exists():
+                return False
+            atomic_write_text(self._memory_file, _DEFAULT_MEMORY)
+        log.info("Created .geode/memory/PROJECT.md and .geode/rules/ structure")
+        return True
 
-        default_memory = """\
+
+_DEFAULT_MEMORY = """\
 # Project Memory
 
 ## Overview
@@ -517,7 +641,3 @@ class ProjectMemory:
 
 ## Recent Insights
 """
-        atomic_write_text(self._memory_file, default_memory)
-
-        log.info("Created .geode/memory/PROJECT.md and .geode/rules/ structure")
-        return True

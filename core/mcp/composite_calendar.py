@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from core.mcp.calendar_port import CalendarEvent, CalendarPort
+from core.mcp.calendar_port import CalendarEvent, CalendarPort, CalendarReadError
 
 log = logging.getLogger(__name__)
 
@@ -29,8 +29,15 @@ class CompositeCalendarAdapter:
         calendar_name: str | None = None,
         max_results: int = 20,
     ) -> list[CalendarEvent]:
-        """Async event listing across child adapters."""
+        """Async event listing across child adapters.
+
+        Raises :class:`CalendarReadError` when any available source fails; its
+        ``events`` carry the merged results of the sources that answered, so a
+        partial view is explicit rather than indistinguishable from "empty".
+        """
         merged: list[CalendarEvent] = []
+        failures: list[str] = []
+        answered = 0
         for adapter in self._adapters:
             if not await _supports(adapter, "read"):
                 continue
@@ -42,8 +49,10 @@ class CompositeCalendarAdapter:
                     max_results=max_results,
                 )
                 merged.extend(events)
+                answered += 1
             except Exception as exc:
                 log.warning("Calendar adapter %s failed: %s", type(adapter).__name__, exc)
+                failures.append(f"{type(adapter).__name__}: {exc}")
         # Native /login-google and the legacy Google Calendar MCP can both
         # point at the same account. Keep compatibility without returning the
         # same Google event twice when both adapters are available.
@@ -53,8 +62,15 @@ class CompositeCalendarAdapter:
             if not event.event_id:
                 key = (event.source, f"{event.start.isoformat()}:{event.title}")
             unique.setdefault(key, event)
-        deduplicated = sorted(unique.values(), key=lambda e: e.start)
-        return deduplicated[:max_results]
+        deduplicated = sorted(unique.values(), key=lambda e: e.start)[:max_results]
+        if failures:
+            raise CalendarReadError(
+                f"{len(failures)} calendar source(s) failed",
+                events=deduplicated,
+                failures=failures,
+                partial=answered > 0,
+            )
+        return deduplicated
 
     async def acreate_event(
         self,

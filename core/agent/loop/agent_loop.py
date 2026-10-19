@@ -218,6 +218,8 @@ class AgenticLoop:
         # Legacy checkpoint/metrics fields, not a text-length termination policy.
         self._consecutive_text_only_rounds = 0
         self._total_empty_rounds = 0
+        # Checkpointed mailbox admission receipt (see _collaboration_mailbox).
+        self._admitted_mailbox_ids: set[int] = set()
         # Low-confidence replan is edge-triggered: fires once when
         # confidence drops below REPLAN_LOW_CONFIDENCE, re-arms only
         # after confidence recovers — prevents a replan storm while

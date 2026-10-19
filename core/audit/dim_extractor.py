@@ -50,15 +50,17 @@ DEFAULT_MODALITY = "judge_llm"
 
 
 def _coerce_float(value: Any) -> float | None:
-    """Return ``float(value)`` when value is a real scalar, else ``None``.
+    """Return ``float(value)`` when value is a finite real scalar, else ``None``.
 
     ``bool`` is rejected (Python's ``isinstance(True, int)`` is True, but
-    a 0/1 boolean is not a meaningful dim score).
+    a 0/1 boolean is not a meaningful dim score). NaN and infinities are
+    rejected too: a non-finite score is unmeasured, never a best-case value.
     """
     if isinstance(value, bool):
         return None
     if isinstance(value, int | float):
-        return float(value)
+        coerced = float(value)
+        return coerced if math.isfinite(coerced) else None
     return None
 
 

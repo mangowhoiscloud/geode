@@ -91,6 +91,7 @@ substitution 추가:
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 from dataclasses import dataclass, field
@@ -190,6 +191,8 @@ def compute_bench_aggregate(bench_means: dict[str, float] | None) -> float:
     total = 0.0
     for field_name, weight in BENCH_DIM_WEIGHTS.items():
         value = bench_means.get(field_name, 0.5)  # 누락 field neutral
+        if not math.isfinite(value):
+            value = 0.5  # a non-finite field is unmeasured, never a clamped 1.0
         total += weight * max(0.0, min(1.0, value))
     return total
 
@@ -411,7 +414,7 @@ def _run_bench_via_inspect_ai(
             if metric is not None:
                 value = float(getattr(metric, "value", metric))
                 break
-        if value is None:
+        if value is None or not math.isfinite(value):
             return None
         # stderr: inspect_ai 의 metric 객체에 stderr 가 있으면 사용, 없으면 0
         stderr = 0.0
@@ -425,6 +428,8 @@ def _run_bench_via_inspect_ai(
         samples = getattr(log_obj, "samples", None)
         if samples is not None:
             sample_count = len(samples)
+        if not math.isfinite(stderr):
+            return None
         return (max(0.0, min(1.0, value)), max(0.0, stderr), sample_count)
     except Exception as exc:  # pragma: no cover — defensive
         log.warning("bench %s (%s.%s) failed: %s", field_name, package, task_path, exc)
