@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/verify-report-pages.mjs && node scripts/export-research-slides.mjs && node scripts/test-jev-report-export.mjs && node scripts/test-seed-frontmatter.mjs && node scripts/verify-terminal-replay.mjs && next build",
+    "build": "node scripts/test-relocate-static-export.mjs && node scripts/verify-report-pages.mjs && node scripts/export-research-slides.mjs && node scripts/test-jev-report-export.mjs && node scripts/test-seed-frontmatter.mjs && node scripts/verify-terminal-replay.mjs && next build",
     "start": "next start",
     "lint": "node scripts/test-next-eslint-patch.mjs && eslint --max-warnings=0",
     "sync-stats": "node scripts/export-research-slides.mjs && node scripts/sync-stats.mjs",

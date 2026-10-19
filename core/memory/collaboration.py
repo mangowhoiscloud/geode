@@ -33,6 +33,11 @@ _ACTIVE_STATUSES = frozenset({"pending", "running"})
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "timeout", "interrupted"})
 _RETENTION_SECONDS = 7 * 24 * 60 * 60
 _MAX_TERMINAL_RUNS = 200
+# Per recipient and per kind, so parent input never displaces a completion
+# notice (or the reverse). Input is refused at the bound and nothing accepted
+# is evicted. Completion capacity is reserved when a run is admitted (unread
+# completions + active runs never exceed the bound), so every terminal run's
+# notice is always queued even after its run row is pruned.
 _MAX_UNREAD_PER_RECIPIENT = 1_000
 _MAX_CONSUMED_MESSAGES = 1_000
 # R6.9 peer input between same-project root sessions. Admission is refused at
@@ -75,6 +80,20 @@ CREATE TABLE IF NOT EXISTS collaboration_mailbox (
     consumed_at           REAL
 )
 """
+
+
+def current_process_owner() -> str:
+    """This process's owner identity (PID plus OS-recorded birth time)."""
+    return _OWNER_ID
+
+
+def process_owner_alive(owner_id: str) -> bool:
+    """Whether the exact owner process still exists; unknown access counts as alive."""
+    return _owner_process_alive(owner_id)
+
+
+class MailboxFullError(ValueError):
+    """The recipient already holds the maximum unread items of this kind."""
 
 
 def _owner_process_alive(owner_id: str) -> bool:
@@ -296,6 +315,7 @@ class CollaborationStore:
         now = time.time()
         with self._transaction() as conn:
             self._prune_locked(conn, now)
+            self._reserve_completion_slot_locked(conn, parent_session_id)
             existing = conn.execute(
                 "SELECT * FROM collaboration_runs WHERE task_id = ?",
                 (task_id,),
@@ -407,11 +427,10 @@ class CollaborationStore:
             )
             if cursor.rowcount != 1:
                 return False
-            self._insert_message(
+            self._insert_completion(
                 conn,
                 sender_session_id=task_id,
                 recipient_session_id=parent_session_id,
-                kind="completion",
                 payload={
                     "task_id": task_id,
                     "status": status,
@@ -555,11 +574,10 @@ class CollaborationStore:
                    WHERE task_id = ? AND generation = ? AND status IN ('pending', 'running')""",
                 ("Owning runtime exited before completion", now, task_id, generation),
             )
-            self._insert_message(
+            self._insert_completion(
                 conn,
                 sender_session_id=task_id,
                 recipient_session_id=parent_session_id,
-                kind="completion",
                 payload={
                     "task_id": task_id,
                     "status": "interrupted",
@@ -581,7 +599,23 @@ class CollaborationStore:
         kind: str,
         payload: dict[str, Any],
         created_at: float,
+        enforce_bound: bool = True,
     ) -> int:
+        """Admit one unread item, or raise :class:`MailboxFullError` at the bound.
+
+        Accepted unread items are never evicted to make room. Completions skip
+        the check because admission already reserved their slot.
+        """
+        unread = conn.execute(
+            """SELECT COUNT(*) FROM collaboration_mailbox
+               WHERE recipient_session_id = ? AND kind = ? AND consumed_at IS NULL""",
+            (recipient_session_id, kind),
+        ).fetchone()
+        if enforce_bound and unread is not None and int(unread[0]) >= _MAX_UNREAD_PER_RECIPIENT:
+            raise MailboxFullError(
+                f"Mailbox for {recipient_session_id} already holds "
+                f"{_MAX_UNREAD_PER_RECIPIENT} unread {kind} items; retry after it drains"
+            )
         bounded = bound_session_payload(payload)
         cursor = conn.execute(
             """INSERT INTO collaboration_mailbox
@@ -595,16 +629,34 @@ class CollaborationStore:
                 created_at,
             ),
         )
-        conn.execute(
-            """DELETE FROM collaboration_mailbox WHERE id IN (
-                   SELECT id FROM collaboration_mailbox
-                   WHERE recipient_session_id = ? AND consumed_at IS NULL
-                     AND kind != 'peer_message'
-                   ORDER BY id DESC LIMIT -1 OFFSET ?
-               )""",
-            (recipient_session_id, _MAX_UNREAD_PER_RECIPIENT),
-        )
         return int(cursor.lastrowid or 0)
+
+    @staticmethod
+    def _reserve_completion_slot_locked(conn: sqlite3.Connection, parent_session_id: str) -> None:
+        """Refuse a new or resumed run when its completion could not be queued.
+
+        Backpressure at admission is what keeps completion delivery lossless:
+        the parent must drain completions before more children start.
+        """
+        row = conn.execute(
+            """SELECT
+                   (SELECT COUNT(*) FROM collaboration_mailbox
+                    WHERE recipient_session_id = ? AND kind = 'completion'
+                      AND consumed_at IS NULL)
+                 + (SELECT COUNT(*) FROM collaboration_runs
+                    WHERE parent_session_id = ? AND status IN ('pending', 'running'))""",
+            (parent_session_id, parent_session_id),
+        ).fetchone()
+        if row is not None and int(row[0]) >= _MAX_UNREAD_PER_RECIPIENT:
+            raise MailboxFullError(
+                f"Parent {parent_session_id} already holds {_MAX_UNREAD_PER_RECIPIENT} "
+                "unread or pending child completions; read them before starting another child"
+            )
+
+    @classmethod
+    def _insert_completion(cls, conn: sqlite3.Connection, **message: Any) -> None:
+        """Queue a completion notice; its slot was reserved at run admission."""
+        cls._insert_message(conn, kind="completion", enforce_bound=False, **message)
 
     @staticmethod
     def _prune_locked(conn: sqlite3.Connection, now: float) -> None:

@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from core.mcp.apple_calendar_adapter import AppleCalendarAdapter
-from core.mcp.calendar_port import CalendarEvent
+from core.mcp.calendar_port import CalendarEvent, CalendarReadError
 from core.mcp.composite_calendar import CompositeCalendarAdapter
 from core.mcp.google_calendar_adapter import GoogleCalendarAdapter
 from core.tools.calendar_tools import CalendarCreateEventTool, CalendarListEventsTool
@@ -124,8 +124,9 @@ class TestGoogleCalendarAdapter:
         self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock
     ):
         mock_manager.acall_tool.return_value = {"error": "unauthorized"}
-        events = asyncio.run(google_adapter.alist_events())
-        assert events == []
+        # A failed read is not an empty calendar.
+        with pytest.raises(CalendarReadError, match="unauthorized"):
+            asyncio.run(google_adapter.alist_events())
 
     def test_create_event_success(
         self, google_adapter: GoogleCalendarAdapter, mock_manager: MagicMock

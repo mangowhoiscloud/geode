@@ -127,7 +127,7 @@ def _handle_command(
     elif action == "schedule":
         cmd_schedule(args, scheduler_service=scheduler_service)
     elif action == "trigger":
-        cmd_trigger(args)
+        cmd_trigger(args, scheduler_service=scheduler_service)
     elif action == "status":
         from core.config import settings
 

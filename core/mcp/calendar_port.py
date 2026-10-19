@@ -29,6 +29,29 @@ class CalendarEvent:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+class CalendarReadError(RuntimeError):
+    """A calendar read failed instead of returning a (possibly empty) schedule.
+
+    ``events`` keeps results from sources that did answer and ``failures``
+    names the ones that did not, so a caller can surface a partial view
+    explicitly; a reader that does not handle it fails rather than reporting
+    an empty calendar.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        events: list[CalendarEvent] | None = None,
+        failures: list[str] | None = None,
+        partial: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.events = list(events or [])
+        self.failures = list(failures or [message])
+        self.partial = partial  # True when at least one source did answer
+
+
 @runtime_checkable
 class CalendarPort(Protocol):
     """Async-only port for calendar operations (read/write events)."""

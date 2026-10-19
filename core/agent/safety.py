@@ -56,7 +56,6 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "check_status",
         "calculate",
         "memory_search",
-        "manage_rule",
         "web_fetch",
         "llms_txt_index",
         "general_web_search",
@@ -90,6 +89,8 @@ WRITE_TOOLS: frozenset[str] = frozenset(
     {
         "memory_save",
         "note_save",
+        # Rule create/update/delete persist into every later system prompt.
+        "manage_rule",
         "manage_login",
         "profile_update",
         "profile_preference",

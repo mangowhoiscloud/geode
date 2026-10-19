@@ -96,6 +96,17 @@ _background_interrupting: set[_ControlKey] = set()
 _background_controls_lock = threading.Lock()
 
 
+def _control_key(scope_key: str, run: CollaborationRun) -> _ControlKey:
+    return (scope_key, run.parent_session_id, run.task_id, run.generation)
+
+
+def _interrupting(scope_key: str, run: CollaborationRun | None) -> bool:
+    if run is None:
+        return False
+    with _background_controls_lock:
+        return _control_key(scope_key, run) in _background_interrupting
+
+
 def get_subagent_context() -> tuple[bool, str]:
     """Return (is_subagent, child_session_key) from thread-local."""
     is_sub = getattr(_subagent_context, "is_subagent", False)
@@ -204,20 +215,6 @@ class SubAgentManager:
         # Sandbox: additional working directories for sub-agent
         self._working_dirs = working_dirs or []
         self._collaboration = collaboration_store or CollaborationStore()
-
-    def _control_key(self, run: CollaborationRun) -> _ControlKey:
-        return (
-            self._collaboration.scope_key,
-            run.parent_session_id,
-            run.task_id,
-            run.generation,
-        )
-
-    def _interrupting(self, run: CollaborationRun | None) -> bool:
-        if run is None:
-            return False
-        with _background_controls_lock:
-            return self._control_key(run) in _background_interrupting
 
     async def adelegate(
         self,
@@ -438,7 +435,7 @@ class SubAgentManager:
                 )
             if durable_run is not None:
                 self._finish_durable_result(durable_run, task, sub_result)
-            interrupted = self._interrupting(durable_run)
+            interrupted = _interrupting(self._collaboration.scope_key, durable_run)
             await self._announcements.emit_stop(
                 task,
                 sub_result,
@@ -533,7 +530,7 @@ class SubAgentManager:
                 ),
                 name=f"subagent:{task.task_id}:g{run.generation}",
             )
-            key = self._control_key(run)
+            key = _control_key(self._collaboration.scope_key, run)
             with _background_controls_lock:
                 _background_interrupting.discard(key)
                 _background_controls[key] = (background, self._runner, done)
@@ -596,7 +593,7 @@ class SubAgentManager:
                     error=error,
                 )
             if not stopped:
-                interrupted = self._interrupting(run)
+                interrupted = _interrupting(self._collaboration.scope_key, run)
                 await self._announcements.emit_stop(
                     task,
                     SubResult(
@@ -646,7 +643,7 @@ class SubAgentManager:
                     error=f"{type(error).__name__}: {error}",
                 )
         done.set()
-        key = self._control_key(run)
+        key = _control_key(self._collaboration.scope_key, run)
         with _background_controls_lock:
             current = _background_controls.get(key)
             if current is not None and current[0] is completed:
@@ -667,7 +664,7 @@ class SubAgentManager:
         if run is None or run.status not in {"pending", "running"}:
             return run
         with _background_controls_lock:
-            control = _background_controls.get(self._control_key(run))
+            control = _background_controls.get(_control_key(self._collaboration.scope_key, run))
         if control is not None:
             await asyncio.to_thread(control[2].wait, max(0.0, min(timeout_s, 3600.0)))
             return self._collaboration.get_run(parent_session_id, task_id)
@@ -684,7 +681,7 @@ class SubAgentManager:
         run = self._collaboration.get_run(parent_session_id, task_id)
         if run is None or run.status not in {"pending", "running"}:
             return False
-        key = self._control_key(run)
+        key = _control_key(self._collaboration.scope_key, run)
         with _background_controls_lock:
             control = _background_controls.get(key)
             if control is None:
@@ -797,7 +794,7 @@ class SubAgentManager:
         result: SubResult,
     ) -> None:
         """Persist the terminal child state before publishing SubagentStop."""
-        if self._interrupting(run):
+        if _interrupting(self._collaboration.scope_key, run):
             status, summary, error = "interrupted", "", "Interrupted by parent"
         elif result.success:
             status, summary, error = "completed", self._result_summary(result), ""

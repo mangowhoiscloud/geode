@@ -844,7 +844,9 @@ def write_kmean_baseline(
         return False
     raw_block["dim_means"] = {dim: float(v) for dim, v in mean_dims.items()}
     raw_block["dim_stderr"] = {dim: float(v) for dim, v in stderr_dims.items()}
-    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    from core.memory.atomic_write import atomic_write_text
+
+    atomic_write_text(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return True
 
 

@@ -278,7 +278,7 @@ class GeodeRuntime:
         activity_sink_provider: RunEventSinkProvider | None = None,
         feature_hook_registrar: Callable[[Any], None] | None = None,
         scheduling_registrar: Callable[[Any, Any], None] | None = None,
-        scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
+        scheduler_callback: Callable[[str, str, bool, str, str], None] | None = None,
     ) -> GeodeRuntime:
         """Factory method — create a fully wired runtime for a GEODE session.
 
@@ -538,7 +538,7 @@ class GeodeRuntime:
         session_key: str,
         subject_id: str,
         scheduling_registrar: Callable[[Any, Any], None] | None = None,
-        scheduler_callback: Callable[[str, str, bool, str], None] | None = None,
+        scheduler_callback: Callable[[str, str, bool, str, str], None] | None = None,
         user_profile: Any = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Stage 3: Build memory, scheduling, and optional components."""

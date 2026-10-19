@@ -288,22 +288,22 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `evals/` + `evolve/`) | 602 |
-| Test Python files | 773 |
-| `core/` Python LOC | 130,601 |
-| `evals/` Python LOC | 45,755 |
-| `evolve/` Python LOC | 32,002 |
-| Test Python LOC | 242,340 |
+| Production Python files (`core/` + `evals/` + `evolve/`) | 601 |
+| Test Python files | 781 |
+| `core/` Python LOC | 131,599 |
+| `evals/` Python LOC | 45,775 |
+| `evolve/` Python LOC | 32,169 |
+| Test Python LOC | 244,220 |
 | Tool definitions / model executions / valid schemas / policies | 86 / 86 / 86 / 86 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 6 |
 | Module/class-scoped `ContextVar`-backed bindings in production packages | 26 |
 | `core` → outer import sites | 0 across 0 files |
 | Import-linter contracts / ignored edges | 7 / 0 |
-| `AgenticLoop` file LOC / methods / constructor args | 1,182 / 39 / 12 |
-| `SubAgentManager` file LOC / methods / constructor args | 877 / 19 / 18 |
+| `AgenticLoop` file LOC / methods / constructor args | 1,184 / 39 / 12 |
+| `SubAgentManager` file LOC / methods / constructor args | 874 / 17 / 18 |
 | `RuntimeCoreConfig` fields | 6 |
-| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 207 |
+| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 206 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful

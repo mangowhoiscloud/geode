@@ -97,12 +97,17 @@ def test_compute_fitness_judge_llm_modality_no_change() -> None:
 # ---------------------------------------------------------------------------
 
 
+# Complete weighted coverage at mean 0 (identical to the implicit default) so
+# the coverage gate admits the comparison and the margin logic is exercised.
+_ZERO_WEIGHTED = dict.fromkeys(DIM_WEIGHTS, 0.0)
+
+
 def test_should_promote_n1_widening_fires_for_judge_llm_critical() -> None:
     """Critical dim 이 judge_llm modality 이고 N=1 → widening (0.20) 발화.
     이 PR 이전 동작 보존 — judge_llm 의 under-sampled stderr=0 은 진짜 noisy."""
-    baseline_means = {"broken_tool_use": 5.0}
+    baseline_means = {**_ZERO_WEIGHTED, "broken_tool_use": 5.0}
     baseline_stderr = {"broken_tool_use": 0.0}
-    current_means = {"broken_tool_use": 4.95}  # 작은 improvement
+    current_means = {**_ZERO_WEIGHTED, "broken_tool_use": 4.95}  # 작은 improvement
     current_stderr = {"broken_tool_use": 0.0}
     baseline_sample_count = {"broken_tool_use": 1}  # N=1
     baseline_modality = {"broken_tool_use": "judge_llm"}
@@ -126,9 +131,9 @@ def test_should_promote_n1_widening_conservative_default_for_missing_modality() 
     from evolve.scaffold_search.fitness import CRITICAL_DIMS
 
     a_critical = CRITICAL_DIMS[0]
-    baseline_means = {a_critical: 5.0}
+    baseline_means = {**_ZERO_WEIGHTED, a_critical: 5.0}
     baseline_stderr = {a_critical: 0.0}
-    current_means = {a_critical: 4.95}
+    current_means = {**_ZERO_WEIGHTED, a_critical: 4.95}
     current_stderr = {a_critical: 0.0}
     baseline_sample_count = {a_critical: 1}
 

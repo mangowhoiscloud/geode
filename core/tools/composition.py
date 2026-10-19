@@ -267,7 +267,7 @@ def compose_tool_plan(
                 mcp_manager=mcp_manager,
                 command_registry=compose_command_registry(command_specs),
                 hooks=hooks,
-                project_memory=(persistence.memory.project_memory if persistence else None),
+                memory_services=(persistence.memory if persistence else None),
                 scheduler_service=scheduler_service,
             ),
             *handler_groups,
@@ -316,6 +316,7 @@ def compose_tool_plan(
     profile_write_tools = {
         "memory_save",
         "note_save",
+        "manage_rule",
         "manage_login",
         "profile_update",
         *GOOGLE_WRITE_TOOLS,

@@ -3,6 +3,9 @@ name: Deploy site to GitHub Pages
 # Builds the Next.js static export under `site/` and deploys it to GitHub
 # Pages. Site URL after deploy: https://mangowhoiscloud.github.io/geode/
 #
+# Since the move to mangowhois.ai, the landing (/geode/) and the docs (/geode/docs/**) are deployed
+# here as redirect pages to https://mangowhois.ai/products/geode/ ; see the last build steps.
+#
 # Triggers on changes to `site/**`, the self-improving hub under
 # `docs/self-improving/**` (copied into `site/out/self-improving/` at build
 # time), this workflow, or any of the SOT files that `sync-stats` reads
@@ -285,6 +288,25 @@ jobs:
           fail: true
           jobSummary: true
           output: lychee-report.md
+
+      # The landing and docs moved to https://mangowhois.ai/products/geode/ (mangowhois-site
+      # evidence/v33/pages-migration/PLAN.md). mangowhois.ai imports the full static export, so it is
+      # uploaded whole first; then every moved route in site/out becomes a redirect page
+      # (site/scripts/redirect-to-mangowhois.mjs, map: site/redirect-map.json). Research readers, the
+      # replay, the self-improving hub and the PDFs are deployed unchanged.
+      - name: Upload the full static export (source for mangowhois.ai)
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: geode-site-export
+          path: site/out
+          retention-days: 90
+
+      - name: Replace moved routes with redirect pages to mangowhois.ai
+        working-directory: ${{ github.workspace }}/site
+        run: |
+          node scripts/test-redirect-to-mangowhois.mjs
+          node scripts/redirect-to-mangowhois.mjs out redirect-map.json
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 

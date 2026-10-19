@@ -228,9 +228,9 @@ def audit(
         "mega-judge call scoring all 22 dims; 'split' — 5-group call "
         "structure per geode_judge_subset_split.yaml (broken_tool_use "
         "isolated to prevent double-counting with input_hallucination). "
-        "Runtime orchestration for 'split' is staged behind upstream "
-        "inspect-petri support; currently the flag drives only the cost "
-        "estimator. See docs/audits/2026-05-13-petri-a3-judge-split-design.md.",
+        "'split' is a cost preview only: --dry-run shows the split estimate, "
+        "and a live run with 'split' is refused before dispatch because the "
+        "5-group orchestration is not implemented.",
     ),
     target_tools: str = typer.Option(
         "none",

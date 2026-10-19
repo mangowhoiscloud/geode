@@ -365,7 +365,7 @@
   },
   {
     "name": "trigger_event",
-    "description": "Manage event/cron triggers or fire one manually. Use when the user wants to list triggers, fire a named event, or run a trigger now. Omit sub_action to list. Sibling: schedule_job creates time-based recurring jobs (this fires named events).",
+    "description": "List the registered event/cron triggers or fire one manually by trigger ID. Use when the user wants to list triggers or run a registered trigger now. Omit sub_action to list. Sibling: schedule_job creates time-based recurring jobs (this fires registered triggers).",
     "category": "scheduling",
     "cost_tier": "cheap",
     "input_schema": {
@@ -373,11 +373,12 @@
       "properties": {
         "sub_action": {
           "type": "string",
-          "description": "Action to perform (list, fire). If omitted, displays list."
+          "enum": ["list", "fire"],
+          "description": "Action to perform. If omitted, lists triggers."
         },
         "event_name": {
           "type": "string",
-          "description": "Name of the event to fire (for fire action)"
+          "description": "Registered trigger ID to fire (required for fire)"
         }
       },
       "required": []
