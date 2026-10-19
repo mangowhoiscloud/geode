@@ -206,6 +206,14 @@ def _handle_command(
 
         resume_state = cmd_resume(args)
         return False, verbose, resume_state
+    elif action == "fork":
+        from core.cli.commands import cmd_fork
+
+        cmd_fork(args, agentic_ref=agentic_ref)
+    elif action == "send":
+        from core.cli.commands import cmd_send
+
+        cmd_send(args, agentic_ref=agentic_ref)
     elif action == "cognitive":
         from core.cli.commands import cmd_cognitive
 

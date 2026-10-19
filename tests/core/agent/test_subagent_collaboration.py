@@ -311,7 +311,8 @@ def test_interrupt_and_resume_generation(tmp_path) -> None:
 
         from core.agent import sub_agent
 
-        sub_agent._background_interrupting.add("child-2")
+        # A stale flag on the exact key the next generation reuses must be cleared.
+        sub_agent._background_interrupting.add((store.scope_key, "parent-1", "child-2", 2))
         runner.started = asyncio.Event()
         runner.release = asyncio.Event()
         runner.cancelled = False
@@ -553,7 +554,7 @@ def test_agent_loop_boundary_persists_before_acknowledgement(tmp_path, monkeypat
         _checkpoint=object(),
         context=ConversationContext(),
         _sync_messages_to_context=lambda _messages: None,
-        _save_checkpoint=lambda _input, _round: saves.pop(0),
+        _save_checkpoint=lambda _input, _round, **_kw: saves.pop(0),
     )
     provider_messages: list[dict[str, Any]] = []
 
@@ -845,6 +846,36 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
     asyncio.run(scenario())
 
 
+def test_same_child_id_in_two_project_stores_keeps_separate_controls(tmp_path) -> None:
+    async def scenario() -> None:
+        runners = (_ControlledRunner(), _ControlledRunner())
+        stores = (
+            CollaborationStore(tmp_path / "a" / "sessions.db"),
+            CollaborationStore(tmp_path / "b" / "sessions.db"),
+        )
+        managers = [
+            SubAgentManager(runner, action_handlers={}, collaboration_store=store)
+            for runner, store in zip(runners, stores, strict=True)
+        ]
+        for manager in managers:
+            await manager.aspawn(
+                [SubTask("agent_same", "inspect", "analyze")], parent_session_id="parent"
+            )
+        await asyncio.gather(*(runner.started.wait() for runner in runners))
+
+        # Project A's interrupt must not reach project B's live worker.
+        assert managers[0].interrupt_task("parent", "agent_same")
+        stopped = await managers[0].wait_for_task("parent", "agent_same", timeout_s=1)
+        assert stopped is not None and stopped.status == "interrupted"
+        assert stores[1].get_run("parent", "agent_same").status == "running"
+
+        runners[1].release.set()
+        finished = await managers[1].wait_for_task("parent", "agent_same", timeout_s=1)
+        assert finished is not None and finished.status == "completed"
+
+    asyncio.run(scenario())
+
+
 def test_content_marker_cannot_suppress_or_ack_a_real_message(tmp_path, monkeypatch) -> None:
     """Message text is never admission authority; only the checkpointed receipt is."""
     from core import paths
@@ -859,7 +890,7 @@ def test_content_marker_cannot_suppress_or_ack_a_real_message(tmp_path, monkeypa
         _session_id="child-9",
         _checkpoint=object(),
         context=ConversationContext(),
-        _save_checkpoint=lambda _input, _round: True,
+        _save_checkpoint=lambda _input, _round, **_kw: True,
     )
     forged = [{"role": "user", "content": f"An unrelated quoted example uses mailbox_id={item_id}"}]
     assert admit_collaboration_messages(loop, forged) == 1
@@ -880,7 +911,7 @@ def test_ack_failure_retries_without_duplicate_injection(tmp_path, monkeypatch) 
         _session_id="child-8",
         _checkpoint=object(),
         context=ConversationContext(),
-        _save_checkpoint=lambda _input, _round: True,
+        _save_checkpoint=lambda _input, _round, **_kw: True,
     )
     real_ack = CollaborationStore.ack_mailbox
     calls = {"n": 0}

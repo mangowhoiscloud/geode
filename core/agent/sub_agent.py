@@ -85,10 +85,26 @@ _subagent_context = threading.local()
 
 # Process-local execution controls. Durable truth remains in sessions.db; this
 # registry only lets a later turn in the same runtime wait for or interrupt the
-# live asyncio task without inventing a thread manager.
-_background_controls: dict[str, tuple[asyncio.Task[None], IsolatedRunner, threading.Event]] = {}
-_background_interrupting: set[str] = set()
+# live asyncio task without inventing a thread manager. Keys carry the owning
+# store, parent, child, and generation, so equal child ids in two projects (or
+# a stale generation) never reach each other's worker.
+_ControlKey = tuple[str, str, str, int]
+_background_controls: dict[
+    _ControlKey, tuple[asyncio.Task[None], IsolatedRunner, threading.Event]
+] = {}
+_background_interrupting: set[_ControlKey] = set()
 _background_controls_lock = threading.Lock()
+
+
+def _control_key(scope_key: str, run: CollaborationRun) -> _ControlKey:
+    return (scope_key, run.parent_session_id, run.task_id, run.generation)
+
+
+def _interrupting(scope_key: str, run: CollaborationRun | None) -> bool:
+    if run is None:
+        return False
+    with _background_controls_lock:
+        return _control_key(scope_key, run) in _background_interrupting
 
 
 def get_subagent_context() -> tuple[bool, str]:
@@ -419,8 +435,7 @@ class SubAgentManager:
                 )
             if durable_run is not None:
                 self._finish_durable_result(durable_run, task, sub_result)
-            with _background_controls_lock:
-                interrupted = task.task_id in _background_interrupting
+            interrupted = _interrupting(self._collaboration.scope_key, durable_run)
             await self._announcements.emit_stop(
                 task,
                 sub_result,
@@ -515,9 +530,10 @@ class SubAgentManager:
                 ),
                 name=f"subagent:{task.task_id}:g{run.generation}",
             )
+            key = _control_key(self._collaboration.scope_key, run)
             with _background_controls_lock:
-                _background_interrupting.discard(task.task_id)
-                _background_controls[task.task_id] = (background, self._runner, done)
+                _background_interrupting.discard(key)
+                _background_controls[key] = (background, self._runner, done)
             background.add_done_callback(partial(self._background_done, run=run, done=done))
             runs.append(run)
         return runs
@@ -577,8 +593,7 @@ class SubAgentManager:
                     error=error,
                 )
             if not stopped:
-                with _background_controls_lock:
-                    interrupted = task.task_id in _background_interrupting
+                interrupted = _interrupting(self._collaboration.scope_key, run)
                 await self._announcements.emit_stop(
                     task,
                     SubResult(
@@ -628,11 +643,12 @@ class SubAgentManager:
                     error=f"{type(error).__name__}: {error}",
                 )
         done.set()
+        key = _control_key(self._collaboration.scope_key, run)
         with _background_controls_lock:
-            current = _background_controls.get(run.task_id)
+            current = _background_controls.get(key)
             if current is not None and current[0] is completed:
-                _background_controls.pop(run.task_id, None)
-                _background_interrupting.discard(run.task_id)
+                _background_controls.pop(key, None)
+                _background_interrupting.discard(key)
 
     def list_collaboration_runs(self, parent_session_id: str) -> list[CollaborationRun]:
         return self._collaboration.list_runs(parent_session_id)
@@ -648,7 +664,7 @@ class SubAgentManager:
         if run is None or run.status not in {"pending", "running"}:
             return run
         with _background_controls_lock:
-            control = _background_controls.get(task_id)
+            control = _background_controls.get(_control_key(self._collaboration.scope_key, run))
         if control is not None:
             await asyncio.to_thread(control[2].wait, max(0.0, min(timeout_s, 3600.0)))
             return self._collaboration.get_run(parent_session_id, task_id)
@@ -665,13 +681,14 @@ class SubAgentManager:
         run = self._collaboration.get_run(parent_session_id, task_id)
         if run is None or run.status not in {"pending", "running"}:
             return False
+        key = _control_key(self._collaboration.scope_key, run)
         with _background_controls_lock:
-            control = _background_controls.get(task_id)
+            control = _background_controls.get(key)
             if control is None:
                 return False
-            if task_id in _background_interrupting:
+            if key in _background_interrupting:
                 return True
-            _background_interrupting.add(task_id)
+            _background_interrupting.add(key)
         task, _runner, _done = control
         if not task.done():
             # The runner's async cancellation path drains worker finalization;
@@ -777,9 +794,7 @@ class SubAgentManager:
         result: SubResult,
     ) -> None:
         """Persist the terminal child state before publishing SubagentStop."""
-        with _background_controls_lock:
-            interrupted = task.task_id in _background_interrupting
-        if interrupted:
+        if _interrupting(self._collaboration.scope_key, run):
             status, summary, error = "interrupted", "", "Interrupted by parent"
         elif result.success:
             status, summary, error = "completed", self._result_summary(result), ""

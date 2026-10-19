@@ -50,6 +50,11 @@ class SessionMeta:
     user_input: str = ""
     round_count: int = 0
     message_count: int = 0
+    # R6.9 lineage projection of ``state.json``; empty/zero on legacy rows.
+    parent_session_id: str = ""
+    source_session_id: str = ""
+    source_generation: int = 0
+    source_message_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +104,17 @@ _HANDOFF_COLUMNS: tuple[tuple[str, str], ...] = (
     ("handoff_platform", "TEXT NOT NULL DEFAULT ''"),
     ("handoff_error", "TEXT NOT NULL DEFAULT ''"),
     ("handoff_triggered_at", "REAL NOT NULL DEFAULT 0.0"),
+    # R6.9 — child parent and persistent-fork source lineage (additive).
+    ("parent_session_id", "TEXT NOT NULL DEFAULT ''"),
+    ("source_session_id", "TEXT NOT NULL DEFAULT ''"),
+    ("source_generation", "INTEGER NOT NULL DEFAULT 0"),
+    ("source_message_count", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+_META_COLUMNS = (
+    "session_id, created_at, updated_at, status, model, provider, user_input, "
+    "round_count, message_count, parent_session_id, source_session_id, "
+    "source_generation, source_message_count"
 )
 
 _CREATE_INDEX_SQL = """\
@@ -612,8 +628,9 @@ class SessionManager:
                 """\
                 INSERT INTO sessions
                     (session_id, created_at, updated_at, status, model, provider,
-                     user_input, round_count, message_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     user_input, round_count, message_count, parent_session_id,
+                     source_session_id, source_generation, source_message_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO UPDATE SET
                     updated_at    = excluded.updated_at,
                     status        = excluded.status,
@@ -621,7 +638,16 @@ class SessionManager:
                     provider      = excluded.provider,
                     user_input    = excluded.user_input,
                     round_count   = excluded.round_count,
-                    message_count = excluded.message_count
+                    message_count = excluded.message_count,
+                    parent_session_id = CASE WHEN excluded.parent_session_id != ''
+                        THEN excluded.parent_session_id ELSE sessions.parent_session_id END,
+                    source_session_id = CASE WHEN excluded.source_session_id != ''
+                        THEN excluded.source_session_id ELSE sessions.source_session_id END,
+                    source_generation = CASE WHEN excluded.source_session_id != ''
+                        THEN excluded.source_generation ELSE sessions.source_generation END,
+                    source_message_count = CASE WHEN excluded.source_session_id != ''
+                        THEN excluded.source_message_count
+                        ELSE sessions.source_message_count END
                 """,
                 (
                     meta.session_id,
@@ -633,6 +659,10 @@ class SessionManager:
                     meta.user_input,
                     meta.round_count,
                     meta.message_count,
+                    meta.parent_session_id,
+                    meta.source_session_id,
+                    meta.source_generation,
+                    meta.source_message_count,
                 ),
             )
             self._conn.commit()
@@ -654,7 +684,8 @@ class SessionManager:
         """Fetch a single session by ID."""
         with self._lock:
             row = self._conn.execute(
-                "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+                f"SELECT {_META_COLUMNS} FROM sessions WHERE session_id = ?",  # noqa: S608  # nosec B608
+                (session_id,),
             ).fetchone()
         if row is None:
             return None
@@ -670,12 +701,14 @@ class SessionManager:
         with self._lock:
             if status:
                 rows = self._conn.execute(
-                    "SELECT * FROM sessions WHERE status = ? ORDER BY updated_at DESC LIMIT ?",
+                    f"SELECT {_META_COLUMNS} FROM sessions WHERE status = ? "  # noqa: S608  # nosec B608
+                    "ORDER BY updated_at DESC LIMIT ?",
                     (status, limit),
                 ).fetchall()
             else:
                 rows = self._conn.execute(
-                    "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?",
+                    f"SELECT {_META_COLUMNS} FROM sessions "  # noqa: S608  # nosec B608
+                    "ORDER BY updated_at DESC LIMIT ?",
                     (limit,),
                 ).fetchall()
         return [self._row_to_meta(r) for r in rows]
@@ -1164,4 +1197,8 @@ class SessionManager:
             user_input=row[6],
             round_count=row[7],
             message_count=row[8],
+            parent_session_id=row[9],
+            source_session_id=row[10],
+            source_generation=row[11],
+            source_message_count=row[12],
         )

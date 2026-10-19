@@ -424,7 +424,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1184,
+      "file_loc": 1186,
       "method_count": 39,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -434,7 +434,7 @@
     },
     "SubAgentManager": {
       "constructor_arg_count": 18,
-      "file_loc": 859,
+      "file_loc": 874,
       "method_count": 17,
       "path": "core/agent/sub_agent.py"
     }
@@ -542,8 +542,8 @@
   },
   "packages": {
     "core": {
-      "python_files": 416,
-      "python_loc": 130603
+      "python_files": 418,
+      "python_loc": 131878
     },
     "evals": {
       "python_files": 110,
@@ -554,8 +554,8 @@
       "python_loc": 32169
     },
     "tests": {
-      "python_files": 778,
-      "python_loc": 243885
+      "python_files": 781,
+      "python_loc": 245357
     }
   },
   "schema_version": 6,
@@ -586,7 +586,7 @@
       ],
       "unknown_always_loaded_names": []
     },
-    "definition_count": 84,
+    "definition_count": 87,
     "definition_names": [
       "accept_result",
       "arxiv_search",
@@ -606,6 +606,7 @@
       "eval_inspect_viz",
       "export_json",
       "followup_task",
+      "fork_session",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -647,12 +648,14 @@
       "profile_update",
       "rate_result",
       "read_document",
+      "read_session_messages",
       "reject_result",
       "run_bash",
       "schedule_job",
       "seed_debate_turn",
       "send_message",
       "send_notification",
+      "send_session_message",
       "session_search",
       "show_help",
       "spawn_agent",
@@ -682,7 +685,7 @@
       "doctor_slack",
       "recall_tool_result"
     ],
-    "execution_registration_count": 87,
+    "execution_registration_count": 90,
     "execution_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -704,6 +707,7 @@
       "eval_inspect_viz",
       "export_json",
       "followup_task",
+      "fork_session",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -745,6 +749,7 @@
       "profile_update",
       "rate_result",
       "read_document",
+      "read_session_messages",
       "recall_tool_result",
       "reject_result",
       "run_bash",
@@ -752,6 +757,7 @@
       "seed_debate_turn",
       "send_message",
       "send_notification",
+      "send_session_message",
       "session_search",
       "show_help",
       "spawn_agent",
@@ -772,7 +778,7 @@
       "web_fetch",
       "write_file"
     ],
-    "handler_registration_count": 79,
+    "handler_registration_count": 82,
     "handler_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -792,6 +798,7 @@
       "eval_dspy_optimize",
       "eval_inspect_viz",
       "export_json",
+      "fork_session",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -831,11 +838,13 @@
       "profile_update",
       "rate_result",
       "read_document",
+      "read_session_messages",
       "recall_tool_result",
       "reject_result",
       "schedule_job",
       "seed_debate_turn",
       "send_notification",
+      "send_session_message",
       "session_search",
       "show_help",
       "switch_model",
@@ -873,6 +882,7 @@
       "eval_dspy_optimize": "eval-audit",
       "eval_inspect_viz": "eval-audit",
       "export_json": "output",
+      "fork_session": "session",
       "freeze_paper_snapshot": "eval-seed",
       "general_web_search": "delegated",
       "generate_data": "data",
@@ -912,11 +922,13 @@
       "profile_update": "delegated",
       "rate_result": "hitl",
       "read_document": "delegated",
+      "read_session_messages": "session",
       "recall_tool_result": "runtime-transient",
       "reject_result": "hitl",
       "schedule_job": "execution",
       "seed_debate_turn": "eval-seed",
       "send_notification": "notification",
+      "send_session_message": "session",
       "session_search": "memory",
       "show_help": "system",
       "switch_model": "system",
@@ -935,7 +947,7 @@
       "web_fetch": "delegated",
       "write_file": "delegated"
     },
-    "model_execution_registration_count": 84,
+    "model_execution_registration_count": 87,
     "model_execution_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -955,6 +967,7 @@
       "eval_inspect_viz",
       "export_json",
       "followup_task",
+      "fork_session",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -996,12 +1009,14 @@
       "profile_update",
       "rate_result",
       "read_document",
+      "read_session_messages",
       "reject_result",
       "run_bash",
       "schedule_job",
       "seed_debate_turn",
       "send_message",
       "send_notification",
+      "send_session_message",
       "session_search",
       "show_help",
       "spawn_agent",
@@ -1022,7 +1037,7 @@
       "web_fetch",
       "write_file"
     ],
-    "policy_registration_count": 84,
+    "policy_registration_count": 87,
     "policy_registration_names": [
       "accept_result",
       "arxiv_search",
@@ -1042,6 +1057,7 @@
       "eval_inspect_viz",
       "export_json",
       "followup_task",
+      "fork_session",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -1083,12 +1099,14 @@
       "profile_update",
       "rate_result",
       "read_document",
+      "read_session_messages",
       "reject_result",
       "run_bash",
       "schedule_job",
       "seed_debate_turn",
       "send_message",
       "send_notification",
+      "send_session_message",
       "session_search",
       "show_help",
       "spawn_agent",
@@ -1109,7 +1127,7 @@
       "web_fetch",
       "write_file"
     ],
-    "schema_count": 84,
+    "schema_count": 87,
     "schema_errors": [],
     "schema_names": [
       "accept_result",
@@ -1130,6 +1148,7 @@
       "eval_inspect_viz",
       "export_json",
       "followup_task",
+      "fork_session",
       "freeze_paper_snapshot",
       "general_web_search",
       "generate_data",
@@ -1171,12 +1190,14 @@
       "profile_update",
       "rate_result",
       "read_document",
+      "read_session_messages",
       "reject_result",
       "run_bash",
       "schedule_job",
       "seed_debate_turn",
       "send_message",
       "send_notification",
+      "send_session_message",
       "session_search",
       "show_help",
       "spawn_agent",

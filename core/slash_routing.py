@@ -112,6 +112,16 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         location=RunLocation.DAEMON_RPC,
         description="Show, set, pause, resume, edit, or clear the persistent session goal",
     ),
+    "/fork": CommandSpec(
+        name="/fork",
+        location=RunLocation.DAEMON_RPC,
+        description="Fork a completed turn of this or another session into a paused session",
+    ),
+    "/send": CommandSpec(
+        name="/send",
+        location=RunLocation.DAEMON_RPC,
+        description="Queue a message for another root session without starting it",
+    ),
     "/plan": CommandSpec(
         name="/plan",
         location=RunLocation.DAEMON_STREAM,

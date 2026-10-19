@@ -170,6 +170,10 @@ def _thin_interactive_loop(
                 f"  [success]Resumed:[/success] {sid}"
                 f"  [muted](round {rnd}, {msgs} messages, {model})[/muted]"
             )
+            if result.get("lineage"):
+                from core.memory.session_peers import describe_lineage
+
+                console.print(f"  [muted]{describe_lineage(result['lineage'])}[/muted]")
         else:
             console.print(f"  [warning]{result.get('message', 'Resume failed')}[/warning]")
     console.print()

@@ -1672,6 +1672,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration.md
 | --- | --- |
 | `send_message` | 새 세대를 시작하지 않고 실행 중인 자식에게 컨텍스트를 큐잉 |
 | `followup_task` | 실행 중이면 다음 루프 경계에 전달하고, 종료 상태면 같은 자식 세션을 재개 |
+| `send_session_message` | 자식이 아닌 같은 프로젝트의 다른 root 세션에 큐잉. 대상을 깨우지 않으며 자식 세션은 보내지도 받지도 못함 |
+| `read_session_messages` | 다른 root 세션이 보낸 미읽음 메시지를 tool 결과 데이터로 한 번씩 읽음. 운영자 지시가 아니며 승인이나 도구 권한을 주지 않음 |
+| `fork_session` | 이 세션 또는 자신의 종료된 자식의 완료 turn을 새 일시정지 root 세션으로 분기 |
 
 최신 상태와 메일박스 전달은 프로젝트 `sessions.db`의 `collaboration_runs`와 `collaboration_mailbox`에 저장합니다. 이 둘은 제어 상태를 투영하며 별도 transcript를 만들지 않습니다. 자식의 대화, 도구 호출, 훅, trajectory는 `messages`와 append-only `session_events`에 독립 롤아웃으로 남습니다. mailbox는 자식 checkpoint 저장 뒤 승인됩니다. 재개는 완료된 도구 호출을 런타임이 자동 재생하지 않지만 모델이 같은 부작용을 다시 요청할 수 있으므로 exactly-once 계약은 아닙니다.
 
@@ -7040,6 +7043,8 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `/skill <name>` |  | daemon | 스킬 호출. `context:fork` 서브에이전트 실행 지원 | `core/cli/commands/skills.py` |
 | `/cost` |  | daemon | LLM 비용 대시보드와 예산 | `core/cli/commands/cost.py` |
 | `/resume` |  | daemon | 중단된 세션 재개 | `core/cli/commands/session.py` |
+| `/fork [sid]` |  | daemon | 완료된 turn 시점에서 새 일시정지 세션을 분기. 대화 기록과 모델 설정만 복사하고 아무것도 시작하지 않음 | `core/memory/session_peers.py` |
+| `/send <sid> <msg>` |  | daemon | 같은 프로젝트의 다른 root 세션에 메시지를 큐잉. 대상은 깨우지 않으며 다음 turn에 신뢰되지 않는 데이터로 읽음 | `core/memory/session_peers.py` |
 | `/context` | `/ctx` | daemon | 조립된 컨텍스트 계층 표시 | `core/cli/commands/session.py` |
 | `/apply` |  | daemon | 지원서 관리 | `core/cli/commands/session.py` |
 | `/compact` |  | daemon | 대화 컨텍스트 압축 | `core/cli/commands/session.py` |
@@ -7490,9 +7495,9 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 
 | 측정값 | 현재 트리 |
 | --- | --- |
-| 프로덕션 Python 파일 | 599 |
-| 테스트 Python 파일 | 778 |
-| 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 84 / 84 / 84 / 84 |
+| 프로덕션 Python 파일 | 601 |
+| 테스트 Python 파일 | 781 |
+| 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 87 / 87 / 87 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |
 | 프로덕션 ContextVar | 26 |
