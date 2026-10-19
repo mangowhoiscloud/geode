@@ -49,6 +49,10 @@ functional change.
 
 ### Added
 
+- **Research desktop navigation.** Recognize one bounded horizontal wheel
+  stroke per scene inside artwork, with direction and momentum guards. Keep
+  native scrolling, zoom, nested controls, and mobile touch navigation; widen
+  the existing desktop pager targets and add the existing neutral focus fill.
 - **GPT-6.1 Sol.** Select `gpt-6.1-sol` on the Platform API and the Codex
   subscription. Requests accept only `low`..`max` effort (no `none`, `minimal`
   or Codex `ultra`), budget context per route (1.05M/922K input on the API,

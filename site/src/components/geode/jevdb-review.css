@@ -104,3 +104,8 @@ body:has(.jevdb-dialog[open]) { overflow: hidden; }
   .jevdb-dialog-heading { padding: 12px 16px; } .jevdb-sources-body { padding: 20px 16px 24px; }
 }
 @media print { .jevdb-header, .jevdb-toc, .jevdb-toolbar, .jevdb-dialog { display: none !important; } .jevdb-workspace { display: block; width: 100%; } }
+
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  .jevdb-pager button { min-width: 72px; }
+  .jevdb-pager button:focus-visible { background: var(--reader-surface); }
+}

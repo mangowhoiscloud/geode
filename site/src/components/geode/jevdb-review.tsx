@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { LocaleProvider, t, useLocale, useSetLocale } from "@/components/geode/locale-context";
 import { attachReaderSwipe } from "@/lib/reader-swipe.mjs";
+import { attachReaderWheel } from "@/lib/reader-wheel.mjs";
 import scenes from "@/data/geode/jevdb-slides.json";
 import "./jevdb-review.css";
 
@@ -42,6 +43,13 @@ function ReviewContent() {
   useEffect(() => {
     if (!overview && canvas.current) return attachReaderSwipe(canvas.current, direction => selectScene(index + direction));
   }, [index, locale, overview, selectScene]);
+
+  const canWheelNavigate = useEffectEvent((direction: -1 | 1) => index + direction >= 0 && index + direction < scenes.length);
+  const onWheelNavigate = useEffectEvent((direction: -1 | 1) => selectScene(index + direction));
+  useEffect(() => {
+    if (!overview && canvas.current) return attachReaderWheel(canvas.current,
+      direction => canWheelNavigate(direction), direction => onWheelNavigate(direction));
+  }, [overview]);
 
   useEffect(() => {
     const readHash = () => {
