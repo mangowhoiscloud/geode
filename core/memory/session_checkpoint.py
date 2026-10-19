@@ -51,6 +51,10 @@ _FORK_PENDING_MARKER = ".fork-pending"
 _SESSION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
 
+# Sessions directories already swept for crashed forks in this process.
+_ORPHAN_SWEPT_DIRS: set[str] = set()
+
+
 class SessionForkError(ValueError):
     """A fork was refused before any destination session became visible."""
 
@@ -63,7 +67,13 @@ def _as_int(value: Any) -> int:
 
 
 def _tool_links(message: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """Return (tool-call ids, tool-result ids) in one provider-neutral message."""
+    """Return (tool-call ids, tool-result ids) in one provider-neutral message.
+
+    Duplicates are kept so the caller can refuse them. The ``tool_calls``
+    column the SQLite transcript mirrors from content blocks is read only when
+    the message has no ``tool_use`` blocks of its own, so a round-tripped
+    message does not name each call twice.
+    """
     calls: list[str] = []
     results: list[str] = []
     content = message.get("content")
@@ -75,14 +85,13 @@ def _tool_links(message: dict[str, Any]) -> tuple[list[str], list[str]]:
                 calls.append(str(block["id"]))
             elif block.get("type") == "tool_result" and block.get("tool_use_id"):
                 results.append(str(block["tool_use_id"]))
-    for call in message.get("tool_calls") or ():
-        if isinstance(call, dict) and call.get("id"):
-            calls.append(str(call["id"]))
+    if not calls:
+        for call in message.get("tool_calls") or ():
+            if isinstance(call, dict) and call.get("id"):
+                calls.append(str(call["id"]))
     if message.get("role") == "tool" and message.get("tool_call_id"):
         results.append(str(message["tool_call_id"]))
-    # One message may name a call twice (content block plus the mirrored
-    # ``tool_calls`` column), so IDs are unique per message, order kept.
-    return list(dict.fromkeys(calls)), list(dict.fromkeys(results))
+    return calls, results
 
 
 def completed_turn_boundaries(messages: list[Any]) -> list[int]:
@@ -546,6 +555,19 @@ class SessionCheckpoint:
                 fork_id, "fork", from_status=None, to_status=SessionStatus.PAUSED
             )
         return fork
+
+    def sweep_orphan_forks_once(self) -> int:
+        """Remove crashed fork publications once per process for this directory.
+
+        Called at runtime startup so an interrupted fork's rows never stay
+        searchable until some later fork happens to sweep them.
+        """
+        key = str(self._dir.resolve())
+        if key in _ORPHAN_SWEPT_DIRS or not self._dir.is_dir():
+            return 0
+        _ORPHAN_SWEPT_DIRS.add(key)
+        with self._status_lock():
+            return self._remove_orphan_forks_locked()
 
     def _remove_orphan_forks_locked(self) -> int:
         """Remove forks whose publisher died before commit (caller holds the lock).

@@ -201,3 +201,16 @@ def test_ipc_daemon_relays_send_and_gates_fork_on_the_source_lane(project: Path)
     finally:
         client.close()
         poller.stop()
+
+
+def test_read_tool_policy_is_a_read_that_headless_roots_may_use() -> None:
+    """Re-review P3-d: daemon/scheduler roots can read; children cannot; send stays gated."""
+    from core.agent.safety import headless_denied_tools
+
+    bound, _ = compose_tool_plan()
+    assert "read_session_messages" not in headless_denied_tools(bound)
+    assert "send_session_message" in headless_denied_tools(bound)
+    assert "fork_session" in headless_denied_tools(bound)
+    assert {"read_session_messages", "send_session_message", "fork_session"} <= (
+        subagent_denied_tools(bound)
+    )

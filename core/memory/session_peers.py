@@ -18,7 +18,11 @@ from core.memory.collaboration import PEER_MESSAGE_KIND, CollaborationStore, Pee
 from core.memory.session_checkpoint import SessionCheckpoint, SessionForkError
 
 OPERATOR_SENDER = "operator"
-MAX_PEER_MESSAGE_CHARS = 16_000
+# A message must fit, whole, in one read_session_messages result well under the
+# default tool-result offload threshold (an offloaded read would never count as
+# delivered), so peer messages are short notes.
+MAX_PEER_MESSAGE_CHARS = 4_000
+_READ_CHAR_BUDGET = 8_000
 _GATEWAY_PREFIX = "s-gw-"  # build_gateway_checkpoint_session_id
 _TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "timeout", "interrupted"})
 _TERMINAL_CHECKPOINT_STATUSES = frozenset({"completed", "error"})
@@ -110,14 +114,21 @@ def _require_root_caller(
     *,
     checkpoint: SessionCheckpoint,
     store: CollaborationStore,
-) -> None:
+) -> str:
+    """Return the sender recorded for this caller, or raise before any write.
+
+    Operator intent with no resolvable session (none bound, or one that has
+    not checkpointed yet) acts as the operator itself.
+    """
     if principal.parent_session_id:
         raise PeerMessageError("child sessions cannot use peer-session operations")
     if not principal.session_id:
         if principal.operator_intent:
-            return
+            return OPERATOR_SENDER
         raise PeerMessageError("no backend-bound session or operator intent")
     kind = session_kind(principal.session_id, checkpoint=checkpoint, store=store)
+    if kind == "missing" and principal.operator_intent:
+        return OPERATOR_SENDER
     if kind == "missing":
         # A bound root session checkpoints before its first model call, so a
         # caller absent from this project's store is unresolved or foreign.
@@ -126,6 +137,7 @@ def _require_root_caller(
         )
     if kind in ("child", "gateway"):
         raise PeerMessageError(f"a {kind} session cannot use peer-session operations")
+    return principal.session_id
 
 
 def send_peer_message(
@@ -142,7 +154,7 @@ def send_peer_message(
     row at its next agent-loop boundary, and an idle one keeps it unread.
     """
     checkpoint, store = _stores(sessions_dir)
-    _require_root_caller(principal, checkpoint=checkpoint, store=store)
+    sender = _require_root_caller(principal, checkpoint=checkpoint, store=store)
     text = str(message)
     if not text.strip():
         raise PeerMessageError("message must not be empty")
@@ -152,7 +164,6 @@ def send_peer_message(
     if kind != "root":
         reason = "unknown in this project" if kind == "missing" else f"a {kind} session"
         raise PeerMessageError(f"target {target_session_id!r} is {reason}")
-    sender = principal.session_id or OPERATOR_SENDER
     message_id = store.append_peer_message(
         sender_session_id=sender,
         recipient_session_id=target_session_id,
@@ -171,7 +182,7 @@ def read_peer_messages(
     principal: SessionPrincipal,
     admitted: set[int] | None,
     *,
-    limit: int = 20,
+    limit: int = 5,
     sessions_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Return this root session's unread peer messages as tool-result data.
@@ -189,13 +200,20 @@ def read_peer_messages(
         raise PeerMessageError("reading peer messages needs a bound root session")
     if admitted is None:
         raise PeerMessageError("peer messages are read only inside an active session turn")
-    bound = max(1, min(int(limit), 50))
+    bound = max(1, min(int(limit), 20))
     unread = [
         item
-        for item in store.read_mailbox(principal.session_id, limit=200)
+        for item in store.read_mailbox(principal.session_id, limit=200, peer=True)
         if item.kind == PEER_MESSAGE_KIND and item.id not in admitted
     ]
-    batch = unread[:bound]
+    batch: list[Any] = []
+    chars = 0
+    for item in unread[:bound]:
+        size = len(str(item.payload.get("message", "")))
+        if batch and chars + size > _READ_CHAR_BUDGET:
+            break
+        batch.append(item)
+        chars += size
     admitted.update(item.id for item in batch)
     return {
         "note": PEER_DATA_NOTE,

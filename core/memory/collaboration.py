@@ -494,10 +494,18 @@ class CollaborationStore:
         recipient_session_id: str,
         *,
         limit: int = 50,
+        peer: bool | None = None,
     ) -> list[CollaborationMessage]:
-        """Read unread items without acknowledging them."""
+        """Read unread items without acknowledging them.
+
+        ``peer`` selects peer messages only (True) or every other kind (False),
+        so one kind's backlog never hides the other within ``limit``.
+        """
         if not recipient_session_id:
             return []
+        # One static statement: a NULL flag selects every kind, 1 only peer
+        # messages, 0 every other kind.
+        peer_flag = None if peer is None else int(peer)
         with self._transaction() as conn:
             self._recover_stale_locked(conn, recipient_session_id)
             rows = conn.execute(
@@ -505,8 +513,15 @@ class CollaborationStore:
                           payload_json, created_at
                    FROM collaboration_mailbox
                    WHERE recipient_session_id = ? AND consumed_at IS NULL
+                     AND (? IS NULL OR (kind = ?) = ?)
                    ORDER BY id ASC LIMIT ?""",
-                (recipient_session_id, max(1, min(limit, 200))),
+                (
+                    recipient_session_id,
+                    peer_flag,
+                    PEER_MESSAGE_KIND,
+                    peer_flag,
+                    max(1, min(limit, 200)),
+                ),
             ).fetchall()
         messages: list[CollaborationMessage] = []
         for row in rows:

@@ -628,3 +628,49 @@ def test_conflicting_child_ownership_is_refused(project: Path) -> None:
         fork_session(SessionPrincipal(session_id="s-parent"), "agent-x")
     with pytest.raises(SessionForkError, match="conflict"):
         fork_session(OPERATOR, "agent-x")
+
+
+@pytest.mark.parametrize(
+    "duplicate",
+    [
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "d", "name": "n"},
+                {"type": "tool_use", "id": "d", "name": "n"},
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "c"},
+                {"type": "tool_result", "tool_use_id": "c"},
+            ],
+        },
+    ],
+    ids=["duplicate-call-in-one-message", "duplicate-result-in-one-message"],
+)
+def test_duplicates_inside_one_message_are_unbalanced(duplicate: dict[str, Any]) -> None:
+    """Re-review P3-a: the 1:1 pairing also holds within a single message."""
+    history = [
+        {"role": "user", "content": "go"},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "c", "name": "n"}]},
+        duplicate,
+        {"role": "assistant", "content": "done"},
+    ]
+    assert completed_turn_boundaries(history) == []
+
+
+def test_startup_sweep_removes_a_crashed_fork_once(project: Path) -> None:
+    """Re-review P3-f: a crashed publication is removed at startup, not at the next fork."""
+    _save(project, "s-src", _turn(1))
+    orphan = project / "s-orphan0001"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src", encoding="utf-8")
+    SessionManager(project / "sessions.db").upsert_messages("s-orphan0001", _turn(1))
+    session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
+    assert SessionCheckpoint(project).sweep_orphan_forks_once() == 1
+    assert not orphan.exists()
+    assert SessionManager(project / "sessions.db").get_messages("s-orphan0001") == []
+    assert SessionCheckpoint(project).load("s-src") is not None
+    assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0  # once per process

@@ -764,7 +764,7 @@
         "message": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 16000
+          "maxLength": 4000
         }
       },
       "required": [
@@ -802,8 +802,8 @@
         "limit": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 50,
-          "description": "Maximum messages to return. Default 20."
+          "maximum": 20,
+          "description": "Maximum messages to return (default 5); a result also stays within 8,000 characters."
         }
       },
       "required": [],

@@ -72,8 +72,12 @@ functional change.
   receives only a GEODE notice; its model reads the text with the
   `read_session_messages` tool, so peer text reaches a provider only as
   tool-result data, never as user or system input, and each message is
-  returned once. A full peer mailbox (200 unread) refuses new input instead of
-  evicting.
+  returned once. Messages are at most 4,000 characters and a read returns up
+  to 5 within 8,000 characters. A message counts as `applied` only after the
+  checkpoint holds the read result carrying it; a read whose result was lost,
+  interrupted or cancelled returns the message to unread. Peer backlog never
+  delays a child's messages or completion. A full peer mailbox (200 unread)
+  refuses new input instead of evicting.
   `/fork`, `geode session fork`, and the `fork_session` tool publish a new
   paused session from a frozen completed-turn cut of a permitted source. The
   operator may fork root sessions and finished children. A root session may

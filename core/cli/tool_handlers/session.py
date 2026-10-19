@@ -62,7 +62,7 @@ def _build_session_handlers(sessions_dir: Path | None = None) -> UniqueEntries[s
             return read_peer_messages(
                 tool_principal(context),
                 admitted if isinstance(admitted, set) else None,
-                limit=int(kwargs.get("limit") or 20),
+                limit=int(kwargs.get("limit") or 5),
                 sessions_dir=sessions_dir,
             )
         except ValueError as exc:

@@ -119,6 +119,9 @@ COLLABORATION_TOOLS: frozenset[str] = frozenset(
 SESSION_PEER_TOOLS: frozenset[str] = frozenset(
     {"send_session_message", "fork_session", "read_session_messages"}
 )
+# Reading one's own peer mailbox is a READ with no approval to wait for, so a
+# headless root session (daemon, scheduler) may still admit its messages.
+SESSION_PEER_READ_TOOLS: frozenset[str] = frozenset({"read_session_messages"})
 SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset(
     {"delegate_task", *COLLABORATION_TOOLS, *SESSION_PEER_TOOLS}
 )
@@ -130,7 +133,7 @@ SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset(
 HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
-        *SUBAGENT_CONTROL_TOOLS,
+        *(SUBAGENT_CONTROL_TOOLS - SESSION_PEER_READ_TOOLS),
         *COMPUTER_USE_TOOLS,
         *SENSITIVE_TOOLS,
     }
