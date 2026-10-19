@@ -56,6 +56,30 @@ functional change.
   pins and limits; local selection, independent validation, and release remain
   distinct. The landing now exposes an explicit KO/EN control; Escape closes
   mobile docs navigation even while its search field contains a query.
+- **Responsive Self-Improving Hub shell.** Every generated hub page, the 11
+  templates and the seedgen sub-pages alike, now takes one nav from
+  `render_hub_nav` and is written through `write_hub_page` in
+  `scripts/build_self_improving_hub.py`. Narrow screens get a brand bar with a
+  native "Contents" disclosure and start at the content; from 64rem the same
+  list is a sticky sidebar. Pages gain a skip link, breadcrumbs, a
+  build-time "On this page" map, and a first-screen surface list on the hub
+  landing. Each table now scrolls inside a labelled, keyboard-reachable region
+  instead of widening the page; no column is hidden. A deferred
+  `assets/hub.js` adds a row filter to tables with 8+ rows and keeps pages
+  fully usable without JS. Type sizes and touch targets were raised (11px
+  floor, 44px rows), and `--ink-faint` is darkened to `#6b7280` for 4.5:1
+  contrast (hub design schema 2). Rendered data, page URLs and viewer routes
+  are unchanged; every page's nav now lists the full route set, and the
+  duplicate "Recent audits" link to the log viewer became a disclosure label.
+  `--refresh-presentation DIR` applies the same shell to a copy of the
+  already-published pages without recomputing data, so values with no tracked
+  source (runtime baselines, local Crucible ledgers, retired runs) and their
+  build stamps stay as published; Inspect bundles are left byte-identical and
+  a rerun changes nothing. Two chrome corrections ride along: the Autoresearch
+  nav status reads `snapshot` instead of `live` (`stale`/`absent` unchanged),
+  and the 404 Crucible link `/geode/docs/architecture/crucible-kernel` now
+  points to the kernel source pinned at `80b130c3`, next to the official
+  Crucible bounded-search docs page.
 
 ### Security
 

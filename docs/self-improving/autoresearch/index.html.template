@@ -6,72 +6,17 @@
 <title>Autoresearch &middot; GEODE Self-Improving Hub</title>
 <meta name="description" content="Autoresearch closed-loop landing — current baseline status, generation timeline, and 4 sub-view links (baseline / mutations / results / policies).">
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+<script src="/geode/self-improving/assets/hub.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <div class="shell">
 
-  <aside class="sidebar">
-    <nav aria-label="Hub navigation">
-      <div class="brand">GEODE</div>
-      <div class="brand-sub">/self-improving</div>
+  {{ hub_nav }}
 
-      <div class="nav-section">Hub</div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/">Overview</a></li>
-      </ul>
-
-      <div class="nav-section">Petri Audit <span class="count">{{ petri_count }}</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
-        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
-          <ul class="sub-nav">
-{{ sidebar_petri_recent }}
-          </ul>
-        </li>
-      </ul>
-
-      <div class="nav-section">Seed Generation <span class="count">{{ seedgen_count_label }}</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/seed-generation/">All runs</a>
-          <ul class="sub-nav">
-{{ sidebar_seedgen_runs }}
-          </ul>
-        </li>
-        <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
-      </ul>
-
-      <div class="nav-section">Autoresearch <span class="count">{{ autoresearch_status_label }}</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/autoresearch/" class="active" aria-current="page">Overview</a></li>
-        <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
-        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
-        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
-        <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
-        <li><a href="/geode/self-improving/autoresearch/runs/">Runs</a></li>
-        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
-      </ul>
-
-      <div class="nav-section">Crucible <span class="count">ledger</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
-      </ul>
-
-      <div class="nav-section">Docs</div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
-        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
-        <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
-      </ul>
-
-      <div class="nav-section">Meta</div>
-      <ul class="nav-list">
-        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
-      </ul>
-    </nav>
-  </aside>
-
-  <main class="content">
+  <main class="content" id="main">
+    {{ hub_crumbs }}
     <h1 class="page-title">Autoresearch <span class="bucket autoresearch">autoresearch</span></h1>
     <p class="page-sub">Closed-loop self-improvement surface. Reads <code>autoresearch/state/</code> (baseline, mutations ledger, results table, 14 policy SoT files) and links to 4 sub-views. The status block below summarises the current promoted baseline; the generation timeline shows the recent promote history.</p>
 

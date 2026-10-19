@@ -6,38 +6,40 @@
 <title>Evidence &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
 <meta name="description" content="Honest evidence page for scaffold-selection: methods (frozen held-out ruler vs pinned selection pool, 3 control arms, replicate + ci-excludes-0, reproducibility pins, content-addressed epochs), results (per-arm held-out curve, 3-arm comparison, promotion count, ci verdict), and power (required N x M, honest null).">
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+<script src="/geode/self-improving/assets/hub.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <div class="shell">
 
   <aside class="sidebar">
-    <nav aria-label="Hub navigation">
-      <div class="brand">GEODE</div>
-      <div class="brand-sub">/self-improving</div>
+    <a class="brand" href="/geode/self-improving/">GEODE<span class="brand-sub">/self-improving</span></a>
+    <details class="hub-nav" data-hub-nav>
+      <summary>Contents</summary>
+      <nav aria-label="Hub navigation">
+        <div class="nav-section">Hub</div>
+        <ul class="nav-list">
+          <li><a href="/geode/self-improving/">Overview</a></li>
+        </ul>
 
-      <div class="nav-section">Hub</div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/">Overview</a></li>
-      </ul>
-
-      <div class="nav-section">Petri Audit <span class="count">26</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
-        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
-          <ul class="sub-nav">
-            <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-57-39-00-00_audit_j93DMHTB2Lfea8rTHsB4gn.eval">audit_j93DMHTB <span class="side-stamp">05-26 23:57</span></a></li>
+        <div class="nav-section">Petri Audit <span class="count">26</span></div>
+        <ul class="nav-list">
+          <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer <span aria-hidden="true">&#x2197;</span></a></li>
+          <li><details class="nav-group"><summary>Recent audits</summary>
+            <ul class="sub-nav">
+<li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-57-39-00-00_audit_j93DMHTB2Lfea8rTHsB4gn.eval">audit_j93DMHTB <span class="side-stamp">05-26 23:57</span></a></li>
             <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-51-32-00-00_audit_LhvVEmc69G22QuXe64xctt.eval">audit_LhvVEmc6 <span class="side-stamp">05-26 23:51</span></a></li>
             <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-42-50-00-00_audit_AdsporVRpyMvfbWhkFAaDD.eval">audit_AdsporVR <span class="side-stamp">05-26 23:42</span></a></li>
-          </ul>
-        </li>
-      </ul>
+            </ul></details></li>
+        </ul>
 
-      <div class="nav-section">Seed Generation <span class="count">7 runs</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/seed-generation/">All runs</a>
-          <ul class="sub-nav">
-            <li class="side-group-label">frontier-2612-bt</li>
+        <div class="nav-section">Seed Generation <span class="count">7 runs</span></div>
+        <ul class="nav-list">
+          <li><a href="/geode/self-improving/seed-generation/">All runs</a></li>
+          <li><details class="nav-group"><summary>Runs by campaign</summary>
+            <ul class="sub-nav">
+<li class="side-group-label">frontier-2612-bt</li>
             <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/frontier-2612-bt-broken_tool_use/" title="frontier-2612-bt-broken_tool_use">broken_tool_use</a></li>
             <li class="side-group-label">gen-2605-1</li>
             <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/gen-2605-1-redundant_tool_invocation/" title="gen-2605-1-redundant_tool_invocation">redundant_tool_invocation</a></li>
@@ -50,46 +52,50 @@
             <li class="side-group-label">gen1</li>
             <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/gen1-broken_tool_use/" title="gen1-broken_tool_use">broken_tool_use</a></li>
             <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/gen1-redundant_tool_invocation/" title="gen1-redundant_tool_invocation">redundant_tool_invocation</a></li>
-          </ul>
-        </li>
-        <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
-      </ul>
+            </ul></details></li>
+          <li><a href="/geode/self-improving/seed-generation/bundle/">Phase log viewer <span aria-hidden="true">&#x2197;</span></a></li>
+          <li><a href="/geode/docs/petri/seeds">Seed runs (docs) <span aria-hidden="true">&#x2197;</span></a></li>
+        </ul>
 
-      <div class="nav-section">Autoresearch <span class="count">live</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/autoresearch/">Overview</a></li>
-        <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
-        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
-        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
-        <li><a href="/geode/self-improving/autoresearch/evidence/" class="active" aria-current="page">Evidence</a></li>
-        <li><a href="/geode/self-improving/autoresearch/runs/">Runs</a></li>
-        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
-      </ul>
+        <div class="nav-section">Autoresearch <span class="count">snapshot</span></div>
+        <ul class="nav-list">
+          <li><a href="/geode/self-improving/autoresearch/">Overview</a></li>
+          <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
+          <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
+          <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+          <li><a href="/geode/self-improving/autoresearch/evidence/" aria-current="page">Evidence</a></li>
+          <li><a href="/geode/self-improving/autoresearch/runs/">Runs</a></li>
+          <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
+        </ul>
 
-      <div class="nav-section">Crucible <span class="count">ledger</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
-      </ul>
+        <div class="nav-section">Crucible <span class="count">ledger</span></div>
+        <ul class="nav-list">
+          <li><a href="https://github.com/mangowhoiscloud/geode/blob/80b130c3113ddaca9d4712d81a277005143c28aa/docs/architecture/crucible-kernel.md" rel="noopener">Kernel architecture (source) <span aria-hidden="true">&#x2197;</span></a></li>
+          <li><a href="/geode/docs/capabilities/outer-loop/">Bounded search (docs) <span aria-hidden="true">&#x2197;</span></a></li>
+        </ul>
 
-      <div class="nav-section">Docs</div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
-        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
-        <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
-      </ul>
+        <div class="nav-section">Docs</div>
+        <ul class="nav-list">
+          <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
+          <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+          <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
+        </ul>
 
-      <div class="nav-section">Meta</div>
-      <ul class="nav-list">
-        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
-      </ul>
-    </nav>
+        <div class="nav-section">Meta</div>
+        <ul class="nav-list">
+          <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub <span aria-hidden="true">&#x2197;</span></a></li>
+        </ul>
+      </nav>
+    </details>
   </aside>
 
-  <main class="content">
+  <main class="content" id="main">
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/geode/self-improving/">Self-Improving Hub</a></li><li><a href="/geode/self-improving/autoresearch/">Autoresearch</a></li><li><span aria-current="page">Evidence</span></li></ol></nav>
     <h1 class="page-title">Evidence <span class="bucket autoresearch">autoresearch</span></h1>
     <p class="page-sub">One honest page to judge a single question: <strong>does scaffold-selection actually improve safety fitness?</strong> Methods, results, and power, read from the git-tracked ledgers (<code>mutations.jsonl</code> + <code>baseline_archive.jsonl</code>) — measured values only, no fabricated numbers. <strong>0 promotions is a trust-increasing result, not a failure</strong>: a loop that promotes nothing on null evidence is behaving correctly. Where a matched campaign has not run yet, the section says so plainly rather than inventing a curve.</p>
 
-    <h2 class="section"><span>1 &middot; Methods</span></h2>
+    <nav class="page-map" aria-labelledby="page-map-label"><span class="scope" id="page-map-label">On this page</span><ul><li><a href="#sec-methods">Methods</a></li><li><a href="#sec-results">Results</a></li><li><a href="#sec-live-campaign">Live campaign</a></li><li><a href="#sec-power">Power</a></li></ul></nav>
+    <h2 class="section" id="sec-methods"><span>1 &middot; Methods</span></h2>
     <p class="page-sub">The experimental design, honestly. The only valid evidence of cross-generation improvement is the <strong>frozen held-out ruler</strong>; everything else (the co-evolving selection pool, a single arm's drift, judge noise) is a confound the design isolates.</p>
     <dl class="status-grid">
       <dt>held-out ruler (E2)</dt><dd>VERSION-FROZEN bench (<code>held_out_bench_id</code>), an older-runs set DISJOINT from the selection pool. <code>held_out_fitness</code> is the SAME 0-1 <code>compute_fitness</code> (HIGHER-is-better) scored on it EVERY cycle. Because the bench never mutates, this curve IS comparable across generations.</dd>
@@ -100,7 +106,7 @@
       <dt>epoch partition (A)</dt><dd>every promoted baseline is hashed into a content-addressed epoch (be-NNN) keyed on the production+measurement spec; baselines from different epochs were produced under different logic and are never averaged into one comparison.</dd>
     </dl>
     <h3 class="section"><span>Control arms</span></h3>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="Control arms"><table class="records">
       <thead>
         <tr>
           <th scope="col"><code>promote_policy</code></th>
@@ -121,13 +127,13 @@
           <td>no-mutation floor</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
 
-    <h2 class="section"><span>2 &middot; Results</span></h2>
+    <h2 class="section" id="sec-results"><span>2 &middot; Results</span></h2>
     <p class="page-sub">Read from the recorded ledgers. The per-cycle held-out curve PER ARM (split by <code>promote_policy</code>), the 3-arm comparison on the fixed ruler, promotion count per arm, and the ci-excludes-0 verdict. Pre-E1 mixed-scale rows (<code>fitness_before &gt; 1.0</code>) are excluded from aggregates. When no matched 3-arm held-out campaign has been recorded, this section renders the honest "awaiting" state below.</p>
     <h3 class="section"><span>3-arm comparison &middot; fixed ruler</span></h3>
     <p class="page-sub">Mean held-out fitness (the fixed ruler) per arm. Selection (<code>gate</code>) is only evidenced if it beats BOTH controls on this ruler. Arm-tagged promotions: <strong>0</strong> — <strong>0 promotions is a trust-increasing result</strong>: the loop correctly promoted nothing on null evidence.</p>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="3-arm comparison &middot; fixed ruler"><table class="records">
       <thead>
         <tr>
           <th scope="col">arm</th>
@@ -162,9 +168,9 @@
           <td class="num">1</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <h3 class="section"><span>selection (promote gate) &middot; <code>gate</code> &middot; 17 generations</span></h3>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="selection (promote gate) &middot; gate &middot; 17 generations"><table class="records">
       <thead>
         <tr>
           <th scope="col" class="num">gen</th>
@@ -277,9 +283,9 @@
           <td class="num delta-positive">+0.0058</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <h3 class="section"><span>random-accept control &middot; <code>random</code> &middot; 5 generations</span></h3>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="random-accept control &middot; random &middot; 5 generations"><table class="records">
       <thead>
         <tr>
           <th scope="col" class="num">gen</th>
@@ -320,9 +326,9 @@
           <td class="num delta-positive">+0.0310</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <h3 class="section"><span>no-mutation floor &middot; <code>never</code> &middot; 10 generations</span></h3>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="no-mutation floor &middot; never &middot; 10 generations"><table class="records">
       <thead>
         <tr>
           <th scope="col" class="num">gen</th>
@@ -393,10 +399,10 @@
           <td class="num delta-positive">+0.0002</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <h3 class="section"><span>Gain verdict &middot; ci excludes 0 &middot; 32 recorded</span></h3>
     <p class="page-sub">The explicit "ci excludes 0" evidence statement on the fitness gain. <code>gain significant</code> only when the CI lies entirely above 0; otherwise the honest null: <code>no evidence yet</code>.</p>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="Gain verdict &middot; ci excludes 0 &middot; 32 recorded"><table class="records">
       <thead>
         <tr>
           <th scope="col">source</th>
@@ -632,13 +638,13 @@
           <td><span class="muted">no evidence yet</span></td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
 
-    <h2 class="section"><span>3 &middot; Live campaign</span></h2>
+    <h2 class="section" id="sec-live-campaign"><span>3 &middot; Live campaign</span></h2>
     <p class="page-sub">The running 3-arm campaign, drilled down per cycle. The gen-0 K-mean noise band fixes the floor every arm is judged against; the promote-gate margin rule says why a cycle rejects; the per-cycle table surfaces every value the loop emits — selection vs held-out fitness, their <strong>divergence</strong> (the winner's-curse signal), the verdict (promote / reject / SKIP), the seeds scored, and the deep-linked Petri eval. The campaign is mid-run, so cells read "in progress" honestly where a value is not yet recorded.</p>
     <h3 class="section"><span>gen-0 baseline noise band &middot; K-mean re-measure</span></h3>
     <p class="page-sub">K=5 held-out noise band: <span class="num">0.8185</span> &plusmn; <span class="num">0.0055</span> stderr. An arm beats noise only when its held-out clears <code>mean + stderr</code> (&gt; <span class="num">0.8240</span>). held-out fitness is 0-1, HIGHER-is-better.</p>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="gen-0 baseline noise band &middot; K-mean re-measure"><table class="records">
       <thead>
         <tr>
           <th scope="col" class="num">repeat</th>
@@ -718,7 +724,7 @@
           <td class="num">0.8825</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <h3 class="section"><span>promote-gate margin rule</span></h3>
     <p class="page-sub">The gate promotes only when the fitness gain clears its own margin (SoT <code>geode_product/self_improving/train.py::_should_promote</code>). The margin is NOT persisted per-cycle, so the RULE + the recorded baseline stderr are shown rather than a fabricated number.</p>
     <dl class="status-grid">
@@ -730,7 +736,7 @@
     <h3 class="section"><span>per-cycle campaign drill-down &middot; verdict / seeds / Petri eval / divergence</span></h3>
     <p class="page-sub">One row per cycle, faceted by arm. <strong>verdict</strong> + <strong>SKIP</strong> are the per-cycle <em>latest</em> SoT (<code>campaign-progress.log</code>) &mdash; distinct from the <em>promoted</em> champion SoT (<code>baseline_archive.jsonl</code>, the 3-arm table above). <strong>divergence</strong> = (selection &minus; gen-0 selection) &minus; (held-out &minus; gen-0 held-out): the gap between how much the cycle moved the selection proxy vs the frozen ruler. A <em>positive</em> divergence is the winner's-curse signal (selection rose more than the held-out ruler). selection + held-out are 0-1 fitness (HIGHER-is-better) but on DIFFERENT scales, so they are anchored to their own gen-0 mean before subtracting; the held-out &Delta;-vs-prior arrow is green when it rises.</p>
     <h4 class="section"><span>selection (promote gate) &middot; <code>gate</code> &middot; promote 0 &middot; reject 16 &middot; SKIP 2</span></h4>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="selection (promote gate) &middot; gate &middot; promote 0 &middot; reject 16 &middot; SKIP 2"><table class="records">
       <thead>
         <tr>
           <th scope="col" class="num">cycle</th>
@@ -906,9 +912,9 @@
           <td><span class="muted">no eval recorded</span></td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <h4 class="section"><span>random-accept control &middot; <code>random</code> &middot; promote 0 &middot; reject 5 &middot; SKIP 5</span></h4>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="random-accept control &middot; random &middot; promote 0 &middot; reject 5 &middot; SKIP 5"><table class="records">
       <thead>
         <tr>
           <th scope="col" class="num">cycle</th>
@@ -1012,9 +1018,9 @@
           <td class="muted">&mdash;</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
     <h4 class="section"><span>no-mutation floor &middot; <code>never</code> &middot; promote 0 &middot; reject 13 &middot; SKIP 2</span></h4>
-    <table class="records">
+    <div class="table-scroll" role="region" tabindex="0" aria-label="no-mutation floor &middot; never &middot; promote 0 &middot; reject 13 &middot; SKIP 2"><table class="records">
       <thead>
         <tr>
           <th scope="col" class="num">cycle</th>
@@ -1163,9 +1169,9 @@
           <td class="muted">&mdash;</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
 
-    <h2 class="section"><span>4 &middot; Power</span></h2>
+    <h2 class="section" id="sec-power"><span>4 &middot; Power</span></h2>
     <p class="page-sub">How many samples are needed to detect a target effect &delta; at 80% power, given the observed fitness-noise &sigma; (recorded E4 decomposition). When the gain CI includes 0 the verdict is "no evidence yet" — stated plainly, not hedged.</p>
     <dl class="status-grid">
       <dt>target effect &delta;</dt><dd><span class="num">0.0200</span> (fitness scale, HIGHER-is-better)</dd>

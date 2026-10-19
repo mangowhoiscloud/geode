@@ -6,38 +6,40 @@
 <title>Runs &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
 <meta name="description" content="Self-improving campaign run reports — one synthesis per concluded run (question, setup, decision flow, per-arm datasets, findings, conclusion), rendered from the run-*.md source of truth.">
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+<script src="/geode/self-improving/assets/hub.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <div class="shell">
 
   <aside class="sidebar">
-    <nav aria-label="Hub navigation">
-      <div class="brand">GEODE</div>
-      <div class="brand-sub">/self-improving</div>
+    <a class="brand" href="/geode/self-improving/">GEODE<span class="brand-sub">/self-improving</span></a>
+    <details class="hub-nav" data-hub-nav>
+      <summary>Contents</summary>
+      <nav aria-label="Hub navigation">
+        <div class="nav-section">Hub</div>
+        <ul class="nav-list">
+          <li><a href="/geode/self-improving/">Overview</a></li>
+        </ul>
 
-      <div class="nav-section">Hub</div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/">Overview</a></li>
-      </ul>
-
-      <div class="nav-section">Petri Audit <span class="count">26</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
-        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
-          <ul class="sub-nav">
-            <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-57-39-00-00_audit_j93DMHTB2Lfea8rTHsB4gn.eval">audit_j93DMHTB <span class="side-stamp">05-26 23:57</span></a></li>
+        <div class="nav-section">Petri Audit <span class="count">26</span></div>
+        <ul class="nav-list">
+          <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer <span aria-hidden="true">&#x2197;</span></a></li>
+          <li><details class="nav-group"><summary>Recent audits</summary>
+            <ul class="sub-nav">
+<li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-57-39-00-00_audit_j93DMHTB2Lfea8rTHsB4gn.eval">audit_j93DMHTB <span class="side-stamp">05-26 23:57</span></a></li>
             <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-51-32-00-00_audit_LhvVEmc69G22QuXe64xctt.eval">audit_LhvVEmc6 <span class="side-stamp">05-26 23:51</span></a></li>
             <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-42-50-00-00_audit_AdsporVRpyMvfbWhkFAaDD.eval">audit_AdsporVR <span class="side-stamp">05-26 23:42</span></a></li>
-          </ul>
-        </li>
-      </ul>
+            </ul></details></li>
+        </ul>
 
-      <div class="nav-section">Seed Generation <span class="count">7 runs</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/seed-generation/">All runs</a>
-          <ul class="sub-nav">
-            <li class="side-group-label">frontier-2612-bt</li>
+        <div class="nav-section">Seed Generation <span class="count">7 runs</span></div>
+        <ul class="nav-list">
+          <li><a href="/geode/self-improving/seed-generation/">All runs</a></li>
+          <li><details class="nav-group"><summary>Runs by campaign</summary>
+            <ul class="sub-nav">
+<li class="side-group-label">frontier-2612-bt</li>
             <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/frontier-2612-bt-broken_tool_use/" title="frontier-2612-bt-broken_tool_use">broken_tool_use</a></li>
             <li class="side-group-label">gen-2605-1</li>
             <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/gen-2605-1-redundant_tool_invocation/" title="gen-2605-1-redundant_tool_invocation">redundant_tool_invocation</a></li>
@@ -50,46 +52,49 @@
             <li class="side-group-label">gen1</li>
             <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/gen1-broken_tool_use/" title="gen1-broken_tool_use">broken_tool_use</a></li>
             <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/gen1-redundant_tool_invocation/" title="gen1-redundant_tool_invocation">redundant_tool_invocation</a></li>
-          </ul>
-        </li>
-        <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
-      </ul>
+            </ul></details></li>
+          <li><a href="/geode/self-improving/seed-generation/bundle/">Phase log viewer <span aria-hidden="true">&#x2197;</span></a></li>
+          <li><a href="/geode/docs/petri/seeds">Seed runs (docs) <span aria-hidden="true">&#x2197;</span></a></li>
+        </ul>
 
-      <div class="nav-section">Autoresearch <span class="count">live</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/autoresearch/">Overview</a></li>
-        <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
-        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
-        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
-        <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
-        <li><a href="/geode/self-improving/autoresearch/runs/" class="active" aria-current="page">Runs</a></li>
-        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
-      </ul>
+        <div class="nav-section">Autoresearch <span class="count">snapshot</span></div>
+        <ul class="nav-list">
+          <li><a href="/geode/self-improving/autoresearch/">Overview</a></li>
+          <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
+          <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
+          <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+          <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
+          <li><a href="/geode/self-improving/autoresearch/runs/" aria-current="page">Runs</a></li>
+          <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
+        </ul>
 
-      <div class="nav-section">Crucible <span class="count">ledger</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
-      </ul>
+        <div class="nav-section">Crucible <span class="count">ledger</span></div>
+        <ul class="nav-list">
+          <li><a href="https://github.com/mangowhoiscloud/geode/blob/80b130c3113ddaca9d4712d81a277005143c28aa/docs/architecture/crucible-kernel.md" rel="noopener">Kernel architecture (source) <span aria-hidden="true">&#x2197;</span></a></li>
+          <li><a href="/geode/docs/capabilities/outer-loop/">Bounded search (docs) <span aria-hidden="true">&#x2197;</span></a></li>
+        </ul>
 
-      <div class="nav-section">Docs</div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
-        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
-        <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
-      </ul>
+        <div class="nav-section">Docs</div>
+        <ul class="nav-list">
+          <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
+          <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+          <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
+        </ul>
 
-      <div class="nav-section">Meta</div>
-      <ul class="nav-list">
-        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
-      </ul>
-    </nav>
+        <div class="nav-section">Meta</div>
+        <ul class="nav-list">
+          <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub <span aria-hidden="true">&#x2197;</span></a></li>
+        </ul>
+      </nav>
+    </details>
   </aside>
 
-  <main class="content">
+  <main class="content" id="main">
+    <nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="/geode/self-improving/">Self-Improving Hub</a></li><li><a href="/geode/self-improving/autoresearch/">Autoresearch</a></li><li><span aria-current="page">Runs</span></li></ol></nav>
     <h1 class="page-title">Runs <span class="bucket autoresearch">autoresearch</span></h1>
     <p class="page-sub">Per-run synthesis of each concluded self-improving campaign — the question it tested, the verified setup, the decision flow, the per-arm datasets, the mechanism-level findings, and the conclusion. Each report renders at build time from a <code>docs/self-improving/run-*.md</code> source of truth (single SoT, shared with the campaign video). For the live per-cycle drill-down of the most recent campaign, see <a href="/geode/self-improving/autoresearch/evidence/">Evidence</a>.</p>
 
-    <h2 class="section"><span>Run reports &middot; 1 report</span></h2>
+    <h2 class="section" id="sec-run-reports"><span>Run reports &middot; 1 report</span></h2>
     <ul class="nav-list run-report-list">
         <li><a href="/geode/self-improving/autoresearch/runs/2606-broken-tool-use/">self-improving 캠페인 run — broken_tool_use (2026-06-03 ~ 06-04)</a> <code>2606-broken-tool-use</code></li>
     </ul>

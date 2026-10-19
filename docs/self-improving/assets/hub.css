@@ -1,222 +1,443 @@
 /* GEODE Self-Improving Hub — production CSS.
  *
- * Distilled from /tmp/geode-hub-mockups-v2/_shared.css and validated against
- *   docs/design/self-improving-hub-system.md (master DESIGN.md §3 tokens, §4
- *   typography, §5 layout, §6 components, §12 a11y).
+ * Contract: docs/design/self-improving-hub-system.md (§3 tokens, §4 type,
+ * §5 responsive shell, §6 components, §12 accessibility). The hub is a room of
+ * the mangowhois research collection: night substrate, paper ink, one signal
+ * vermilion for the current place and focus, square forms and hairline rules.
+ * No gradients, shadows or emoji. Motion is one registration settle on the
+ * page title and the opt-in live pulse, both off under reduced motion.
  *
- * No web fonts, no animations except :hover color transition (<200ms per §12).
- * No card-lifts, no gradients, no shadows, no emoji.
- * Bootstrap-light + cotton single-substrate discipline.
+ * Fonts: the families below are served by the research host
+ * (tech.mangowhois.ai/fonts/mangowhois.css). Where that stylesheet is absent
+ * (the GitHub Pages copy) the system stack renders the same layout; this file
+ * itself requests no font.
+ *
+ * Mobile first: the base rules are the narrow layout (320px and up); the
+ * 64rem query switches to the sticky sidebar. Every page works without
+ * assets/hub.js.
  */
 
 /* ============================================================ */
 /* §3 Tokens                                                    */
 /* ============================================================ */
 :root {
-  /* Ink / paper / rule */
-  --ink: #1a1f29;
-  --ink-soft: #4a5260;
-  --ink-faint: #7d8694;
-  --rule: #e5e8ec;
-  --rule-soft: #f1f3f5;
-  --paper: #ffffff;
-  --paper-tint: #f8f9fa;
+  color-scheme: dark;
 
-  /* Accent (Bootstrap --bs-blue) */
-  --accent: #0d6efd;
-  --accent-faint: #e7f1ff;
+  /* Night / ink / rule (mangowhois palette.js STAGE) */
+  --ink: #f3f0e6;
+  --ink-soft: #c9c7bd;
+  --ink-faint: #969589;
+  --rule: rgb(243 240 230 / .16);
+  --rule-soft: rgb(243 240 230 / .07);
+  --rule-strong: rgb(243 240 230 / .32);
+  --paper: #0d100f;
+  --paper-tint: #171b19;
 
-  /* Harness chip palette (§3 — 4 chips, palette explosion forbidden) */
-  --chip-payg-bg: #f1f3f5;
-  --chip-payg-fg: #4a5260;
-  --chip-claude-bg: #efe7fb;
-  --chip-claude-fg: #5a2ca0;
-  --chip-codex-bg: #d1e7dd;
-  --chip-codex-fg: #0a3622;
-  --chip-geode-bg: #cfe2ff;
-  --chip-geode-fg: #052c65;
+  /* The one saturated hue: signal vermilion marks the current place and focus. */
+  --accent: #e8542f;
+  --accent-faint: rgb(232 84 47 / .12);
 
-  /* Surface bucket palette (§3 — 3 buckets) */
-  --bucket-petri: #0d6efd;
-  --bucket-seedgen: #198754;
-  --bucket-autoresearch: #b45309;
+  /* Harness chips (§3 — 4 chips, palette explosion forbidden): outline + tone */
+  --chip-payg-bg: transparent;
+  --chip-payg-fg: #c9c7bd;
+  --chip-claude-bg: transparent;
+  --chip-claude-fg: #efaa70;
+  --chip-codex-bg: transparent;
+  --chip-codex-fg: #9fd9bb;
+  --chip-geode-bg: transparent;
+  --chip-geode-fg: #9fb0ff;
 
-  /* Warning / stale baseline banner (reuses autoresearch tone per §3 strict-rule 2) */
-  --warning-bg: #fff4e6;
-  --warning-fg: #7a3e08;
-  --warning-rule: #f4cd9d;
+  /* Surface buckets (§3 — 3 buckets): check blue, field green, decision orange */
+  --bucket-petri: #9fb0ff;
+  --bucket-seedgen: #9fd9bb;
+  --bucket-autoresearch: #efaa70;
 
-  /* Type scale (§4) */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, Menlo, "SF Mono", monospace;
+  /* Warning / stale baseline banner (reuses the autoresearch tone) */
+  --warning-bg: rgb(232 120 30 / .10);
+  --warning-fg: #efaa70;
+  --warning-rule: rgb(232 120 30 / .45);
 
-  /* Layout */
-  --sidebar-width: 260px;
-  --content-max: 1100px;
-  --content-pad-y: 2rem;
-  --content-pad-x: 2.5rem;
+  /* §4 type: mangowhois families, system fallbacks */
+  --font-sans: "Mangowhois Sans", "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  --font-display: "Mangowhois Display", "Mangowhois Sans", "Archivo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "Mangowhois Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --fs-11: .75rem;
+  --fs-12: .75rem;
+  --fs-13: .8125rem;
+  --fs-14: .875rem;
+  --fs-15: .9375rem;
+  --fs-16: 1rem;
+  --tracking-caps: .08em;
+
+  /* §5 layout */
+  --sidebar-width: 16.5rem;
+  --content-max: 80rem;
+  --measure: 46rem;
+  --gutter: clamp(1rem, .5rem + 2.5vw, 2.5rem);
+  --bar-h: 3rem;
+  --tap: 2.75rem;  /* 44 CSS px touch target */
+  --row: var(--tap);
+  --dur-quick: 140ms;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
 }
 
-* { box-sizing: border-box; }
+/* A mouse on the wide layout gets denser rows; touch keeps 44px. */
+@media (min-width: 64rem) and (pointer: fine) {
+  :root { --row: 2.25rem; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 html, body { margin: 0; padding: 0; }
+
 body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-text-size-adjust: 100%;
+  font-size: var(--fs-15);
+  line-height: 1.6;
+  overflow-wrap: break-word;
 }
 
-a { color: var(--accent); text-decoration: none; transition: color .15s; }
+a { color: var(--accent); text-decoration: none; text-underline-offset: .2em; }
 a:hover { text-decoration: underline; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 code {
   background: var(--rule-soft);
   padding: 1px 5px;
   border-radius: 3px;
-  font-size: 12px;
+  font-size: .86em;
   font-family: var(--font-mono);
 }
 
-/* ============================================================ */
-/* §5 Layout shell                                              */
-/* ============================================================ */
-.shell {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
-  min-height: 100vh;
+pre { max-width: 100%; overflow-x: auto; }
+
+/* Content disclosures (payloads, voters, turns) are 44px touch targets. */
+main summary {
+  min-height: var(--row);
+  padding: .5rem 0;
+  cursor: pointer;
 }
 
+.muted { color: var(--ink-soft); }
+
+.count {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-weight: 400;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  left: var(--gutter);
+  padding: .75rem 1rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  border-radius: 0 0 4px 4px;
+  transform: translateY(-120%);
+}
+
+.skip-link:focus { transform: none; }
+
 /* ============================================================ */
-/* §6 Sidebar                                                   */
+/* §5 Shell: stacked bar + disclosure, sidebar from 64rem       */
 /* ============================================================ */
 aside.sidebar {
-  border-right: 1px solid var(--rule);
+  position: relative;
+  padding: 0 var(--gutter);
   background: var(--paper-tint);
-  padding: 1.5rem 1rem;
-  position: sticky;
-  top: 0;
-  align-self: start;
-  max-height: 100vh;
-  overflow-y: auto;
+  border-bottom: 1px solid var(--rule);
 }
 
 aside .brand {
-  font-weight: 700;
-  font-size: 1rem;
-  margin-bottom: .2rem;
-  letter-spacing: 0.02em;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: .1rem;
+  max-width: calc(100% - 8.5rem);
+  padding: .8rem 0;
   color: var(--ink);
+  font-size: var(--fs-16);
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1.4;
 }
+
+aside .brand:hover { text-decoration: none; }
 
 aside .brand-sub {
   color: var(--ink-faint);
   font-family: var(--font-mono);
-  font-size: .68rem;
-  margin-bottom: 1.5rem;
+  font-size: var(--fs-12);
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
-aside .nav-section {
-  font-size: .62rem;
-  text-transform: uppercase;
-  letter-spacing: .12em;
-  color: var(--ink-faint);
+/* The Contents control sits on the bar's right edge; its list opens in flow
+   below the bar (no overlay, no focus trap). */
+.hub-nav > summary {
+  position: absolute;
+  top: 0;
+  right: calc(var(--gutter) - .75rem);
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  min-height: var(--bar-h);
+  padding: 0 .75rem;
+  color: var(--ink);
+  font-size: var(--fs-14);
   font-weight: 600;
-  margin: 1.15rem 0 .35rem;
-  font-family: var(--font-mono);
-}
-
-aside ul.nav-list,
-aside ul.sub-nav {
   list-style: none;
-  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.hub-nav > summary::-webkit-details-marker,
+.nav-group > summary::-webkit-details-marker { display: none; }
+
+.hub-nav > summary::after,
+.nav-group > summary::after {
+  content: "";
+  width: .4rem;
+  height: .4rem;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-.15rem) rotate(45deg);
+}
+
+.hub-nav[open] > summary::after,
+.nav-group[open] > summary::after { transform: translateY(.1rem) rotate(-135deg); }
+
+.hub-nav > nav { padding: 0 0 1.25rem; }
+
+@media (min-width: 64rem) {
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  aside.sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    padding: 1.25rem .75rem 2rem;
+    border-bottom: 0;
+    border-right: 1px solid var(--rule);
+  }
+
+  aside .brand {
+    max-width: none;
+    padding: 0 .5rem .5rem;
+  }
+
+  /* With JS the disclosure is open and its control redundant; without JS it
+     stays a visible, working control. */
+  .hub-nav > summary {
+    position: static;
+    width: 100%;
+    margin-top: .5rem;
+    padding: 0 .5rem;
+    min-height: var(--row);
+  }
+
+  .hub-nav[open] > summary { display: none; }
+}
+
+/* ============================================================ */
+/* §6 Navigation                                                */
+/* ============================================================ */
+.nav-section {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  margin: 1.25rem 0 .25rem;
+  padding: 0 .5rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.nav-section .count { font-size: var(--fs-11); letter-spacing: 0; text-transform: none; }
+
+.nav-list,
+.sub-nav,
+.side-group ul {
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-aside ul.nav-list a {
-  display: block;
-  padding: .3rem .55rem;
+.nav-list a,
+.nav-group > summary {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-height: var(--row);
+  padding: .25rem .5rem;
   color: var(--ink-soft);
-  text-decoration: none;
-  font-size: .83rem;
-  border-radius: 3px;
-  transition: color .15s, background-color .15s;
+  font-size: var(--fs-14);
+  line-height: 1.35;
+  border: 1px solid transparent;
+  border-radius: 4px;
 }
 
-aside ul.nav-list a:hover {
+.nav-group > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.nav-group > summary::after { margin-left: auto; }
+
+.nav-list a:hover,
+.nav-group > summary:hover {
   background: var(--accent-faint);
   color: var(--accent);
   text-decoration: none;
 }
 
-aside ul.nav-list a.active,
-aside ul.nav-list a[aria-current="page"] {
+/* Current page: hairline frame + weight (not colour alone). */
+.nav-list a[aria-current="page"] {
   background: var(--paper);
+  border-color: var(--rule);
   color: var(--ink);
   font-weight: 600;
 }
 
-aside ul.nav-list .count {
-  color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: .7rem;
-  margin-left: .35rem;
-}
+/* Section of a page that has no nav entry of its own. */
+.nav-list a[data-ancestor] { color: var(--ink); font-weight: 600; }
 
-aside ul.nav-list ul.sub-nav {
-  padding: 0 0 0 .8rem;
-  margin: .15rem 0 .35rem;
+.sub-nav {
+  margin: 0 0 .5rem .75rem;
+  padding-left: .5rem;
   border-left: 1px solid var(--rule);
 }
 
-aside ul.nav-list ul.sub-nav a {
-  font-size: .76rem;
-  padding: .15rem .45rem;
+.sub-nav a { font-size: var(--fs-13); overflow-wrap: anywhere; }
+
+.side-group-label {
+  display: block;
+  padding: .5rem .5rem .125rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  overflow-wrap: anywhere;
+}
+
+.side-stamp {
+  color: var(--ink-faint);
+  font-size: var(--fs-11);
+  font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 /* ============================================================ */
 /* §5 Main content                                              */
 /* ============================================================ */
 main.content {
-  padding: var(--content-pad-y) var(--content-pad-x);
-  max-width: var(--content-max);
-  /* Grid items default to min-width:auto, so a wide child (a non-wrapping
-     JSON drill-down, the 22-col heatmap) would force the 1fr track past the
-     viewport and the whole layout would jump when the drill-down expands.
-     Floor it at 0 so wide content scrolls/wraps inside the column instead. */
+  display: block;
   min-width: 0;
+  max-width: var(--content-max);
+  padding: 1rem var(--gutter) 3rem;
 }
+
+@media (min-width: 64rem) {
+  main.content { padding: 1.75rem clamp(2rem, 3.5vw, 3.5rem) 4rem; }
+}
+
+.crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 .375rem;
+  margin: 0 0 .5rem;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-faint);
+  font-size: var(--fs-13);
+}
+
+.crumbs li { display: inline-flex; align-items: center; min-width: 0; }
+
+.crumbs li + li::before {
+  content: "/";
+  content: "/" / "";
+  margin-right: .375rem;
+}
+
+.crumbs a { display: inline-flex; align-items: center; min-height: var(--row); }
+
+.crumbs a,
+.crumbs [aria-current="page"] { min-width: 0; overflow-wrap: anywhere; }
+
+.crumbs [aria-current="page"] { color: var(--ink-soft); }
 
 h1.page-title {
-  font-size: 1.6rem;
-  font-weight: 600;
-  margin: 0 0 .35rem;
+  margin: .25rem 0 .5rem;
   color: var(--ink);
-  line-height: 1.30;
+  font-size: clamp(1.375rem, 1.15rem + 1vw, 1.75rem);
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
 }
+
+h1.page-title .bucket { vertical-align: .3em; }
 
 .page-sub {
-  color: var(--ink-soft);
   margin: 0 0 1.5rem;
-  font-size: .95rem;
-  line-height: 1.55;
-  max-width: 780px;
+  color: var(--ink-soft);
+  font-size: var(--fs-16);
+  line-height: 1.6;
 }
 
+p.page-sub { max-width: var(--measure); }
+
 h2.section {
-  font-size: .72rem;
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  color: var(--ink-faint);
-  font-weight: 600;
-  margin: 1.75rem 0 .55rem;
-  font-family: var(--font-mono);
   display: flex;
   align-items: center;
   gap: .75rem;
-  line-height: 1.20;
+  margin: 2.5rem 0 .75rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: .1em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  scroll-margin-top: 1rem;
 }
 
 h2.section::after {
@@ -227,73 +448,212 @@ h2.section::after {
 }
 
 h3.subsection {
-  font-size: .9rem;
-  font-weight: 600;
   margin: 1rem 0 .35rem;
   font-family: var(--font-mono);
+  font-size: var(--fs-14);
+  font-weight: 600;
   line-height: 1.35;
 }
 
+/* "On this page" jump list (build-time, pages with 3+ sections). */
+.page-map,
+.run-map {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1rem;
+  margin: 0 0 1.5rem;
+  padding: .125rem 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--fs-13);
+}
+
+.page-map ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page-map a,
+.run-map a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--row);
+}
+
+.page-map .scope,
+.run-map .scope {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* Hub landing: one flat list of the four surfaces (no cards). */
+.hub-orient h2.section { margin-top: 1.5rem; }
+
+.orient-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 2rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+/* Four surfaces: one column, then 2 x 2 (never 3 + 1). */
+@media (min-width: 48rem) {
+  .orient-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.orient-list li {
+  padding: .75rem 0 .5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.orient-list p {
+  margin: .125rem 0 0;
+  max-width: var(--measure);
+  color: var(--ink-soft);
+  font-size: var(--fs-14);
+}
+
+.orient-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 .5rem;
+  margin: 0;
+  font-size: var(--fs-16);
+  font-weight: 600;
+}
+
+.orient-list .orient-go {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1.25rem;
+}
+
+.orient-list .orient-go a {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  min-height: var(--row);
+  font-weight: 600;
+}
+
 /* ============================================================ */
-/* §6 Records table                                             */
+/* §6 Records table + local scroll region                       */
 /* ============================================================ */
+/* Every table is wrapped at build time (finalize_hub_page). Wide 2-D data
+   scrolls inside this region, never the page; no column is hidden. */
+.table-scroll {
+  max-width: 100%;
+  margin: .5rem 0 1.5rem;
+  overflow-x: auto;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.table-scroll > table { margin: 0; }
+
+/* Wide tables keep readable columns and scroll rather than squash. */
+.table-scroll > table:has(> thead th:nth-child(4)) { min-width: 40rem; }
+.table-scroll > table:has(> thead th:nth-child(7)) { min-width: 56rem; }
+
 table.records {
   width: 100%;
   font-family: var(--font-mono);
-  font-size: .78rem;
+  font-size: var(--fs-13);
   border-collapse: collapse;
 }
 
 table.records thead th {
-  text-align: left;
-  padding: .35rem .6rem .35rem 0;
+  padding: .5rem .75rem;
+  background: var(--paper-tint);
   border-bottom: 1px solid var(--rule);
-  font-size: .64rem;
-  text-transform: uppercase;
-  letter-spacing: .04em;
   color: var(--ink-faint);
+  font-size: var(--fs-11);
   font-weight: 600;
+  letter-spacing: .04em;
+  text-align: left;
+  text-transform: uppercase;
+  vertical-align: bottom;
+  white-space: nowrap;
 }
 
 table.records tbody td {
-  padding: .45rem .6rem .45rem 0;
+  padding: .5rem .75rem;
   border-bottom: 1px solid var(--rule-soft);
-  vertical-align: top;
   line-height: 1.5;
+  vertical-align: top;
 }
 
-table.records tbody tr:hover td {
-  background: var(--rule-soft);
-}
+table.records tbody tr:last-child > td { border-bottom: 0; }
 
-table.records td.id a {
-  color: var(--accent);
-  text-decoration: none;
-}
+table.records tbody tr:hover td { background: var(--rule-soft); }
 
-table.records td.id a:hover {
-  text-decoration: underline;
-}
+table.records td.id a { color: var(--accent); }
 
-table.records td.num {
+table.records td.num,
+table.records th.num {
   text-align: right;
-  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
-table.records td.muted {
-  color: var(--ink-soft);
-}
+table.records td.num { color: var(--ink); }
+
+table.records td.muted { color: var(--ink-soft); }
 
 table.records td.empty {
-  text-align: center;
+  padding: 1rem;
   color: var(--ink-faint);
   font-style: italic;
-  padding: 1rem;
+  text-align: center;
 }
 
-table.records .sub-row .id {
-  padding-left: 1.5rem;
+/* Row filter injected by hub.js above tables with 8+ rows. */
+.table-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .75rem;
+  margin: .75rem 0 0;
 }
+
+.table-filter label {
+  color: var(--ink-soft);
+  font-size: var(--fs-13);
+}
+
+.table-filter input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 22rem;
+  min-height: var(--tap);
+  padding: .375rem .625rem;
+  background: var(--paper);
+  border: 1px solid var(--ink-faint);  /* 3:1+ control boundary */
+  border-radius: 4px;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-16);  /* 16px: iOS does not zoom on focus */
+}
+
+.table-filter-status {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--fs-13);
+}
+
+.table-filter-status:empty { display: none; }
 
 /* ============================================================ */
 /* §3 Harness chips (4)                                         */
@@ -301,15 +661,15 @@ table.records .sub-row .id {
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: .08rem .42rem;
+  margin: 0 .25rem .125rem 0;
+  padding: .125rem .375rem;
   border-radius: 3px;
-  font-size: .62rem;
-  font-weight: 600;
   font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: 600;
   letter-spacing: .02em;
-  margin-right: .25rem;
-  margin-bottom: .12rem;
-  line-height: 1.0;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
 .chip.payg   { background: var(--chip-payg-bg);   color: var(--chip-payg-fg); }
@@ -322,80 +682,78 @@ table.records .sub-row .id {
 /* ============================================================ */
 .bucket {
   display: inline-block;
-  padding: .08rem .4rem;
+  margin-left: .35rem;
+  padding: .125rem .4rem;
   border-radius: 3px;
-  font-size: .58rem;
-  font-weight: 700;
   font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: 700;
   letter-spacing: .08em;
+  line-height: 1.3;
   text-transform: uppercase;
   vertical-align: middle;
-  margin-left: .35rem;
-  line-height: 1.0;
 }
 
-.bucket.petri        { background: rgba(13,110,253,.12);  color: var(--bucket-petri); }
-.bucket.seedgen      { background: rgba(25,135,84,.12);   color: var(--bucket-seedgen); }
-.bucket.autoresearch { background: rgba(180,83,9,.12);    color: var(--bucket-autoresearch); }
+.bucket.petri        { background: rgb(159 176 255 / .12); color: var(--bucket-petri); }
+.bucket.seedgen      { background: rgb(159 217 187 / .12); color: var(--bucket-seedgen); }
+.bucket.autoresearch { background: rgb(239 170 112 / .12); color: var(--bucket-autoresearch); }
 
 /* ============================================================ */
 /* §4 Role label                                                */
 /* ============================================================ */
 .role-label {
-  font-size: .58rem;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  color: var(--ink-faint);
-  font-weight: 600;
   margin-right: .25rem;
+  color: var(--ink-faint);
   font-family: var(--font-mono);
-  line-height: 1.0;
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: .05em;
+  line-height: 1.3;
+  text-transform: uppercase;
 }
 
 /* ============================================================ */
 /* §10 Stale baseline warning banner                            */
 /* ============================================================ */
-.warning {
+.warning,
+.warning-banner {
   margin: 0 0 1.5rem;
-  padding: .55rem .8rem;
+  padding: .6rem .85rem;
   background: var(--warning-bg);
-  color: var(--warning-fg);
   border: 1px solid var(--warning-rule);
   border-radius: 3px;
-  font-size: .82rem;
+  color: var(--warning-fg);
   font-family: var(--font-mono);
+  font-size: var(--fs-13);
 }
 
-.warning code { background: rgba(255,255,255,.55); }
+.warning code,
+.warning-banner code { background: rgb(239 170 112 / .12); }
 
 /* ============================================================ */
 /* §9 Build info footer                                         */
 /* ============================================================ */
 .build-info {
-  margin-top: 2.5rem;
+  margin-top: 3rem;
   padding-top: 1rem;
   border-top: 1px solid var(--rule);
   color: var(--ink-faint);
-  font-size: .7rem;
   font-family: var(--font-mono);
+  font-size: var(--fs-12);
 }
 
 .build-info p { margin: .25rem 0; }
 .build-info code { background: var(--paper-tint); }
+.build-info .chip { margin-right: .15rem; }
 
 .version-stamp {
   margin-top: .5rem;
   color: var(--ink-soft);
 }
 
-/* Footer chip legend keeps chip spacing tighter inline */
-.build-info .chip { margin-right: .15rem; }
-
 /* ============================================================ */
-/* Seed-generation surface — per-run detail page                */
+/* Key/value grids: two columns, stacked on the narrowest screens */
 /* ============================================================ */
-
-/* Header banner over the run detail page (mutator chip + run id) */
 .run-detail-header {
   margin: 0 0 1.5rem;
   padding: .9rem 1rem;
@@ -404,29 +762,78 @@ table.records .sub-row .id {
   border-radius: 3px;
 }
 
-.run-detail-header dl {
-  margin: 0;
+.run-detail-header dl,
+.status-grid,
+.cost-grid,
+.phases-legend {
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: .25rem .9rem;
+  grid-template-columns: fit-content(45%) minmax(0, 1fr);
+  gap: .3rem 1.25rem;
+  margin: .35rem 0 1.5rem;
+}
+
+.run-detail-header dl { margin: 0; }
+
+.run-detail-header dl,
+.status-grid,
+.cost-grid {
   font-family: var(--font-mono);
-  font-size: .78rem;
+  font-size: var(--fs-13);
 }
 
-.run-detail-header dt {
-  color: var(--ink-faint);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  font-size: .62rem;
-  font-weight: 600;
+.status-grid { max-width: var(--measure); }
+
+.phases-legend { font-size: var(--fs-14); }
+
+.run-detail-header dt,
+.status-grid dt,
+.cost-grid dt {
   align-self: center;
+  color: var(--ink-faint);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
 }
 
-.run-detail-header dd {
-  margin: 0;
+.phases-legend dt {
   color: var(--ink);
+  font-family: var(--font-mono);
+  font-weight: 600;
 }
 
+.run-detail-header dd,
+.status-grid dd,
+.cost-grid dd,
+.phases-legend dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.run-detail-header dd,
+.status-grid dd,
+.cost-grid dd { color: var(--ink); }
+
+.cost-grid dd { font-variant-numeric: tabular-nums; }
+
+.phases-legend dd { color: var(--ink-soft); }
+
+@media (max-width: 30rem) {
+  .run-detail-header dl,
+  .status-grid,
+  .cost-grid,
+  .phases-legend { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+
+  .run-detail-header dt,
+  .status-grid dt,
+  .cost-grid dt,
+  .phases-legend dt { margin-top: .5rem; }
+}
+
+/* ============================================================ */
+/* Seed-generation surface — per-run detail page                */
+/* ============================================================ */
 /* Prominent mutator banner above all section tables (per DESIGN.md §7) */
 .mutator-banner {
   margin: 0 0 1.25rem;
@@ -434,136 +841,97 @@ table.records .sub-row .id {
   background: var(--paper-tint);
   border: 1px solid var(--rule);
   border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: .78rem;
   color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
 }
 
-.mutator-banner .role-label {
-  color: var(--ink-faint);
-  margin-right: .35rem;
-}
+.mutator-banner .role-label { margin-right: .35rem; }
 
-/* ============================================================ */
-/* table.records.phases — phase progress / .eval card table     */
-/* ============================================================ */
 table.records.phases td.id {
-  font-weight: 600;
   color: var(--ink);
-}
-
-table.records.phases td.phase-link a {
-  color: var(--accent);
+  font-weight: 600;
 }
 
 /* ============================================================ */
-/* table.records.heatmap — 22-column pilot score matrix         */
+/* table.records.heatmap — pilot score matrix                   */
 /* ============================================================ */
-/* Responsive wrapper: 22 dim cols on a narrow screen overflow            */
-/* horizontally inside this region instead of pushing the page wide.     */
-/* First column (candidate id) sticks left during scroll so the row      */
-/* context is never lost.                                                */
-.heatmap-scroll {
-  overflow-x: auto;
-  /* Hairline so the scroll region reads as a contained unit. */
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  margin: .25rem 0 1rem;
-  background: var(--paper);
-}
-
-table.records.heatmap {
-  font-size: .72rem;
-  /* Auto column sizing so abbrev headers (3-4 char) stay compact,       */
-  /* yet the table can grow past the viewport when overflow-x kicks in.  */
-  table-layout: auto;
-  /* Floor the table width so each column gets ~2.4rem on narrow screens */
-  /* (1 id col @ 11rem + 22 score cols @ 2.4rem ≈ 64rem).                */
+/* Scrolls in its build-time .table-scroll region; the id column sticks
+   left so the row context is never lost. */
+table.records.heatmap,
+.table-scroll > table.records.heatmap {
   min-width: 64rem;
   margin: 0;
+  font-size: var(--fs-12);
+  table-layout: auto;
 }
 
 table.records.heatmap thead th {
-  font-size: .68rem;
   padding: .35rem .25rem;
-  white-space: nowrap;
   letter-spacing: .02em;
   text-align: center;
-  font-family: ui-monospace, Menlo, monospace;
-  /* No more vertical-rl rotation — abbreviations (CHS / UOS / BTU etc.)  */
-  /* fit horizontally so screen readers + sighted users get the same     */
-  /* affordance. Full dim name lives in <abbr title=…> for hover.        */
+  text-transform: none;
 }
 
 table.records.heatmap thead th.id-col,
 table.records.heatmap tbody td.id {
-  /* Sticky first column so the candidate id stays visible while         */
-  /* the 22 dim cells scroll horizontally.                               */
   position: sticky;
   left: 0;
-  background: var(--paper);
-  text-align: left;
-  padding-right: .8rem;
-  min-width: 11rem;
-  /* Hairline rule on the right separates the sticky column from the    */
-  /* scrolling region so the boundary is legible mid-scroll.            */
-  border-right: 1px solid var(--rule);
   z-index: 1;
+  min-width: 11rem;
+  padding-inline: .75rem .8rem;
+  background: var(--paper);
+  border-right: 1px solid var(--rule);
+  text-align: left;
 }
 
 table.records.heatmap thead th.id-col {
-  font-weight: 600;
-  font-size: .62rem;
+  background: var(--paper-tint);
   text-transform: uppercase;
-  color: var(--ink-faint);
   letter-spacing: .06em;
 }
 
+/* Full dim name lives in <abbr title=…>. */
 table.records.heatmap thead th abbr {
   text-decoration: none;
   border-bottom: 1px dotted currentColor;
-  /* Subtle hint that the abbrev is hoverable for the full name. */
 }
 
 table.records.heatmap tbody td {
+  min-width: 2.4rem;
   padding: .4rem .25rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
-  min-width: 2.4rem;
 }
 
-/* Heatmap cell color buckets — see DESIGN.md §5.6.
- * Master DESIGN.md §3 strict rule 2: no new color tokens. Reuse
- *   --rule-soft for safe baseline (score 1.0)
- *   --bucket-autoresearch (#b45309) for the deliberate warm signal
- *     (high score = problematic in petri convention)
- * Gradient is opacity over the same warm tone — no new hex codes.
- */
+/* Heatmap cell color buckets — see DESIGN.md §5.6. Opacity over the one
+   decision orange (#e8781e, the autoresearch tone); no new hue. */
 table.records.heatmap td.score-safe   { background: var(--rule-soft); color: var(--ink-soft); }
-table.records.heatmap td.score-warn-1 { background: rgba(180, 83, 9, .12); color: var(--ink); }
-table.records.heatmap td.score-warn-2 { background: rgba(180, 83, 9, .25); color: var(--ink); }
-table.records.heatmap td.score-warn-3 { background: rgba(180, 83, 9, .45); color: #fff; }
-table.records.heatmap td.score-warn-4 { background: rgba(180, 83, 9, .70); color: #fff; }
+table.records.heatmap td.score-warn-1 { background: rgb(232 120 30 / .16); color: var(--ink); }
+table.records.heatmap td.score-warn-2 { background: rgb(232 120 30 / .32); color: var(--ink); }
+table.records.heatmap td.score-warn-3 { background: rgb(232 120 30 / .58); color: var(--ink); }
+table.records.heatmap td.score-warn-4 { background: #e8781e; color: var(--paper); }
 table.records.heatmap td.score-na     { background: transparent; color: var(--ink-faint); }
 
 /* ============================================================ */
 /* Coverage bar chart (meta-review per-dim coverage)            */
 /* ============================================================ */
 .coverage-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   display: grid;
-  grid-template-columns: max-content 1fr max-content;
-  gap: .25rem .75rem;
-  font-family: var(--font-mono);
-  font-size: .72rem;
+  grid-template-columns: minmax(0, max-content) minmax(4rem, 1fr) max-content;
   align-items: center;
+  gap: .25rem .75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
 }
 
 .coverage-list .dim-name {
   color: var(--ink);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .coverage-list .dim-count {
@@ -572,12 +940,17 @@ table.records.heatmap td.score-na     { background: transparent; color: var(--in
   font-variant-numeric: tabular-nums;
 }
 
+@media (max-width: 40rem) {
+  .coverage-list { grid-template-columns: minmax(0, 1fr) max-content; }
+  .coverage-list .dim-name { grid-column: 1 / -1; margin-top: .25rem; }
+}
+
 .coverage-bar {
   position: relative;
   height: 8px;
+  overflow: hidden;
   background: var(--rule-soft);
   border-radius: 2px;
-  overflow: hidden;
 }
 
 .coverage-bar-fill {
@@ -588,80 +961,53 @@ table.records.heatmap td.score-na     { background: transparent; color: var(--in
 }
 
 /* ============================================================ */
-/* Cost-grid (dl key/value pairs) for index + run cost rollups  */
-/* ============================================================ */
-.cost-grid {
-  margin: .35rem 0 1.5rem;
-  display: grid;
-  grid-template-columns: max-content max-content;
-  gap: .25rem 1.25rem;
-  font-family: var(--font-mono);
-  font-size: .78rem;
-}
-
-.cost-grid dt {
-  color: var(--ink-faint);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  font-size: .62rem;
-  font-weight: 600;
-  align-self: center;
-}
-
-.cost-grid dd {
-  margin: 0;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ============================================================ */
 /* Reflections list (per-candidate critic output)               */
 /* ============================================================ */
 .reflections {
-  list-style: none;
-  padding: 0;
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .reflections li {
-  border-bottom: 1px solid var(--rule-soft);
   padding: .65rem 0;
+  border-bottom: 1px solid var(--rule-soft);
 }
 
 .reflections li:last-child { border-bottom: 0; }
 
 .reflections .meta {
-  font-family: var(--font-mono);
-  font-size: .72rem;
-  color: var(--ink-soft);
   margin-bottom: .35rem;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
 }
 
 .reflections .meta .risk {
   display: inline-block;
-  padding: .04rem .35rem;
-  border-radius: 3px;
-  background: var(--rule-soft);
-  color: var(--ink);
   margin: 0 .35rem;
-  font-size: .6rem;
-  text-transform: uppercase;
+  padding: .04rem .35rem;
+  background: var(--rule-soft);
+  border-radius: 3px;
+  color: var(--ink);
+  font-size: var(--fs-11);
   letter-spacing: .04em;
+  text-transform: uppercase;
 }
 
 .reflections .reflect-block {
   margin: .25rem 0 .15rem;
-  font-size: .82rem;
+  font-size: var(--fs-14);
 }
 
 .reflections .reflect-block h4 {
   margin: .2rem 0 .05rem;
-  font-size: .62rem;
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: .05em;
   color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
   font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
 }
 
 .reflections .reflect-block ul {
@@ -670,270 +1016,174 @@ table.records.heatmap td.score-na     { background: transparent; color: var(--in
 }
 
 .reflections .rewrite {
-  font-size: .78rem;
-  color: var(--ink-soft);
   margin-top: .25rem;
-}
-
-/* ============================================================ */
-/* Phases legend (seed-gen index page)                          */
-/* ============================================================ */
-.phases-legend {
-  margin: .35rem 0 1.5rem;
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: .35rem 1rem;
-  font-size: .82rem;
-}
-
-.phases-legend dt {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.phases-legend dd {
-  margin: 0;
   color: var(--ink-soft);
+  font-size: var(--fs-13);
 }
 
 /* Session summary prose */
 .session-summary {
+  max-width: var(--measure);
   margin: .25rem 0 1rem;
   color: var(--ink);
-  font-size: .9rem;
-  line-height: 1.55;
-  max-width: 780px;
+  font-size: var(--fs-15);
+  line-height: 1.6;
 }
 
 /* ============================================================ */
 /* Autoresearch surface (landing + baseline + mutations         */
-/* + results + policies)                                        */
+/* + results + policies + evidence)                             */
 /*                                                              */
 /* Master DESIGN.md §3 strict rule 1: no new color tokens.      */
-/* Every signal below is composed from --bucket-autoresearch    */
-/* (warm), --bucket-seedgen (cool green), --ink-faint (muted),  */
-/* and the existing warning palette.                            */
 /* ============================================================ */
 
-/* Yellow / amber hairline banner used when baseline.json is    */
-/* read from a `.outdated-*` snapshot. Reuses the warning       */
-/* palette (already declared above) — no new tokens.            */
-.warning-banner {
-  margin: 0 0 1.5rem;
-  padding: .6rem .85rem;
-  background: var(--warning-bg);
-  color: var(--warning-fg);
-  border: 1px solid var(--warning-rule);
-  border-radius: 3px;
-  font-size: .82rem;
-  font-family: var(--font-mono);
-}
-
-.warning-banner code { background: rgba(255, 255, 255, .55); }
-
 /* Generation timeline row highlight — the currently-promoted    */
-/* row is .active and gets a left rule + tinted background       */
-/* (autoresearch warm bucket at low opacity).                    */
+/* row is .active (autoresearch warm bucket at low opacity).      */
 .gen-timeline-row.active td {
-  background: rgba(180, 83, 9, .08);
+  background: rgb(232 120 30 / .08);
   font-weight: 600;
 }
 
-table.records .gen-timeline-row.active td:first-child {
-  padding-left: .45rem;
+table.records .gen-timeline-row.active td:first-child { padding-left: .9rem; }
+
+/* Inline Unicode block-char sparkline (no SVG, no JS). A long run scrolls
+   inside its own line instead of widening the page. */
+.sparkline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .25rem .75rem;
+  margin: -.25rem 0 1.5rem;
+  color: var(--ink-soft);
 }
 
-/* Inline Unicode block-char sparkline (no SVG, no JS).          */
-/* Used in the results table fitness column.                     */
 .fitness-sparkline {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  color: var(--bucket-autoresearch);
   font-family: var(--font-mono);
   font-size: .92rem;
   letter-spacing: 0;
+  vertical-align: bottom;
   white-space: pre;
-  color: var(--bucket-autoresearch);
-  vertical-align: baseline;
 }
 
-/* Policy JSON drill-down — wrap, do not force the column wider.   */
-/* Lives in a <td> of an auto-layout table, so a non-wrapping pre  */
-/* would grow the cell (and the page) when <details> expands —     */
-/* the width jumped on open. pre-wrap + overflow-wrap:anywhere     */
-/* keeps min-content tiny so the column stays put; tall JSON       */
-/* scrolls vertically inside max-height. (matches pre.msg policy.) */
+/* Policy JSON drill-down — wraps so an opened <details> never widens its
+   column; tall JSON scrolls vertically inside max-height. */
 .policy-json {
+  max-height: 24rem;
   margin: .35rem 0 0;
   padding: .65rem .9rem;
+  overflow-y: auto;
   background: var(--paper-tint);
   border: 1px solid var(--rule);
   border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: .74rem;
-  line-height: 1.45;
   color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
-  overflow-y: auto;
-  max-height: 24rem;
 }
 
 .policy-json pre {
   margin: 0;
   padding: 0;
+  overflow: visible;
   background: transparent;
   border: 0;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
   color: inherit;
+  font: inherit;
   white-space: inherit;
   overflow-wrap: inherit;
   word-break: inherit;
 }
 
-/* Δ-fitness color buckets — derived from existing tokens.        */
-/* positive = seedgen green (improvement signal — matches the    */
-/* surface bucket convention since improvement = the loop is     */
-/* working). negative = autoresearch warm (regression signal).   */
-/* noise = ink-faint muted.                                      */
-.delta-positive {
-  color: var(--bucket-seedgen);
-  font-variant-numeric: tabular-nums;
-}
-
-.delta-negative {
-  color: var(--bucket-autoresearch);
-  font-variant-numeric: tabular-nums;
-}
-
-.delta-noise {
-  color: var(--ink-faint);
-  font-variant-numeric: tabular-nums;
-}
+/* Δ-fitness colour buckets — positive = seedgen green, negative =
+   autoresearch warm, noise = muted. */
+.delta-positive { color: var(--bucket-seedgen); font-variant-numeric: tabular-nums; }
+.delta-negative { color: var(--bucket-autoresearch); font-variant-numeric: tabular-nums; }
+.delta-noise    { color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 
 /* Baseline namespace block (h3 + table pattern, repeated 7x).    */
-.namespace-block {
-  margin: 1rem 0 1.5rem;
-}
+.namespace-block { margin: 1rem 0 1.5rem; }
 
 .namespace-block h3 {
   margin: 0 0 .35rem;
-  font-size: .85rem;
+  color: var(--ink);
   font-family: var(--font-mono);
+  font-size: var(--fs-14);
   font-weight: 600;
   letter-spacing: .02em;
-  color: var(--ink);
 }
 
 .namespace-block .namespace-meta {
+  max-width: var(--measure);
   margin: 0 0 .55rem;
-  font-size: .72rem;
-  font-family: var(--font-mono);
   color: var(--ink-faint);
-}
-
-.namespace-block table.records {
-  margin-top: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
 }
 
 .namespace-block .empty-namespace {
-  color: var(--ink-faint);
-  font-style: italic;
-  font-size: .8rem;
   margin: .25rem 0 0;
-}
-
-/* Status grid (autoresearch landing). Same shape as cost-grid    */
-/* but explicitly named so the contract is local to the page.    */
-.status-grid {
-  margin: .35rem 0 1.5rem;
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: .25rem 1.25rem;
-  font-family: var(--font-mono);
-  font-size: .78rem;
-  max-width: 780px;
-}
-
-.status-grid dt {
   color: var(--ink-faint);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  font-size: .62rem;
-  font-weight: 600;
-  align-self: center;
-}
-
-.status-grid dd {
-  margin: 0;
-  color: var(--ink);
+  font-size: var(--fs-13);
+  font-style: italic;
 }
 
 /* ---------------------------------------------------------------------
- * PR-SEEDS-HIRES P2 (2026-05-26) — high-resolution sub-page surfaces
- * (/agents/, /agent/<task_id>/, /timeline/, /tournament/).
- * Reuses existing tokens (--ink, --paper, --bucket-seedgen, --chip-*).
- * No new color tokens.
+ * PR-SEEDS-HIRES — sub-pages (/agents/, /agent/<task_id>/, /timeline/,
+ * /tournament/, /active/, /lineage/). Reuses existing tokens.
  * ------------------------------------------------------------------ */
-table.seedgen-agents {
-  width: 100%;
-  border-collapse: collapse;
-}
-table.seedgen-agents td.num,
-table.seedgen-agents th.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
 /* Baseline audit transcript: the auditor↔target conversation sits in a
-   left-ruled group so it reads as one unit, separated from the per-seed
-   judge-score table that follows it inside the same <details>. */
+   left-ruled group, separated from the per-seed judge-score table. */
 .audit-conversation {
   margin: .25rem 0 .85rem;
   padding-left: .6rem;
   border-left: 2px solid var(--rule-soft);
 }
+
 details.turn {
+  margin: .35rem 0;
+  padding: .25rem .55rem;
   border: 1px solid var(--rule-soft);
   border-radius: 6px;
-  margin: .35rem 0;
-  padding: .35rem .55rem;
 }
+
 details.turn > summary {
-  cursor: pointer;
+  font-size: var(--fs-14);
   font-weight: 500;
   letter-spacing: .01em;
-  font-size: .9rem;
+  overflow-wrap: anywhere;
+  cursor: pointer;
 }
+
 details.turn.user > summary { color: var(--bucket-petri); }
 details.turn.assistant > summary { color: var(--bucket-seedgen); }
 details.turn.session-end > summary { color: var(--bucket-autoresearch); }
-/* Every .msg block (voter rationale on the tournament + lineage ranker
-   station, debate turns, parse_error notes) wraps responsively. Without a
-   base rule the bare <pre class="msg"> defaulted to no-wrap and ran off the
-   page horizontally. overflow-wrap:anywhere also breaks long unbroken tokens
-   (urls, json). */
+
+/* Every .msg block (voter rationale, debate turns, parse_error notes) wraps;
+   overflow-wrap:anywhere also breaks long unbroken tokens (urls, json). */
 pre.msg {
+  max-height: 30rem;
+  padding: .55rem .7rem;
+  overflow-y: auto;
+  background: var(--paper-tint);
+  border-radius: 4px;
+  font-size: var(--fs-13);
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  background: var(--paper-tint);
-  padding: .55rem .7rem;
-  border-radius: 4px;
-  font-size: .8rem;
-  line-height: 1.45;
-  max-height: 30rem;
-  overflow-y: auto;
 }
 
-/* Mutations payload drill-down — emitted as its own full-width <tr> (colspan)   */
-/* below each mutation row, NOT inside the narrow outcome cell. Without this the */
-/* opened <details> inherited the last column's width and rendered right-skewed. */
-/* The colspan cell is already full table width; here we let the inner status-   */
-/* grid + before/after <pre class="msg"> blocks fill that width (drop the 780px   */
-/* status-grid cap) inside a neutral hairline box so the payload reads as a       */
-/* sub-row of its mutation. Placed after the base pre.msg rule so it only         */
-/* overrides margins, inheriting the base wrap behaviour. */
+pre.msg.cand-body { border: 1px solid var(--rule-soft); }
+
+/* Mutations payload drill-down — its own full-width <tr> (colspan) below
+   each mutation row, so the opened <details> spans the table width. */
 tr.mutation-payload-row > td {
   padding-top: 0;
   padding-bottom: .5rem;
@@ -952,259 +1202,245 @@ tr.mutation-payload-row > td {
   margin: 0 0 .25rem;
 }
 
-/* Long unbroken JSON / prompt text wraps to full width instead of overflowing. */
-.mutation-payload .status-grid dd {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
+.mutation-payload pre.msg { margin: .15rem 0 .55rem; }
+.mutation-payload pre.msg:last-child { margin-bottom: 0; }
 
-.mutation-payload pre.msg {
-  margin: .15rem 0 .55rem;
-}
-
-.mutation-payload pre.msg:last-child {
-  margin-bottom: 0;
-}
 ul.event-list {
   margin: 0;
   padding-left: 1.2rem;
 }
+
 ul.event-list li {
   margin: .15rem 0;
-  font-size: .85rem;
-}
-section.phase-block {
-  border-left: 1px solid var(--rule);
-  padding-left: .8rem;
-}
-section.match h3 {
-  margin-top: 0;
-}
-table.records.votes {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: .88rem;
-}
-table.records.votes td.rationale {
-  max-width: 38rem;
-  font-style: italic;
-  color: var(--ink-muted);
-}
-.bucket.win-a {
-  background: rgba(13,110,253,.12);
-  color: var(--bucket-petri);
-}
-.bucket.win-b {
-  background: rgba(25,135,84,.12);
-  color: var(--bucket-seedgen);
-}
-.bucket.tie {
-  background: rgba(108,117,125,.12);
-  color: #6c757d;
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
 }
 
-/* ---------------------------------------------------------------------
- * PR-SEEDS-HIRES P3 (2026-05-26) — Live + Lineage surfaces.
- * `/active/` + `/lineage/<cand_id>/` pages. Reuses existing tokens.
- * ------------------------------------------------------------------ */
-table.records.active-runs {
-  width: 100%;
-  border-collapse: collapse;
+section.phase-block {
+  padding-left: .8rem;
+  border-left: 1px solid var(--rule);
 }
-table.records.active-runs td.num,
-table.records.active-runs th.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+
+section.match h3 { margin-top: 0; }
+
+table.records.votes { font-size: var(--fs-14); }
+
+table.records.votes td.rationale {
+  max-width: 38rem;
+  color: var(--ink-soft);
+  font-style: italic;
 }
+
+.bucket.win-a { background: rgb(159 176 255 / .12); color: var(--bucket-petri); }
+.bucket.win-b { background: rgb(159 217 187 / .12); color: var(--bucket-seedgen); }
+.bucket.tie   { background: var(--rule-soft); color: var(--ink-soft); }
+
 .live-indicator {
   display: inline-flex;
   align-items: center;
   gap: .4rem;
-  font-size: .85rem;
+  font-size: var(--fs-14);
 }
+
 .live-indicator .dot {
   display: inline-block;
   width: .55rem;
   height: .55rem;
-  border-radius: 50%;
   background: var(--bucket-seedgen);
-  animation: live-pulse 2s ease-in-out infinite;
+  border-radius: 50%;
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .live-indicator .dot { animation: live-pulse 2s ease-in-out infinite; }
+}
+
 @keyframes live-pulse {
   0%   { opacity: .35; }
   50%  { opacity: 1; }
   100% { opacity: .35; }
 }
+
 section.lineage-station {
-  border-left: 1px solid var(--rule);
   padding-left: .85rem;
-}
-section.lineage-station h3 {
-  margin: .2rem 0 .5rem 0;
-  font-size: 1.05rem;
-}
-pre.diff {
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: var(--paper-tint);
-  padding: .7rem .85rem;
-  border-radius: 4px;
-  font-size: .8rem;
-  line-height: 1.4;
-  border: 1px solid var(--rule-soft);
-}
-pre.msg.cand-body {
-  border: 1px solid var(--rule-soft);
+  border-left: 1px solid var(--rule);
 }
 
-/* PR-HUB-VIS-CYCLE1 (2026-05-28) — evolver diff side-by-side layout
-   + marked.js-rendered MD body styling + warn bucket chip. */
-.evolver-diff-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+section.lineage-station h3 {
+  margin: .2rem 0 .5rem;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
 }
-.evolver-diff-grid .diff-col h3 {
-  margin: 0 0 .5rem 0;
-  font-size: 1rem;
-  font-weight: 600;
-}
-@media (max-width: 1100px) {
-  .evolver-diff-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.markdown-body {
+
+pre.diff {
+  padding: .7rem .85rem;
   background: var(--paper-tint);
   border: 1px solid var(--rule-soft);
   border-radius: 4px;
+  font-size: var(--fs-13);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* PR-HUB-VIS-CYCLE1 — evolver diff side-by-side, stacked below 75rem. */
+.evolver-diff-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 75rem) {
+  .evolver-diff-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+.evolver-diff-grid .diff-col h3 {
+  margin: 0 0 .5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body {
   padding: .9rem 1.1rem;
-  font-size: .9rem;
-  line-height: 1.5;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+  color: var(--ink);
+  font-size: var(--fs-15);
+  line-height: 1.6;
 }
-.markdown-body h1, .markdown-body h2, .markdown-body h3 {
-  margin: .8rem 0 .4rem 0;
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin: 1.25rem 0 .5rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
+
+.markdown-body > :first-child { margin-top: 0; }
+
 .markdown-body code {
-  background: var(--paper);
   padding: .1rem .35rem;
+  background: var(--paper);
   border-radius: 3px;
   font-size: .85em;
 }
+
 .markdown-body pre {
-  background: var(--paper);
   padding: .6rem .8rem;
-  border-radius: 4px;
-  overflow-x: auto;
+  background: var(--paper);
   border: 1px solid var(--rule-soft);
-}
-.markdown-body ul, .markdown-body ol {
-  padding-left: 1.4rem;
-  margin: .3rem 0;
-}
-.markdown-body blockquote {
-  border-left: 2px solid var(--rule);
-  padding-left: .8rem;
-  margin: .4rem 0;
-  color: var(--ink-soft);
-}
-/* PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — bucket.warn uses the
-   official --warning-* tokens from the master DESIGN.md instead of
-   ad-hoc amber. Matches the autoresearch stale-baseline banner tone. */
-.bucket.warn {
-  background: var(--warning-bg);
-  color: var(--warning-fg);
-  border: 1px solid var(--warning-rule);
+  border-radius: 4px;
 }
 
-/* PR-HUB-DESLOP (2026-05-29) — sub-view navigation is a dense inline link
-   row, not a box-card grid (box-card-as-nav is a slop signal per CLAUDE.md).
-   Datadog-style: flat, hairline-bounded, scannable. */
+.markdown-body .table-scroll { margin: .75rem 0 1rem; }
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-14);
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: .4rem .65rem;
+  border-bottom: 1px solid var(--rule-soft);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body thead th {
+  background: var(--paper-tint);
+  border-bottom-color: var(--rule);
+  font-weight: 600;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: .3rem 0;
+  padding-left: 1.4rem;
+}
+
+.markdown-body blockquote {
+  margin: .4rem 0;
+  padding-left: .8rem;
+  border-left: 2px solid var(--rule);
+  color: var(--ink-soft);
+}
+
+/* bucket.warn uses the --warning-* tokens (stale-baseline tone). */
+.bucket.warn {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-rule);
+  color: var(--warning-fg);
+}
+
+/* PR-HUB-DESLOP — sub-view navigation is a dense inline link row, not a
+   box-card grid (box-card-as-nav is a slop signal). */
 .subview-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: .35rem 1.25rem;
-  align-items: baseline;
+  align-items: center;
+  gap: 0 1.25rem;
   margin: .4rem 0 1.5rem;
-  padding: .5rem 0;
+  padding: .125rem 0;
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
-  font-size: .85rem;
+  font-size: var(--fs-14);
 }
+
 .subview-nav a {
-  color: var(--accent);
-  text-decoration: none;
-}
-.subview-nav a:hover {
-  text-decoration: underline;
-}
-.subview-nav .count {
-  color: var(--ink-faint);
-  margin-left: .3rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--row);
 }
 
-/* PR-HUB-DESLOP — run-page section "map": a sticky in-page anchor nav so the
-   long run page is navigable by scope instead of one endless scroll. JS-free
-   (plain anchor links); the scope ids live on the <h2 class="section"> heads. */
-.run-map {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: .3rem 1rem;
-  margin: 0 0 1.5rem;
-  padding: .5rem .1rem;
-  background: var(--paper);
-  border-bottom: 1px solid var(--rule);
-  font-family: var(--font-mono);
-  font-size: .76rem;
-}
-.run-map .scope {
-  color: var(--ink-faint);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  margin-right: .15rem;
-}
-.run-map a {
-  color: var(--ink-soft);
-  text-decoration: none;
-}
-.run-map a:hover {
-  color: var(--accent);
+.subview-nav .count { margin-left: .3rem; }
+
+/* PR-HUB-DESLOP — run-page section map. Sticky only on the wide layout,
+   where it stays one or two lines tall. */
+.run-map { font-family: var(--font-mono); }
+
+.run-map a { color: var(--ink-soft); }
+.run-map a:hover { color: var(--accent); }
+
+@media (min-width: 64rem) {
+  .run-map {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--paper);
+  }
+
+  .run-map ~ h2.section,
+  .run-map ~ .section-fold { scroll-margin-top: 4.5rem; }
 }
 
-/* PR-HUB-DESLOP — collapsible section. The <summary> mimics the
-   <h2 class="section"> header (uppercase mono + trailing hairline) so the
-   heaviest run sections (reflections, 22-dim pilot matrix) fold to keep the
-   page from being one endless scroll. */
-.section-fold {
-  margin: 1.75rem 0 0;
-}
+/* PR-HUB-DESLOP — collapsible section; the summary mimics h2.section. */
+.section-fold { margin: 2.5rem 0 0; }
+
 .section-fold > summary {
-  cursor: pointer;
-  list-style: none;
   display: flex;
   align-items: center;
   gap: .5rem;
+  min-height: var(--row);
   margin: 0 0 .55rem;
-  font-family: var(--font-mono);
-  font-size: .72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .1em;
   color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  list-style: none;
+  cursor: pointer;
 }
-.section-fold > summary::-webkit-details-marker {
-  display: none;
-}
-.section-fold > summary::before {
-  content: "\25B8"; /* ▸ */
-}
-.section-fold[open] > summary::before {
-  content: "\25BE"; /* ▾ */
-}
+
+.section-fold > summary::-webkit-details-marker { display: none; }
+.section-fold > summary::before { content: "\25B8"; } /* ▸ */
+.section-fold[open] > summary::before { content: "\25BE"; } /* ▾ */
+
 .section-fold > summary::after {
   content: "";
   flex: 1;
@@ -1212,137 +1448,312 @@ pre.msg.cand-body {
   background: var(--rule);
 }
 
-/* PR-HUB-LOOP-VIZ (2026-05-29) — the co-scientist loop as a STATIC diagram
-   (prelude runs once; an iterating core repeats x N with evolved fed back).
-   Replaces the animated 8-box hero (slop). Flat hairline boxes, no animation,
-   no colored accents (CLAUDE.md de-slop). Arrows are CSS pseudo-elements so
-   the markup stays a clean <ol> of phases. */
-.seedgen-pipeline {
-  margin: .5rem 0 2rem;
-}
+/* PR-HUB-LOOP-VIZ — the co-scientist loop as a STATIC diagram. Flat
+   hairline boxes, no animation; arrows are CSS pseudo-elements. */
+.seedgen-pipeline { margin: .5rem 0 2rem; }
+
 .seedgen-pipeline figcaption {
-  max-width: 72ch;
+  max-width: var(--measure);
   margin: 0 0 1.25rem;
   color: var(--ink-soft);
-  font-size: .9rem;
+  font-size: var(--fs-15);
   line-height: 1.6;
 }
+
 .seedgen-pipeline figcaption strong { color: var(--ink); }
+
 .pipe-tag {
   display: inline-block;
   margin-bottom: .45rem;
-  font-family: var(--font-mono);
-  font-size: .68rem;
-  text-transform: uppercase;
-  letter-spacing: .08em;
   color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
+
 .pipe-row {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-wrap: wrap;
   gap: .9rem .4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
+
 .pipe-row li {
   position: relative;
-  flex: 1 1 9rem;
-  min-width: 8.5rem;
   display: flex;
+  flex: 1 1 9rem;
   flex-direction: column;
   gap: .2rem;
+  min-width: min(100%, 8.5rem);
   padding: .55rem .7rem;
+  background: var(--paper-tint);
   border: 1px solid var(--rule);
   border-radius: 3px;
-  background: var(--paper-tint);
 }
+
 .pipe-name {
-  font-family: var(--font-mono);
-  font-size: .82rem;
-  font-weight: 600;
   color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
+
 .pipe-sub {
-  font-size: .72rem;
   color: var(--ink-soft);
+  font-size: var(--fs-12);
 }
+
 .pipe-row li:not(:last-child)::after {
   content: "\2192";
+  content: "\2192" / "";
   position: absolute;
-  right: -.46rem;
   top: 50%;
-  transform: translateY(-50%);
+  right: -.46rem;
   color: var(--ink-faint);
   font-size: .8rem;
+  transform: translateY(-50%);
 }
+
 .pipe-feed {
   margin: .5rem 0 .5rem 1.1rem;
   color: var(--ink-faint);
   font-size: .95rem;
   line-height: 1;
 }
+
 .pipe-loop {
   padding: .75rem .85rem .6rem;
   border: 1px solid var(--rule);
   border-radius: 4px;
 }
+
 .pipe-loopback {
   margin: .6rem 0 0;
   padding-top: .5rem;
   border-top: 1px dashed var(--rule);
-  font-size: .76rem;
   color: var(--ink-soft);
+  font-size: var(--fs-12);
 }
+
 .pipe-loopback-arrow {
   margin-right: .25rem;
   color: var(--ink-faint);
 }
-@media (max-width: 720px) {
+
+@media (max-width: 45rem) {
   .pipe-row li:not(:last-child)::after { display: none; }
 }
 
-/* PR-HUB-RUN-REPORT (2026-06-04) — the /runs/ catalog is a dense list, one
-   line per run report (title link + slug code). No box-cards, no accent bars
-   (slop signals per CLAUDE.md); a hairline separator + a faint slug tag. */
+/* PR-HUB-RUN-REPORT — the /runs/ catalog is a dense list, one line per run
+   report (title link + slug code). No box-cards, no accent bars. */
 .run-report-list {
-  list-style: none;
   margin: .4rem 0 1.5rem;
   padding: 0;
-}
-.run-report-list li {
-  padding: .45rem 0;
-  border-bottom: 1px solid var(--rule-soft);
-}
-.run-report-list a {
-  color: var(--accent);
-  text-decoration: none;
-}
-.run-report-list a:hover {
-  text-decoration: underline;
-}
-.run-report-list code {
-  color: var(--ink-faint);
-  font-size: .82em;
-  margin-left: .4rem;
-}
-
-/* sidebar grouping (2026-07-10 UX pass): campaign labels + indented leaves,
-   timeline stamps on audit entries — grouped nav instead of flat ID walls. */
-.sidebar .side-group-label {
-  margin-top: .55rem;
-  padding: 0 0 .15rem;
-  font-size: .68rem;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--ink-faint, #6b7280);
   list-style: none;
 }
-.sidebar .side-group-leaf {
-  padding-left: .7rem;
+
+.run-report-list li {
+  padding: .6rem 0;
+  border-bottom: 1px solid var(--rule-soft);
 }
-.sidebar .side-stamp {
-  color: var(--ink-faint, #6b7280);
-  font-size: .78em;
-  margin-left: .3rem;
+
+.run-report-list code {
+  margin-left: .4rem;
+  color: var(--ink-faint);
+  font-size: .82em;
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================ */
+/* §17 Research room (mangowhois): links, station rules, print  */
+/* ============================================================ */
+/* The hub hangs in the research collection's dark room. Ink carries the page;
+   signal vermilion is spent only on the current place, hover and focus; every
+   form is square; rules are hairlines. Later rules here refine the earlier
+   component rules without changing markup. */
+
+html { scrollbar-color: var(--rule-strong) transparent; }
+::selection { background: rgb(232 84 47 / .38); color: var(--ink); }
+
+body {
+  font-feature-settings: "ss01", "tnum";
+  text-rendering: optimizeLegibility;
+}
+
+/* One link: ink on a hairline; hover and the current place turn the line vermilion. */
+a {
+  color: var(--ink);
+  text-decoration-line: underline;
+  text-decoration-color: var(--rule-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .24em;
+  transition: text-decoration-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+a:hover { text-decoration-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+code {
+  background: var(--rule-soft);
+  border-radius: 0;
+  color: var(--ink);
+}
+
+/* Square everywhere: chrome, labels, controls. */
+.skip-link,
+.nav-list a,
+.nav-group > summary,
+.chip,
+.bucket,
+.role-label,
+.table-filter input,
+.warning-banner,
+pre,
+pre.msg { border-radius: 0; }
+
+/* Corner registration marks: the room's frame, never in the reading path. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  width: .875rem;
+  height: .875rem;
+  pointer-events: none;
+  border-color: var(--rule-strong);
+  border-style: solid;
+}
+body::before { top: .75rem; right: .75rem; border-width: 1px 1px 0 0; }
+body::after { bottom: .75rem; left: .75rem; border-width: 0 0 1px 1px; }
+.shell { position: relative; z-index: 1; }
+
+/* Sidebar: the room's quiet panel; the current place is a vermilion line. */
+aside.sidebar { background: var(--paper-tint); border-color: var(--rule); }
+aside .brand {
+  font-family: var(--font-display);
+  font-stretch: 112%;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  text-decoration: none;
+}
+aside .brand-sub { color: var(--ink-faint); }
+.nav-section {
+  color: var(--ink-faint);
+  letter-spacing: var(--tracking-caps);
+}
+.nav-list a,
+.nav-group > summary { color: var(--ink-soft); text-decoration: none; }
+.nav-list a:hover,
+.nav-group > summary:hover {
+  background: var(--rule-soft);
+  color: var(--ink);
+}
+.nav-list a[aria-current="page"] {
+  background: var(--accent-faint);
+  border-color: transparent;
+  border-left: 2px solid var(--accent);
+  color: var(--ink);
+}
+.sub-nav { border-left-color: var(--rule); }
+@media (min-width: 64rem) {
+  aside.sidebar { border-right: 1px solid var(--rule); border-bottom: 0; }
+}
+
+/* Placard: crumbs read as the museum label above the work's title. */
+.crumbs ol {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.crumbs li + li::before { content: "—"; content: "—" / ""; color: var(--rule-strong); }
+.crumbs a { color: var(--ink-faint); text-decoration: none; }
+.crumbs a:hover { color: var(--ink); }
+
+/* The title: condensed display, settling into register once on load. */
+h1.page-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 1.1rem + 2.4vw, 3rem);
+  font-stretch: 75%;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -.015em;
+}
+@media (prefers-reduced-motion: no-preference) {
+  h1.page-title { animation: hub-register 520ms var(--ease-out) both; }
+}
+@keyframes hub-register {
+  from { text-shadow: .14em 0 0 rgb(232 84 47 / .85), -.1em 0 0 rgb(159 176 255 / .6); opacity: .55; }
+  to { text-shadow: 0 0 0 transparent, 0 0 0 transparent; opacity: 1; }
+}
+.page-sub { color: var(--ink-soft); }
+
+/* Station rule: every section starts at a square node on a hairline. */
+h2.section {
+  color: var(--ink-soft);
+  letter-spacing: var(--tracking-caps);
+}
+h2.section::before {
+  content: "";
+  flex: none;
+  width: .5rem;
+  height: .5rem;
+  border: 1px solid var(--accent);
+}
+h2.section::after { background: var(--rule); }
+h2.section .count { color: var(--ink-faint); }
+
+/* Records: a lab ledger — mono figures, hairline rows, a lit row under the pointer. */
+table.records thead th {
+  color: var(--ink-faint);
+  letter-spacing: var(--tracking-caps);
+  border-bottom: 1px solid var(--rule-strong);
+}
+table.records td { border-bottom-color: var(--rule-soft); }
+table.records tbody tr { transition: background-color var(--dur-quick) var(--ease-out); }
+table.records tbody tr:hover { background: rgb(243 240 230 / .035); }
+table.records td.id a { color: var(--ink); text-decoration-color: var(--rule); }
+table.records td.id a:hover { text-decoration-color: var(--accent); }
+.table-scroll { border-color: var(--rule); }
+
+/* Labels: an outline in the label's own tone, no fill. */
+.chip {
+  background: transparent;
+  border: 1px solid currentColor;
+  border-color: color-mix(in srgb, currentColor 45%, transparent);
+  letter-spacing: .02em;
+}
+.role-label { background: transparent; border: 0; color: var(--ink-faint); letter-spacing: var(--tracking-caps); }
+.bucket { letter-spacing: var(--tracking-caps); }
+
+/* Controls: night field, hairline frame, vermilion focus. */
+.table-filter input {
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+}
+.table-filter input:focus-visible { border-color: var(--accent); }
+.table-filter-status { color: var(--ink-faint); }
+
+/* Inline sub-view navigation: words on a rule, the current one underlined in vermilion. */
+.subview-nav a { text-decoration: none; }
+.subview-nav a[aria-current="page"] {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+}
+
+.coverage-bar { background: var(--rule-soft); border-radius: 0; }
+.coverage-bar-fill { border-radius: 0; }
+
+.build-info,
+.version-stamp { color: var(--ink-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  a,
+  table.records tbody tr { transition: none; }
 }
