@@ -65,6 +65,40 @@ functional change.
   choice on Sonnet 5.5 (Haiku 5.5 keeps it), and Haiku 5.5's 5x tariff when a
   prompt, counting cache reads and writes, exceeds 100,000 tokens. Account-bound
   thinking drops are now reported by reason and count.
+- **Peer-session messages and persistent session forks (R6.9).** `/send`,
+  `geode session send`, and the `send_session_message` tool queue a message for
+  another existing root session of the same project. The sender comes from the
+  bound session or explicit operator intent, never from tool arguments; child,
+  gateway, unknown, and other-project sessions are refused before any write.
+  The result is a durable `queued` receipt; `geode session message-status`
+  reports `applied` only after the target checkpointed the message, and neither
+  means a turn ran. The target is never woken. At its next loop boundary it
+  receives only a GEODE notice; its model reads the text with the
+  `read_session_messages` tool, so peer text reaches a provider only as
+  tool-result data, never as user or system input, and each message is
+  returned once. Messages are at most 4,000 characters without control
+  characters (line breaks and tabs allowed), and a read returns up to 5 within
+  8,000 serialized characters. A message counts as `applied` only after the
+  checkpoint holds the read result carrying it; a read whose result was lost,
+  interrupted or cancelled returns the message to unread. Peer backlog never
+  delays a child's messages or completion. A full peer mailbox (200 unread)
+  refuses new input instead of evicting.
+  `/fork`, `geode session fork`, and the `fork_session` tool publish a new
+  paused session from a frozen completed-turn cut of a permitted source. The
+  operator may fork root sessions and finished children. A root session may
+  fork only itself or its own finished child. The fork records source session,
+  generation, and cut, and copies bounded, balanced conversation history and
+  model settings only. Busy or incomplete sources are refused, the source stays
+  byte-identical, and publication is atomic, with crashed partial forks removed.
+  A fork reads only messages bound to the source's last committed checkpoint
+  (a failed save is never copied; a checkpoint written before this release
+  needs one completed turn first), refuses symlinked source files and histories
+  with an orphaned, duplicate or open tool call, and lets the owning parent
+  fork a finished child after its run record was pruned. A cancelled IPC fork
+  keeps the source Lane until the fork has actually finished.
+  `geode session list` and `/resume` show the lineage. Live sub-agent controls
+  are now keyed by store, parent, child, and generation, so equal child ids in
+  two projects cannot interrupt each other.
 - **Research reader touch navigation.** Swipe artwork left or right to move
   between GEODE, Jev, and JEVDB scenes. Preserve scene URLs, language, browser
   history, vertical scrolling, pinch zoom, and taps on full-size image links.

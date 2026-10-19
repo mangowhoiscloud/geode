@@ -10,10 +10,15 @@ Persists session state to .geode/session/{id}/ so that:
 
 from __future__ import annotations
 
+import copy
 import fcntl
+import hashlib
 import json
 import logging
+import re
+import shutil
 import time
+import uuid
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
@@ -39,6 +44,132 @@ DEFAULT_SESSION_DIR = _get_default_session_dir()
 CLEANUP_AGE_HOURS = 72
 # Transitions-ledger retention bound (rows kept by cleanup()).
 _LEDGER_MAX_ROWS = 10_000
+# R6.9 fork bounds: copied history window (ConversationContext's default
+# 200-turn safety net) and the in-progress publication marker.
+FORK_MAX_MESSAGES = 400
+_FORK_PENDING_MARKER = ".fork-pending"
+_SESSION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+
+
+# Sessions directories already swept for crashed forks in this process.
+_ORPHAN_SWEPT_DIRS: set[str] = set()
+
+
+class SessionForkError(ValueError):
+    """A fork was refused before any destination session became visible."""
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _tool_links(message: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Return (tool-call ids, tool-result ids) in one provider-neutral message.
+
+    Duplicates are kept so the caller can refuse them. The ``tool_calls``
+    column the SQLite transcript mirrors from content blocks is read only when
+    the message has no ``tool_use`` blocks of its own, so a round-tripped
+    message does not name each call twice.
+    """
+    calls: list[str] = []
+    results: list[str] = []
+    content = message.get("content")
+    if isinstance(content, list):
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use" and block.get("id"):
+                calls.append(str(block["id"]))
+            elif block.get("type") == "tool_result" and block.get("tool_use_id"):
+                results.append(str(block["tool_use_id"]))
+    if not calls:
+        for call in message.get("tool_calls") or ():
+            if isinstance(call, dict) and call.get("id"):
+                calls.append(str(call["id"]))
+    if message.get("role") == "tool" and message.get("tool_call_id"):
+        results.append(str(message["tool_call_id"]))
+    return calls, results
+
+
+def completed_turn_boundaries(messages: list[Any]) -> list[int]:
+    """Return every index ``n`` where ``messages[:n]`` ends a completed turn.
+
+    A completed turn ends with an assistant message that makes no tool call
+    while every earlier tool call already has its result, so a prefix cut at
+    such an index never leaves a pending call or an orphaned result. A result
+    for a call that is not open, or a reused call ID, leaves the history
+    unbalanced: no later index is a boundary.
+    """
+    open_calls: set[str] = set()
+    seen_calls: set[str] = set()
+    boundaries: list[int] = []
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict):
+            continue  # transcript placeholders carry no turn or tool structure
+        calls, results = _tool_links(message)
+        for result in results:
+            if result not in open_calls:
+                return boundaries  # orphan or duplicate result
+            open_calls.remove(result)
+        for call in calls:
+            if call in seen_calls:
+                return boundaries  # reused call ID
+            seen_calls.add(call)
+            open_calls.add(call)
+        if message.get("role") == "assistant" and not calls and not open_calls:
+            boundaries.append(index + 1)
+    return boundaries
+
+
+def _balanced_window(window: list[Any]) -> bool:
+    """Whether ``window`` alone pairs every tool call with exactly one result.
+
+    Checked independently of :func:`completed_turn_boundaries` so a copied
+    window never carries an orphaned result, a duplicate, or an open call.
+    """
+    open_calls: set[str] = set()
+    seen_calls: set[str] = set()
+    for message in window:
+        if not isinstance(message, dict):
+            continue
+        calls, results = _tool_links(message)
+        for result in results:
+            if result not in open_calls:
+                return False
+            open_calls.remove(result)
+        for call in calls:
+            if call in seen_calls:
+                return False
+            seen_calls.add(call)
+            open_calls.add(call)
+    return not open_calls
+
+
+def _messages_digest(messages: list[Any]) -> str:
+    """Digest of the role/content sequence a checkpoint commits.
+
+    Computed over the fields the SQLite transcript round-trips unchanged, so
+    the committed ``state.json`` can name exactly which messages it covers.
+    """
+    shape = [
+        [message.get("role"), message.get("content")]
+        for message in messages
+        if isinstance(message, dict)
+    ]
+    encoded = json.dumps(shape, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def _fork_history(message: dict[str, Any]) -> dict[str, Any]:
+    """Copy one historical message without its effect-admission anchors."""
+    copied = copy.deepcopy(message)
+    metadata = copied.get("metadata")
+    if isinstance(metadata, dict):
+        metadata.pop("effect_operations", None)
+    return copied
 
 
 class SessionStatus(StrEnum):
@@ -113,6 +244,11 @@ class SessionState:
     loop_guards: dict[str, Any] = field(default_factory=dict)
     pending_verification: dict[str, Any] = field(default_factory=dict)
     model_settings: SessionModelConfig | None = None
+    # Durable R6.5 child marker; empty for root sessions and legacy records.
+    parent_session_id: str = ""
+    # R6.9 fork provenance (source session, generation, cut). Written once at
+    # fork publication and carried forward by later saves; empty when absent.
+    lineage: dict[str, Any] = field(default_factory=dict)
 
 
 class SessionCheckpoint:
@@ -168,10 +304,17 @@ class SessionCheckpoint:
         }
         if state.model_settings is not None:
             data["model_settings"] = state.model_settings.model_dump()
+        if state.parent_session_id:
+            data["parent_session_id"] = state.parent_session_id
         state_file = session_path / "state.json"
 
         with self._status_lock():
             current = self.current_status(state.session_id)
+            # Lineage is write-once publication metadata, not loop state.
+            lineage = state.lineage or self._persisted_lineage(state.session_id)
+            if lineage:
+                data["lineage"] = lineage
+                state = replace(state, lineage=lineage)
             if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
                 # Terminal-state writes are an implicit reopen — tolerated
                 # (losing a resumed conversation is worse than a noisy edge)
@@ -231,8 +374,233 @@ class SessionCheckpoint:
             self._sync_to_index(state, len(state.messages))
 
             # state.json is the guard/checkpoint commit marker. Publish it last
-            # so a failed save cannot make resume observe uncommitted plan state.
+            # so a failed save cannot make resume observe uncommitted plan state;
+            # the digest binds it to the exact messages this save wrote.
+            data["messages_digest"] = _messages_digest(persisted_state.messages)
             atomic_write_json(state_file, data, indent=2)
+
+    def read_header(self, session_id: str) -> dict[str, Any] | None:
+        """Return one session's committed ``state.json`` header, or None.
+
+        Only a well-formed id naming a real (non-symlinked) directory of this
+        sessions dir resolves; a guessed path or id elsewhere never does.
+        """
+        if not _SESSION_ID_RE.fullmatch(session_id):
+            return None
+        session_path = self._dir / session_id
+        state_file = session_path / "state.json"
+        if session_path.is_symlink() or state_file.is_symlink() or not state_file.is_file():
+            return None
+        try:
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _persisted_lineage(self, session_id: str) -> dict[str, Any]:
+        state_file = self._dir / session_id / "state.json"
+        try:
+            lineage = json.loads(state_file.read_text(encoding="utf-8")).get("lineage")
+        except (OSError, json.JSONDecodeError, AttributeError):
+            return {}
+        return lineage if isinstance(lineage, dict) else {}
+
+    def fork_completed_turn(
+        self,
+        source_session_id: str,
+        *,
+        forked_by: str,
+        allow_in_flight_tail: bool = False,
+        max_messages: int = FORK_MAX_MESSAGES,
+    ) -> SessionState:
+        """Publish a new paused session from one frozen completed-turn cut.
+
+        Every checkpoint write holds ``_status_lock``, so the source read here
+        is one committed checkpoint. The copied window starts and ends at
+        completed-turn boundaries. Without ``allow_in_flight_tail`` the
+        source's persisted tail must itself be such a boundary; a caller may
+        set it only while it owns the source's in-flight turn (self-fork).
+
+        The destination is invisible until ``state.json`` commits: messages
+        rows and caches land first under a pending marker, a failure removes
+        only those owned rows/files, and a crash leaves a marker that the next
+        fork or :meth:`cleanup` removes under the same lock. Source files,
+        rows, and events are only read.
+        """
+        if not _SESSION_ID_RE.fullmatch(source_session_id):
+            raise SessionForkError("invalid source session id")
+        source_path = self._dir / source_session_id
+        fork_id = f"s-{uuid.uuid4().hex[:12]}"
+        with self._status_lock():
+            self._remove_orphan_forks_locked()
+            # Checked under the lock, immediately before the read: every file a
+            # load may follow must be a regular file of this sessions dir.
+            if source_path.is_symlink() or any(
+                (source_path / name).is_symlink()
+                for name in ("state.json", "messages.json", "tools.json")
+            ):
+                raise SessionForkError("refusing a symlinked source session path")
+            header = self.read_header(source_session_id)
+            source = self.load(source_session_id)
+            if source is None or header is None:
+                raise SessionForkError(f"unknown source session: {source_session_id}")
+            committed = header.get("messages_digest")
+            if not isinstance(committed, str):
+                raise SessionForkError(
+                    "source checkpoint predates fork verification; complete a turn first"
+                )
+            if committed != _messages_digest(source.messages):
+                raise SessionForkError(
+                    "source messages do not match its last committed checkpoint; "
+                    "fork after the source saves again"
+                )
+            if source.pending_verification:
+                raise SessionForkError("source has a pending external verification")
+            boundaries = completed_turn_boundaries(source.messages)
+            if not boundaries or (
+                not allow_in_flight_tail and boundaries[-1] != len(source.messages)
+            ):
+                raise SessionForkError(
+                    "source has an in-flight or incomplete turn; fork after it completes"
+                )
+            cut = boundaries[-1]
+            floor = max(0, cut - max_messages)
+            start = (
+                0
+                if floor == 0
+                else next(
+                    (
+                        index
+                        for index in [0, *boundaries]
+                        if floor <= index < cut
+                        and isinstance(source.messages[index], dict)
+                        and source.messages[index].get("role") == "user"
+                    ),
+                    None,
+                )
+            )
+            if start is None:
+                raise SessionForkError("no completed-turn boundary fits the fork history bound")
+            window = source.messages[start:cut]
+            if not _balanced_window(window):
+                raise SessionForkError("source history has unbalanced tool calls; fork refused")
+            from core.observability.session_timeline import SessionEventStore
+
+            now = time.time()
+            lineage = {
+                "kind": "fork",
+                "source_session_id": source_session_id,
+                "source_generation": SessionEventStore(self._dir / "sessions.db").latest_generation(
+                    source_session_id
+                ),
+                "source_message_count": cut,
+                "source_window_start": start,
+                "source_updated_at": source.updated_at,
+                "source_digest": hashlib.sha256(
+                    json.dumps(window, sort_keys=True, ensure_ascii=False, default=str).encode()
+                ).hexdigest(),
+                "forked_at": now,
+                "forked_by": forked_by,
+            }
+            fork = SessionState(
+                session_id=fork_id,
+                created_at=now,
+                updated_at=now,
+                model=source.model,
+                provider=source.provider,
+                model_settings=source.model_settings,
+                status=str(SessionStatus.PAUSED),
+                messages=[_fork_history(message) for message in window],
+                user_input=source.user_input,
+                # A restriction carries forward; nothing else in the guards does.
+                loop_guards=(
+                    {"reflection_requires_redaction": True}
+                    if source.loop_guards.get("reflection_requires_redaction") is True
+                    else {}
+                ),
+                lineage=lineage,
+            )
+            destination = self._dir / fork_id
+            destination.mkdir()
+            try:
+                (destination / _FORK_PENDING_MARKER).write_text(source_session_id, encoding="utf-8")
+                self._sync_messages_to_db(fork, strict=True)
+                atomic_write_json(destination / "messages.json", fork.messages)
+                data = {
+                    "session_id": fork_id,
+                    "created_at": now,
+                    "updated_at": now,
+                    "round_idx": 0,
+                    "model": fork.model,
+                    "provider": fork.provider,
+                    "status": fork.status,
+                    "system_prompt_hash": "",
+                    "user_input": fork.user_input,
+                    "cognitive_state": {},
+                    "loop_guards": fork.loop_guards,
+                    "pending_verification": {},
+                    "lineage": lineage,
+                    "messages_digest": _messages_digest(fork.messages),
+                }
+                if fork.model_settings is not None:
+                    data["model_settings"] = fork.model_settings.model_dump()
+                # Commit point: the fork becomes visible only with state.json.
+                atomic_write_json(destination / "state.json", data, indent=2)
+            except BaseException:
+                self._discard_fork_locked(fork_id)
+                raise
+            (destination / _FORK_PENDING_MARKER).unlink(missing_ok=True)
+            self._sync_to_index(fork, len(fork.messages))
+            self._record_transition(
+                fork_id, "fork", from_status=None, to_status=SessionStatus.PAUSED
+            )
+        return fork
+
+    def sweep_orphan_forks_once(self) -> int:
+        """Remove crashed fork publications once per process for this directory.
+
+        Called at runtime startup so an interrupted fork's rows never stay
+        searchable until some later fork happens to sweep them.
+        """
+        key = str(self._dir.resolve())
+        if key in _ORPHAN_SWEPT_DIRS or not self._dir.is_dir():
+            return 0
+        _ORPHAN_SWEPT_DIRS.add(key)
+        with self._status_lock():
+            return self._remove_orphan_forks_locked()
+
+    def _remove_orphan_forks_locked(self) -> int:
+        """Remove forks whose publisher died before commit (caller holds the lock).
+
+        A live publisher holds ``_status_lock`` for the whole publication, so a
+        marker observed under the lock belongs to a dead or failed publisher.
+        """
+        # ponytail: O(session dirs) scan per fork; index markers if dirs reach 10^5.
+        removed = 0
+        for marker in self._dir.glob(f"*/{_FORK_PENDING_MARKER}"):
+            session_dir = marker.parent
+            if session_dir.is_symlink():
+                continue
+            if (session_dir / "state.json").exists():
+                marker.unlink(missing_ok=True)
+                continue
+            self._discard_fork_locked(session_dir.name)
+            removed += 1
+        return removed
+
+    def _discard_fork_locked(self, fork_id: str) -> None:
+        """Delete only an unpublished fork's own directory, rows, and index entry."""
+        destination = self._dir / fork_id
+        if destination.is_dir() and not destination.is_symlink():
+            shutil.rmtree(destination, ignore_errors=True)
+        try:
+            from core.memory.session_manager import SessionManager
+
+            with closing(SessionManager(self._dir / "sessions.db")) as mgr:
+                mgr.upsert_messages(fork_id, [])
+                mgr.delete(fork_id)
+        except Exception:
+            log.warning("Unpublished fork rows were not removed (fork=%s)", fork_id, exc_info=True)
 
     def load(self, session_id: str) -> SessionState | None:
         """Load a session checkpoint. Returns None if not found.
@@ -296,8 +664,11 @@ class SessionCheckpoint:
             if not isinstance(cognitive_state, dict):
                 cognitive_state = {}
 
+            lineage = data.get("lineage")
             return SessionState(
                 session_id=data["session_id"],
+                parent_session_id=str(data.get("parent_session_id") or ""),
+                lineage=lineage if isinstance(lineage, dict) else {},
                 created_at=data.get("created_at", 0),
                 updated_at=data.get("updated_at", 0),
                 round_idx=data.get("round_idx", 0),
@@ -538,7 +909,8 @@ class SessionCheckpoint:
             return 0
 
         cutoff = time.time() - (max_age_hours * 3600)
-        removed = 0
+        with self._status_lock():
+            removed = self._remove_orphan_forks_locked()
 
         # Transitions-ledger retention — the ledger lives in the sessions
         # ROOT (not a session dir), so directory removal below never prunes
@@ -586,6 +958,10 @@ class SessionCheckpoint:
                         user_input=state.user_input,
                         round_count=state.round_idx,
                         message_count=message_count,
+                        parent_session_id=state.parent_session_id,
+                        source_session_id=str(state.lineage.get("source_session_id", "")),
+                        source_generation=_as_int(state.lineage.get("source_generation")),
+                        source_message_count=_as_int(state.lineage.get("source_message_count")),
                     )
                 )
         except Exception:

@@ -90,6 +90,7 @@ edge, and the warning plus its pinned test keep the edge visible.
 | ACTIVE → ERROR | scheduler drain timeout / unhandled exception |
 | PAUSED → ACTIVE | ask answer → continuation's per-turn save |
 | COMPLETED/ERROR → ACTIVE | `reopen()` only (IPC resume-by-id) |
+| absent → PAUSED (new fork id) | `SessionCheckpoint.fork_completed_turn` under the status lock; `state.json` commits last and the `fork` ledger edge follows. The source machine is only read |
 
 ## What the machine state contains
 

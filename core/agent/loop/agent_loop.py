@@ -220,6 +220,8 @@ class AgenticLoop:
         self._total_empty_rounds = 0
         # Checkpointed mailbox admission receipt (see _collaboration_mailbox).
         self._admitted_mailbox_ids: set[int] = set()
+        # Peer rows already announced this process (notice only, never content).
+        self._notified_peer_ids: set[int] = set()
         # Low-confidence replan is edge-triggered: fires once when
         # confidence drops below REPLAN_LOW_CONFIDENCE, re-arms only
         # after confidence recovers — prevents a replan storm while
