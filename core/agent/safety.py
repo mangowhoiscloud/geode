@@ -116,7 +116,9 @@ COLLABORATION_TOOLS: frozenset[str] = frozenset(
     {"spawn_agent", "list_agents", "wait_agent", "interrupt_agent", "send_message", "followup_task"}
 )
 # R6.9 root-session operations; children keep only their R6.5 parent route.
-SESSION_PEER_TOOLS: frozenset[str] = frozenset({"send_session_message", "fork_session"})
+SESSION_PEER_TOOLS: frozenset[str] = frozenset(
+    {"send_session_message", "fork_session", "read_session_messages"}
+)
 SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset(
     {"delegate_task", *COLLABORATION_TOOLS, *SESSION_PEER_TOOLS}
 )

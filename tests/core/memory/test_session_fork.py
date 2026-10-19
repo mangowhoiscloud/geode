@@ -20,6 +20,7 @@ from core.memory.session_checkpoint import (
     SessionCheckpoint,
     SessionForkError,
     SessionState,
+    SessionStatus,
     completed_turn_boundaries,
 )
 from core.memory.session_manager import SessionManager
@@ -237,7 +238,8 @@ def test_symlinked_source_is_refused(project: Path, tmp_path_factory) -> None:
         fork_session(OPERATOR, "s-link")
     with pytest.raises(SessionForkError, match="symlink"):
         SessionCheckpoint(project).fork_completed_turn("s-link", forked_by="operator")
-    assert sorted(p.name for p in project.iterdir()) == ["s-link"]
+    # The refusal happens under the status lock; no session directory appears.
+    assert sorted(p.name for p in project.iterdir() if not p.name.startswith(".")) == ["s-link"]
 
 
 def test_failed_publication_leaves_no_visible_partial_session(
@@ -376,3 +378,253 @@ def test_legacy_checkpoint_and_index_load_unchanged(tmp_path: Path) -> None:
     state = SessionCheckpoint(tmp_path).load("s-old")
     assert state is not None and state.lineage == {} and state.parent_session_id == ""
     assert [m["content"] for m in state.messages] == ["task 1", "done 1"]
+
+
+# Independent review follow-ups (F1, F3, F4).
+
+
+@pytest.mark.parametrize("pending", [{}, {"candidate": "new-guard"}])
+def test_fork_refuses_messages_of_a_failed_save(
+    project: Path, monkeypatch: pytest.MonkeyPatch, pending: dict[str, Any]
+) -> None:
+    """F1: rows written by a save whose state.json failed are not a committed cut."""
+    _save(project, "s-src", _turn(1))
+    real_write = session_checkpoint.atomic_write_json
+
+    def failing_state_write(path: Path, data: Any, **kwargs: Any) -> None:
+        if path.name == "state.json":
+            raise OSError("disk full")
+        real_write(path, data, **kwargs)
+
+    monkeypatch.setattr(session_checkpoint, "atomic_write_json", failing_state_write)
+    with pytest.raises(OSError, match="disk full"):
+        _save(project, "s-src", [*_turn(1), *_turn(2)], pending_verification=pending)
+    monkeypatch.setattr(session_checkpoint, "atomic_write_json", real_write)
+    with pytest.raises(SessionForkError, match="committed checkpoint"):
+        SessionCheckpoint(project).fork_completed_turn("s-src", forked_by="operator")
+    # The next successful save commits again and the fork takes that cut.
+    _save(project, "s-src", [*_turn(1), *_turn(2)])
+    fork = SessionCheckpoint(project).fork_completed_turn("s-src", forked_by="operator")
+    assert fork.messages[-1]["content"] == "done 2"
+
+
+def test_legacy_checkpoint_without_digest_is_refused(project: Path) -> None:
+    _save(project, "s-old", _turn(1))
+    state_file = project / "s-old" / "state.json"
+    data = json.loads(state_file.read_text())
+    del data["messages_digest"]
+    state_file.write_text(json.dumps(data))
+    assert SessionCheckpoint(project).load("s-old") is not None  # still loads unchanged
+    with pytest.raises(SessionForkError, match="predates fork verification"):
+        SessionCheckpoint(project).fork_completed_turn("s-old", forked_by="operator")
+
+
+@pytest.mark.parametrize("name", ["messages.json", "tools.json"])
+def test_symlinked_legacy_source_file_is_refused(
+    project: Path, tmp_path_factory: pytest.TempPathFactory, name: str
+) -> None:
+    """F3: a local session must not read a foreign transcript through a link."""
+    outside = tmp_path_factory.mktemp("foreign")
+    foreign = outside / name
+    foreign.write_text(json.dumps([{"role": "user", "content": "FOREIGN_PRIVATE"}]))
+    _save(project, "s-legacy", _turn(1))
+    target = project / "s-legacy" / name
+    target.unlink(missing_ok=True)
+    target.symlink_to(foreign)
+    with pytest.raises(SessionForkError, match="symlink"):
+        fork_session(OPERATOR, "s-legacy")
+    assert not any(
+        "FOREIGN_PRIVATE" in (p / "messages.json").read_text()
+        for p in project.iterdir()
+        if p.is_dir()
+        and not p.is_symlink()
+        and (p / "messages.json").is_file()
+        and not (p / "messages.json").is_symlink()
+    )
+
+
+@pytest.mark.parametrize(
+    "history",
+    [
+        # orphan result: no matching call
+        [
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "missing"}]},
+            {"role": "assistant", "content": "done"},
+        ],
+        # duplicate result for one call
+        [
+            {"role": "user", "content": "go"},
+            {"role": "assistant", "content": [{"type": "tool_use", "id": "c", "name": "n"}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c"}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c"}]},
+            {"role": "assistant", "content": "done"},
+        ],
+        # reused call ID across turns
+        [
+            *_turn(1, tools=1),
+            {"role": "user", "content": "again"},
+            {"role": "assistant", "content": [{"type": "tool_use", "id": "call-1-0", "name": "n"}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "call-1-0"}]},
+            {"role": "assistant", "content": "done again"},
+        ],
+    ],
+    ids=["orphan-result", "duplicate-result", "reused-call-id"],
+)
+def test_unbalanced_tool_history_is_never_forked(
+    project: Path, history: list[dict[str, Any]]
+) -> None:
+    """F4: only histories whose calls and results pair exactly are copied."""
+    _save(project, "s-bad", history)
+    with pytest.raises(SessionForkError):
+        SessionCheckpoint(project).fork_completed_turn("s-bad", forked_by="operator")
+
+
+def test_balanced_window_after_an_old_orphan_is_not_resurrected(project: Path) -> None:
+    """A poisoned history yields no later boundary, even in a self-fork."""
+    history = [
+        *_turn(1),
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "ghost"}]},
+        *_turn(2),
+    ]
+    assert completed_turn_boundaries(history) == [2]
+    _save(project, "s-ghost", history)
+    with pytest.raises(SessionForkError):
+        SessionCheckpoint(project).fork_completed_turn("s-ghost", forked_by="operator")
+    fork = SessionCheckpoint(project).fork_completed_turn(
+        "s-ghost", forked_by="s-ghost", allow_in_flight_tail=True
+    )
+    assert [m["content"] for m in fork.messages] == ["task 1", "done 1"]
+
+
+def test_ipc_cancellation_keeps_the_source_lane_until_the_fork_finishes(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F2: the real IPC caller holds the source Lane past a cancelled await."""
+    from core.orchestration.lane_queue import SessionLane
+    from core.server.ipc_server.poller import CLIPoller
+
+    _save(project, "s-src", _turn(1))
+    entered = threading.Event()
+    release = threading.Event()
+    original = SessionCheckpoint._sync_messages_to_db
+
+    def blocking_sync(
+        self: SessionCheckpoint, state: SessionState, *, strict: bool = False
+    ) -> None:
+        if state.session_id != "s-src":
+            entered.set()
+            release.wait(5)
+        original(self, state, strict=strict)
+
+    monkeypatch.setattr(SessionCheckpoint, "_sync_messages_to_db", blocking_sync)
+    lane = SessionLane()
+    services = SimpleNamespace(
+        lane_queue=SimpleNamespace(session_lane=lane),
+        command_registry=None,
+        skill_registry=None,
+        mcp_manager=None,
+    )
+    poller = CLIPoller(services=services)  # type: ignore[arg-type]
+
+    def fork_command(_cmd: str, args: str, _verbose: bool, **_kw: Any) -> tuple[bool, bool, Any]:
+        fork_session(OPERATOR, args)
+        return False, False, None
+
+    poller._command_handler = fork_command
+    loop = SimpleNamespace(_session_id="s-other")
+
+    async def scenario() -> None:
+        caller = asyncio.ensure_future(
+            poller._handle_fork_command({"cmd": "/fork", "args": "s-src"}, loop)
+        )
+        await asyncio.to_thread(entered.wait, 5)
+        caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await caller
+        # The fork is still writing: the source Lane must still be held.
+        assert lane.try_acquire("s-src") is False
+        release.set()
+        for _ in range(200):
+            if lane.try_acquire("s-src"):
+                lane.manual_release("s-src")
+                return
+            await asyncio.sleep(0.01)
+        raise AssertionError("source Lane was never released after the fork finished")
+
+    asyncio.run(scenario())
+    forks = [
+        p.name
+        for p in project.iterdir()
+        if p.is_dir() and p.name != "s-src" and (p / "state.json").is_file()
+    ]
+    assert len(forks) == 1 and not (project / forks[0] / ".fork-pending").exists()
+
+
+def test_cancelled_lane_acquire_releases_a_late_grant() -> None:
+    """F2: an acquire that completes after its caller left releases its slot."""
+    from core.server.ipc_server.poller import _release_if_acquired
+
+    released: list[str] = []
+    lane = SimpleNamespace(manual_release=released.append)
+
+    async def scenario() -> None:
+        granted: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+        granted.set_result(True)
+        _release_if_acquired(granted, lane, "s-src")
+        refused: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+        refused.set_result(False)
+        _release_if_acquired(refused, lane, "s-src")
+
+    asyncio.run(scenario())
+    assert released == ["s-src"]
+
+
+def _terminal_child(base: Path, child: str, parent: str, status: SessionStatus) -> None:
+    _save(base, child, _turn(1), parent_session_id=parent)
+    checkpoint = SessionCheckpoint(base)
+    if status is SessionStatus.COMPLETED:
+        checkpoint.mark_completed(child)
+    elif status is SessionStatus.ERROR:
+        checkpoint.mark_error(child)
+
+
+@pytest.mark.parametrize("status", [SessionStatus.COMPLETED, SessionStatus.ERROR])
+def test_owning_parent_forks_a_terminal_child_after_run_retention(
+    project: Path, status: SessionStatus
+) -> None:
+    """F5: durable header ownership survives pruning of the run row."""
+    _save(project, "s-parent", _turn(1))
+    _save(project, "s-peer", _turn(1))
+    _terminal_child(project, "agent-pruned", "s-parent", status)
+    assert CollaborationStore(project / "sessions.db").child_run("agent-pruned") is None
+    receipt = fork_session(SessionPrincipal(session_id="s-parent"), "agent-pruned")
+    assert receipt.lineage["source_session_id"] == "agent-pruned"
+    with pytest.raises(SessionForkError, match="owning parent"):
+        fork_session(SessionPrincipal(session_id="s-peer"), "agent-pruned")
+    with pytest.raises(SessionForkError):
+        fork_session(
+            SessionPrincipal(session_id="agent-pruned", parent_session_id="s-parent"),
+            "agent-pruned",
+        )
+
+
+def test_pruned_child_that_is_not_durably_terminal_is_refused(project: Path) -> None:
+    _save(project, "s-parent", _turn(1))
+    _save(project, "agent-active", _turn(1), parent_session_id="s-parent")  # status active
+    with pytest.raises(SessionForkError, match="not durably terminal"):
+        fork_session(SessionPrincipal(session_id="s-parent"), "agent-active")
+
+
+def test_conflicting_child_ownership_is_refused(project: Path) -> None:
+    _save(project, "s-parent", _turn(1))
+    _save(project, "s-other", _turn(1))
+    store = CollaborationStore(project / "sessions.db")
+    store.begin_run(task_id="agent-x", parent_session_id="s-other", task_type="analyze")
+    store.finish_run(
+        parent_session_id="s-other", task_id="agent-x", generation=1, status="completed"
+    )
+    _terminal_child(project, "agent-x", "s-parent", SessionStatus.COMPLETED)
+    with pytest.raises(SessionForkError, match="conflict"):
+        fork_session(SessionPrincipal(session_id="s-parent"), "agent-x")
+    with pytest.raises(SessionForkError, match="conflict"):
+        fork_session(OPERATOR, "agent-x")

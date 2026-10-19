@@ -139,6 +139,21 @@ def _balanced_window(window: list[Any]) -> bool:
     return not open_calls
 
 
+def _messages_digest(messages: list[Any]) -> str:
+    """Digest of the role/content sequence a checkpoint commits.
+
+    Computed over the fields the SQLite transcript round-trips unchanged, so
+    the committed ``state.json`` can name exactly which messages it covers.
+    """
+    shape = [
+        [message.get("role"), message.get("content")]
+        for message in messages
+        if isinstance(message, dict)
+    ]
+    encoded = json.dumps(shape, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
 def _fork_history(message: dict[str, Any]) -> dict[str, Any]:
     """Copy one historical message without its effect-admission anchors."""
     copied = copy.deepcopy(message)
@@ -350,7 +365,9 @@ class SessionCheckpoint:
             self._sync_to_index(state, len(state.messages))
 
             # state.json is the guard/checkpoint commit marker. Publish it last
-            # so a failed save cannot make resume observe uncommitted plan state.
+            # so a failed save cannot make resume observe uncommitted plan state;
+            # the digest binds it to the exact messages this save wrote.
+            data["messages_digest"] = _messages_digest(persisted_state.messages)
             atomic_write_json(state_file, data, indent=2)
 
     def read_header(self, session_id: str) -> dict[str, Any] | None:
@@ -404,14 +421,30 @@ class SessionCheckpoint:
         if not _SESSION_ID_RE.fullmatch(source_session_id):
             raise SessionForkError("invalid source session id")
         source_path = self._dir / source_session_id
-        if source_path.is_symlink() or (source_path / "state.json").is_symlink():
-            raise SessionForkError("refusing a symlinked source session path")
         fork_id = f"s-{uuid.uuid4().hex[:12]}"
         with self._status_lock():
             self._remove_orphan_forks_locked()
+            # Checked under the lock, immediately before the read: every file a
+            # load may follow must be a regular file of this sessions dir.
+            if source_path.is_symlink() or any(
+                (source_path / name).is_symlink()
+                for name in ("state.json", "messages.json", "tools.json")
+            ):
+                raise SessionForkError("refusing a symlinked source session path")
+            header = self.read_header(source_session_id)
             source = self.load(source_session_id)
-            if source is None:
+            if source is None or header is None:
                 raise SessionForkError(f"unknown source session: {source_session_id}")
+            committed = header.get("messages_digest")
+            if not isinstance(committed, str):
+                raise SessionForkError(
+                    "source checkpoint predates fork verification; complete a turn first"
+                )
+            if committed != _messages_digest(source.messages):
+                raise SessionForkError(
+                    "source messages do not match its last committed checkpoint; "
+                    "fork after the source saves again"
+                )
             if source.pending_verification:
                 raise SessionForkError("source has a pending external verification")
             boundaries = completed_turn_boundaries(source.messages)
@@ -498,6 +531,7 @@ class SessionCheckpoint:
                     "loop_guards": fork.loop_guards,
                     "pending_verification": {},
                     "lineage": lineage,
+                    "messages_digest": _messages_digest(fork.messages),
                 }
                 if fork.model_settings is not None:
                     data["model_settings"] = fork.model_settings.model_dump()

@@ -32,6 +32,7 @@ import os
 import queue
 import threading
 from collections.abc import Awaitable, Callable
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -1295,7 +1296,18 @@ class CLIPoller:
         session_lane = getattr(lane_queue, "session_lane", None)
         if session_lane is None or not source_id:
             return await self._handle_command_on_server(msg, loop)
-        if not await session_lane.try_acquire_async(source_id):
+        # Cancelling the caller cancels neither the off-thread acquire nor the
+        # off-thread fork write, so the Lane is released only when that physical
+        # work has finished, never at the cancelled await.
+        acquire = asyncio.ensure_future(session_lane.try_acquire_async(source_id))
+        try:
+            acquired = await asyncio.shield(acquire)
+        except asyncio.CancelledError:
+            acquire.add_done_callback(
+                lambda done: _release_if_acquired(done, session_lane, source_id)
+            )
+            raise
+        if not acquired:
             return {
                 "type": "command_result",
                 "cmd": msg.get("cmd", ""),
@@ -1303,10 +1315,13 @@ class CLIPoller:
                 "error_type": "busy",
                 "message": f"Session {source_id} is running a turn; fork after it completes",
             }
+        work = asyncio.ensure_future(self._handle_command_on_server(msg, loop))
+        work.add_done_callback(lambda _done: session_lane.manual_release(source_id))
         try:
-            return await self._handle_command_on_server(msg, loop)
-        finally:
-            session_lane.manual_release(source_id)
+            return await asyncio.shield(work)
+        except asyncio.CancelledError:
+            work.add_done_callback(partial(_log_unobserved_fork, source_id=source_id))
+            raise
 
     async def _handle_resume(
         self,
@@ -1431,3 +1446,23 @@ class CLIPoller:
             self._context_initializer()
         except Exception:
             log.debug("ContextVar propagation skipped", exc_info=True)
+
+
+def _release_if_acquired(done: asyncio.Future[bool], session_lane: Any, key: str) -> None:
+    """Release a Lane slot an abandoned acquire obtained after its caller left."""
+    if not done.cancelled() and done.exception() is None and done.result():
+        session_lane.manual_release(key)
+
+
+def _log_unobserved_fork(done: asyncio.Future[dict[str, Any]], *, source_id: str) -> None:
+    """Record the outcome of a fork whose caller was cancelled before the result."""
+    if done.cancelled():
+        log.warning("Fork of %s was cancelled before it finished", source_id)
+    elif (error := done.exception()) is not None:
+        log.warning("Fork of %s failed after its caller was cancelled: %s", source_id, error)
+    else:
+        log.warning(
+            "Fork of %s finished after its caller was cancelled: %s",
+            source_id,
+            done.result().get("message", done.result()),
+        )

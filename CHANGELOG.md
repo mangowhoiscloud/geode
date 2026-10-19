@@ -68,9 +68,12 @@ functional change.
   gateway, unknown, and other-project sessions are refused before any write.
   The result is a durable `queued` receipt; `geode session message-status`
   reports `applied` only after the target checkpointed the message, and neither
-  means a turn ran. The target is never woken. It admits the message at its
-  next loop boundary as untrusted `peer_message` data, not user input. A full
-  peer mailbox (200 unread) refuses new input instead of evicting.
+  means a turn ran. The target is never woken. At its next loop boundary it
+  receives only a GEODE notice; its model reads the text with the
+  `read_session_messages` tool, so peer text reaches a provider only as
+  tool-result data, never as user or system input, and each message is
+  returned once. A full peer mailbox (200 unread) refuses new input instead of
+  evicting.
   `/fork`, `geode session fork`, and the `fork_session` tool publish a new
   paused session from a frozen completed-turn cut of a permitted source. The
   operator may fork root sessions and finished children. A root session may
@@ -78,6 +81,12 @@ functional change.
   generation, and cut, and copies bounded, balanced conversation history and
   model settings only. Busy or incomplete sources are refused, the source stays
   byte-identical, and publication is atomic, with crashed partial forks removed.
+  A fork reads only messages bound to the source's last committed checkpoint
+  (a failed save is never copied; a checkpoint written before this release
+  needs one completed turn first), refuses symlinked source files and histories
+  with an orphaned, duplicate or open tool call, and lets the owning parent
+  fork a finished child after its run record was pruned. A cancelled IPC fork
+  keeps the source Lane until the fork has actually finished.
   `geode session list` and `/resume` show the lineage. Live sub-agent controls
   are now keyed by store, parent, child, and generation, so equal child ids in
   two projects cannot interrupt each other.
