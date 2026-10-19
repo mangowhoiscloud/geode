@@ -1,8 +1,8 @@
 ---
 title: GEODE Self-Improving Hub Design System
 geode_version: 0.99.65
-schema_version: 1
-last_updated: 2026-05-26
+schema_version: 3
+last_updated: 2026-10-19
 applies_to_geode: ">=0.99.65"
 sibling_pages:
   - self-improving-hub.md
@@ -35,112 +35,160 @@ Visitors range from operators (daily status check) to external readers (PR demo)
 
 ## 2. Visual Theme & Atmosphere
 
-**Mood**: inspect_ai SPA-adjacent. Bootstrap-light primary `#0d6efd` blue, system sans, monospace for IDs. Reads like a server-status page — calm, dense, no marketing tone.
+**Mood (schema 3, 2026-10-19)**: a room of the mangowhois research collection
+(`tech.mangowhois.ai`) — the experiment archive of a near-future museum. Night
+substrate, paper ink, condensed display titles, a mono ledger for every number,
+and one signal vermilion spent only on the current place, hover and focus.
+It still reads like an instrument log: calm, dense, no marketing tone.
 
-**Adjectives**: neutral, dense, monochromatic-with-data-bursts, terminal-adjacent, no chrome.
+**Adjectives**: night, archival, ledger-dense, square, hairline, restrained.
 
-**What it is not**: card grid with hover-lifts, emoji navigation, gradient hero, marketing CTA, dark mode (single light substrate).
+**What it is not**: card grid with hover-lifts, emoji navigation, gradient hero,
+marketing CTA, colored left-border accent bars, box-card sub-view navigation.
 
-**Inspiration touchstones**:
-- inspect_ai's bundled SPA (`docs/petri-bundle/index.html` v0.3.220)
-- cotton's editorial restraint discipline (`~/workspace/cotton/wiki/design/10-frontend-design.md` — single substrate, no warm tones, monospace for data, prose for human content)
-- Bootstrap 5.3 token vocabulary (only color/spacing primitives reused)
+**Atmosphere devices (all CSS, no markup change)**: square station nodes on the
+section rules, a placard line (mono capitals) for the breadcrumb above each
+title, two fixed corner registration marks framing the viewport, and one
+registration settle on the page title at load (off under reduced motion).
+
+**Inspiration touchstones**: the mangowhois design system (`src/styles/tokens.css`,
+`src/lib/palette.js` in the site repository) supplies palette, families, scale
+and the square/hairline shape rule; inspect_ai's bundled SPA remains the data
+reading model.
 
 ## 3. Color Palette & Roles
 
-| Token | Hex | Role |
+| Token | Value | Role |
 |---|---|---|
-| `--ink` | `#1a1f29` | Primary text |
-| `--ink-soft` | `#4a5260` | Secondary text |
-| `--ink-faint` | `#7d8694` | Captions, metadata, section labels |
-| `--rule` | `#e5e8ec` | Hairline borders |
-| `--rule-soft` | `#f1f3f5` | Softer dividers between rows |
-| `--accent` | `#0d6efd` | Links, primary action — matches `--bs-blue` |
-| `--accent-faint` | `#e7f1ff` | Hover bg for nav items |
-| `--paper` | `#ffffff` | Surface background |
-| `--paper-tint` | `#f8f9fa` | Sidebar background, raised surfaces |
+| `--paper` | `#0d100f` | Night substrate (palette.js `STAGE.night`) |
+| `--paper-tint` | `#171b19` | Sidebar and raised panels (`STAGE.night2`) |
+| `--ink` | `#f3f0e6` | Primary text (paper) |
+| `--ink-soft` | `#c9c7bd` | Secondary text |
+| `--ink-faint` | `#969589` | Captions, metadata, section labels (6.3:1 on `--paper`, 5.7:1 on `--paper-tint`) |
+| `--rule` / `--rule-soft` / `--rule-strong` | paper at 16% / 7% / 32% | Hairlines, row dividers, header and control frames |
+| `--accent` | `#e8542f` | Signal vermilion: current place, hover line, focus outline — never a fill for content |
+| `--accent-faint` | vermilion at 12% | Current nav item ground |
 
 ### Harness Chips (4 only — palette explosion forbidden)
 
-| Chip | Bg / Fg | Use |
+Chips are a 1px outline in their own tone on the night field (no fill).
+
+| Chip | Tone | Use |
 |---|---|---|
-| `.chip.payg` | `#f1f3f5` / `#4a5260` | `anthropic/` or `openai/` prefix — PAYG API billing |
-| `.chip.claude` | `#efe7fb` / `#5a2ca0` | historical `claude-cli/` artifact prefix — read-only legacy receipt |
-| `.chip.codex` | `#d1e7dd` / `#0a3622` | `codex/` or `openai-codex/` prefix — ChatGPT OAuth |
-| `.chip.geode` | `#cfe2ff` / `#052c65` | `geode/` prefix — self-target wrapper |
+| `.chip.payg` | `#c9c7bd` | `anthropic/` or `openai/` prefix — PAYG API billing |
+| `.chip.claude` | `#efaa70` | historical `claude-cli/` artifact prefix — read-only legacy receipt |
+| `.chip.codex` | `#9fd9bb` | `codex/` or `openai-codex/` prefix — ChatGPT OAuth |
+| `.chip.geode` | `#9fb0ff` | `geode/` prefix — self-target wrapper |
 
 ### Surface Buckets (3 only)
 
-| Bucket | Color | Role |
+| Bucket | Tone | Role |
 |---|---|---|
-| `.bucket.petri` | `#0d6efd` | Petri audit artifact |
-| `.bucket.seedgen` | `#198754` | Seed-generation artifact |
-| `.bucket.autoresearch` | `#b45309` | Autoresearch artifact |
+| `.bucket.petri` | `#9fb0ff` (check blue) | Petri audit artifact |
+| `.bucket.seedgen` | `#9fd9bb` | Seed-generation artifact |
+| `.bucket.autoresearch` | `#efaa70` (decision orange) | Autoresearch artifact |
 
 **Strict rules**:
-1. **No additional colors.** Status semantics (success / partial / fail) reuse the surface bucket palette where possible, else `--ink-faint` for muted.
-2. **No warm yellow / red / orange** except `--bucket-autoresearch` (deliberate signal for the closed-loop surface). Cotton's monochromatic discipline absorbed.
-3. **No gradients, no shadows.** Hairline borders only (`var(--rule)`).
-4. **No emoji.** Per `[[feedback-no-box-ui-no-emoji]]`. Role labels are uppercase letterforms with `.role-label` class.
-
-**Signature accent propagation.** `--accent` (`#0d6efd`, the petri Bootstrap-blue) is the signature of the whole self-improving surface. The docs site (dark) propagates it as its `04-self-improving` section identity — token `--acc-si` (`#5B9BFF`, the same hue lightened for AA on the dark substrate). The hub stays light (this palette); the docs stay dark; the shared thread is the accent, not the mode. Docs-side policy: `site/DESIGN.md §11.1`.
+1. **No additional hues.** Status semantics reuse the bucket tones, else `--ink-faint`. Heatmap warmth steps are decision orange (`#e8781e`) at 16/32/58/100%.
+2. **Vermilion is not a status colour.** It marks only where the reader is and what has focus.
+3. **No gradients, no box shadows, no rounded corners.** Hairline borders only. The title's registration settle is a transient text offset that ends at none.
+4. **No emoji.** Role labels are uppercase letterforms with `.role-label` class.
 
 ## 4. Typography
 
-| Variable | Family | Weights | Use |
-|---|---|---|---|
-| Body sans | `-apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif` | 400, 600, 700 | Prose, headlines, buttons |
-| Monospace | `ui-monospace, Menlo, "SF Mono", monospace` | 400, 600 | IDs (run_id, eval_id), hashes, paths, numeric data, code |
+| Variable | Family (fallbacks) | Use |
+|---|---|---|
+| `--font-display` | Mangowhois Display → Archivo → system | `h1.page-title` (condensed 75%, 800), brand mark (112%) |
+| `--font-sans` | Mangowhois Sans → Pretendard → system (Hangul faces included) | Prose, navigation, controls |
+| `--font-mono` | Mangowhois Mono → JetBrains Mono → system mono | IDs, hashes, paths, numbers, section labels, placard line |
 
-**No web fonts.** GitHub Pages cold-start budget = 0 extra HTTP. System stack only.
+**Font loading.** `hub.css` declares no `@font-face`. The research host injects
+its own font stylesheet (`/fonts/mangowhois.css`); the GitHub Pages copy renders
+the same layout in the system stack with zero extra requests.
 
 ### Scale
 
+Sizes are `rem` steps (`--fs-11` … `--fs-16`); the floor is 12px (the
+mangowhois minimum), so `--fs-11` and `--fs-12` are both .75rem.
+
 | Element | Size | Line height | Family |
 |---|---|---|---|
-| `h1.page-title` | 1.6rem (≈26px) | 1.30 | sans, 600 |
-| `.page-sub` | .95rem (≈15px) | 1.55 | sans, 400, `--ink-soft` |
-| `h2.section` | .72rem (≈11.5px) | 1.20 | mono, 600 uppercase, `--ink-faint`, letter-spacing 0.1em, with `::after` flex divider |
-| `h3.subsection` | .9rem (≈14px) | 1.35 | mono, 600 |
-| `body` | 14px | 1.5 | sans |
-| `table.records` cell | .78rem (≈12.5px) | 1.5 | mono |
-| `.chip` | .62rem (≈10px) | 1.0 | mono, 600 |
-| `.role-label` | .58rem (≈9px) | 1.0 | mono, 600, uppercase, letter-spacing 0.05em |
+| `h1.page-title` | clamp(1.75rem, 1.1rem + 2.4vw, 3rem) | 1.05 | display, condensed 75%, 800; wraps long run ids |
+| `.crumbs` (placard) | .75rem | 1.3 | mono capitals, tracking .08em |
+| `.page-sub` | 1rem | 1.6 | sans, `--ink-soft`; `p.page-sub` capped at `--measure` (46rem) |
+| `h2.section` | .75rem | 1.30 | mono 600 capitals, square vermilion node + hairline |
+| `h3.subsection` | .875rem | 1.35 | mono, 600 |
+| `body` | .9375rem (15px) | 1.6 | sans, tabular figures |
+| `table.records` cell / header | .8125rem / .75rem | 1.5 | mono; header capitals |
+| `.chip`, `.bucket`, `.role-label` | .75rem | 1.3 | mono, 600 |
+| Row-filter input | 1rem | — | inherits sans; 16px stops iOS focus zoom |
 
-## 5. Layout Grid
+## 5. Responsive shell (schema 2)
 
-Two-column shell, sticky sidebar:
+Mobile first. One breakpoint, `64rem` (1024 CSS px), switches between two
+arrangements of the same DOM; the reading order is always brand, Contents,
+breadcrumb, page.
 
 ```
-┌──────────┬────────────────────────────────────────┐
-│          │ h1.page-title                          │
-│ aside    │ .page-sub                              │
-│ .sidebar │                                        │
-│ (260px)  │ h2.section · · · · · · · · · · · · · ·│
-│ sticky   │ table.records or content block          │
-│ top 0    │                                        │
-│ max      │ h2.section · · · · · · · · · · · · · ·│
-│ 100vh    │ table.records or content block          │
-│ overflow │                                        │
-│ scroll   │ .build-info (footer-equivalent)        │
-└──────────┴────────────────────────────────────────┘
+narrow (< 64rem)                       wide (>= 64rem)
+┌──────────────────────────────┐       ┌──────────┬───────────────────────────┐
+│ GEODE/self-improving Contents│       │ GEODE    │ Hub / Section / Page      │
+├──────────────────────────────┤       │ (nav,    │ h1.page-title             │
+│ (nav list when opened)       │       │  sticky, │ .page-sub                 │
+│ Hub / Section / Page         │       │  own     │ On this page: ...         │
+│ h1.page-title                │       │  scroll) │ h2.section ─────────────  │
+│ .page-sub                    │       │ 16rem    │ ┌ table-scroll ─────────┐ │
+│ h2.section ────────────────  │       │          │ │ table.records         │ │
+│ ┌ table-scroll ───────────┐  │       │          │ └───────────────────────┘ │
+│ │ table.records  ──scroll▶│  │       │          │ .build-info               │
+│ └─────────────────────────┘  │       │          │                           │
+└──────────────────────────────┘       └──────────┴───────────────────────────┘
 ```
 
-- `main.content` max-width 1100px, padding 2rem 2.5rem.
-- Mobile: sidebar collapses to top horizontal bar at <768px (defer to Phase 5 — initial hub is desktop-first).
+- **Navigation disclosure.** `aside.sidebar` holds the brand link and one
+  native `<details class="hub-nav" data-hub-nav>` whose `<summary>` reads
+  "Contents". It is closed in the HTML, so a phone shows the page content
+  directly under a 3rem bar. The list opens in flow below the bar: no
+  overlay, no modal, no focus trap. `assets/hub.js` opens it at the wide
+  breakpoint, where the summary hides and the aside becomes a 16rem sticky
+  column with its own vertical scroll (`100vh`/`100dvh`). Without JS the
+  summary stays visible on every width and opens the same list.
+- **Content.** `main.content#main` has `min-width: 0`, max-width 76rem and a
+  fluid gutter (`clamp(1rem, .5rem + 2.5vw, 2rem)`). Reflow holds at 320,
+  375, 390 and 768 CSS px and at 200% zoom; the page itself never scrolls
+  sideways.
+- **2-D data.** Tables may be wider than the viewport; they scroll inside
+  their own `.table-scroll` region (WCAG 1.4.10 exception for data tables).
+  Tables with 4+ columns keep `min-width: 40rem`, 7+ columns `56rem`, the
+  pilot heatmap `64rem` with a sticky id column, so columns stay legible
+  instead of collapsing to one character. No column is hidden at any width.
+- **Prose and values.** Body text breaks long tokens (`overflow-wrap:
+  break-word`); key/value grids (`.status-grid`, `.cost-grid`,
+  `.run-detail-header dl`, `.phases-legend`) use `fit-content(45%)
+  minmax(0, 1fr)` and stack below 30rem; code, JSON and payload blocks wrap
+  (`pre.msg`, `pre.diff`, `.policy-json`) or scroll in place (`pre`,
+  `.fitness-sparkline`).
+- **Sticky surfaces.** Only the wide sidebar and, on the wide layout, the run
+  page's `.run-map`. Nothing sticks on narrow screens.
 
 ## 6. Components (canonical names)
 
 | Component | Selector | Used on |
 |---|---|---|
-| Sidebar shell | `aside.sidebar` | All pages |
+| Skip link | `a.skip-link` → `#main` | All pages |
+| Sidebar shell | `aside.sidebar` (`a.brand`, `details.hub-nav`) | All pages |
 | Sidebar nav section header | `.nav-section` | All pages |
-| Sidebar item with count | `aside ul.nav-list li a .count` | All pages |
-| Sidebar nested item | `aside ul.nav-list ul.sub-nav` | hub, seed-gen index |
+| Sidebar item with count | `.nav-section .count` | All pages |
+| Collapsible long list | `details.nav-group > ul.sub-nav` | Recent audits, Runs by campaign |
+| Breadcrumb | `nav.crumbs` (last item `aria-current="page"`) | Every page below the hub root |
+| On-this-page map | `nav.page-map` (build-time) / `nav.run-map` (run page) | Pages with 3+ sections |
+| Surface orientation list | `.hub-orient .orient-list` | Hub landing |
 | Page title | `h1.page-title` | All pages |
 | Page subtitle | `.page-sub` | All pages |
 | Section header | `h2.section` (with flex `::after` rule) | All pages |
+| Table scroll region | `div.table-scroll[role=region][aria-label]` | Every table (build-time) |
 | Records table | `table.records` (thead + tbody) | All data pages |
+| Row filter | `.table-filter` (hub.js) | Tables with 8+ row groups |
 | Harness chip | `.chip.{payg,claude,codex,geode}` | All rows referencing models |
 | Surface bucket chip | `.bucket.{petri,seedgen,autoresearch}` | hub, activity feed |
 | Role label inline | `.role-label` | Any model cell with N roles |
@@ -148,19 +196,55 @@ Two-column shell, sticky sidebar:
 
 **Forbidden** components: rounded card boxes, hover-lift, decorative grid icons, hero gradients, modal dialogs, toast notifications.
 
+The landing's orientation list is a flat `<ol>` with hairline separators, one
+row per surface (name linking to its section, the count label the builder
+already computes, one sentence, one destination link). It reflows from one to
+two columns; it is not a card grid and adds no status beyond those labels.
+
+**Row filter.** `hub.js` inserts a labelled `type="search"` input above any
+records table with 8 or more row groups (a mutation's payload row travels with
+its row). Rows are hidden with the `hidden` attribute, never removed; headers,
+navigation and other tables are untouched. A `role="status"` line announces
+"Showing N of M rows." after typing pauses, and a zero match reads
+"No rows match "q". Clear the filter to show all M rows." Escape clears.
+
 ## 7. Navigation Contract
 
-Every page has the same sidebar structure:
+One renderer, `render_hub_nav` in `scripts/build_self_improving_hub.py`,
+emits the nav for every page (all templates via `{{ hub_nav }}` and every
+seedgen sub-page via `_render_seedgen_subpage`), so the structure cannot
+drift per page:
 
-1. **Brand** — `GEODE` / `/self-improving`
-2. **Hub section** — link to `/self-improving/` (highlight if current)
-3. **Petri Audit section** — count + sub-nav of N recent items
-4. **Seed Generation section** — count + sub-nav of N runs
-5. **Autoresearch section** — count + sub-nav: Baseline / Mutations / Results / Policies
-6. **Docs section** — links to `/geode/docs/petri/*` (existing Next.js pages)
-7. **Meta section** — GitHub repo link `https://github.com/mangowhoiscloud/geode`
+1. **Brand** — `GEODE` / `/self-improving`, a link to the hub root
+2. **Hub** — Overview
+3. **Petri Audit** — count, SPA log viewer, Recent audits (collapsible)
+4. **Seed Generation** — count, All runs, Runs by campaign (collapsible,
+   grouped by `gen_tag`), Phase log viewer, Seed runs (docs)
+5. **Autoresearch** — baseline status (`snapshot` / `stale` / `absent`),
+   Overview / Baseline / Mutations / Results / Evidence / Runs / Policies
+6. **Crucible** — count label, Kernel architecture (source), Bounded search (docs)
 
-Sidebar is **identical across all hub pages** so visitors never lose their place. The only diff is the `.active` highlight.
+**Corrections (2026-10-08).** The status label read `live`, which implied
+current runtime activity on a static archive; a found, non-outdated baseline
+now reads `snapshot` (recorded at build time), and `stale` / `absent` keep
+their meaning. The inherited Crucible link `/geode/docs/architecture/crucible-kernel`
+has no docs route (404). "Kernel architecture (source)" now opens
+`docs/architecture/crucible-kernel.md` pinned at
+`80b130c3113ddaca9d4712d81a277005143c28aa`, and "Bounded search (docs)"
+opens `/geode/docs/capabilities/outer-loop/`. `--refresh-presentation` applies
+both: it normalizes a published `live` label and carries the single
+`_HREF_CORRECTIONS` entry (old → pinned source), which its evidence guard
+counts as kept. No other destination, record or build stamp changes.
+7. **Docs** — links to `/geode/docs/petri/*` (existing Next.js pages)
+8. **Meta** — GitHub repo link `https://github.com/mangowhoiscloud/geode`
+
+Current page: the link whose `href` equals the page URL gets
+`aria-current="page"` (hairline frame + 600 weight, not colour alone). A page
+without its own entry (run sub-pages, run reports, Active runs) marks its
+closest ancestor link with `data-ancestor` instead of a false
+`aria-current`; its breadcrumb carries `aria-current="page"`. A collapsible
+group opens when it contains either mark. Trailing ↗ marks are
+`aria-hidden` so link names stay clean.
 
 ## 8. URL Contract
 
@@ -215,18 +299,25 @@ Borrowed from CLAUDE.md DONT table:
 
 ## 12. Accessibility minimum
 
-- Color contrast ≥ 4.5:1 for body text (`--ink #1a1f29` on `--paper #fff` is 16.3:1 ✓).
+- Color contrast ≥ 4.5:1 for body text (`--ink #1a1f29` on `--paper #fff` is 16.3:1 ✓) and for `--ink-faint` labels (4.8:1 on paper, 4.6:1 on paper-tint).
 - Chip colors ≥ 3:1 (verified above palette).
-- Sidebar nav uses `<nav>` with `aria-label`. Active link gets `aria-current="page"`.
-- No keyboard trap: every interactive is `<a>` or `<button>`, focusable.
-- No motion: zero animations, transitions only on `:hover` color (under 200ms).
+- Landmarks: `aside` › `nav[aria-label="Hub navigation"]`, `main#main`, `nav.crumbs[aria-label="Breadcrumb"]`, `nav.page-map`. The first focusable element is the "Skip to content" link to `#main`.
+- Current page: `aria-current="page"` on the matching nav link and on the last breadcrumb item (see §7).
+- Disclosures are native `<details>/<summary>`: keyboard operable with Enter/Space and exposing expanded/collapsed (the `aria-expanded` state) through the browser, so no ARIA is duplicated on them. On narrow screens Escape inside the open nav closes it and returns focus to Contents. Focus moves in document order; nothing traps it.
+- Targets: nav rows, breadcrumb, page-map, sub-view links, summaries and the filter input are at least 44 CSS px tall (`--tap`), except nav rows on a fine pointer at the wide layout (36px, above the 24px WCAG 2.5.8 minimum).
+- Focus: a 2px `--accent` outline at 2px offset on every focusable element, including scroll regions.
+- Scroll regions: each `.table-scroll` is `role="region"` with an `aria-label` from the nearest preceding heading and `tabindex="0"` so keyboard users can scroll it; `hub.js` drops the tab stop while a region does not overflow. Native wheel and touch scrolling only: no `preventDefault`, no `overscroll-behavior` overrides.
+- Motion: none beyond the Active runs pulse, which runs only under `prefers-reduced-motion: no-preference`. No hover transitions.
 
 ## 13. Implementation stack
 
-- **Static HTML + CSS only.** No JS framework. No build step. Each page is a single `.html` file under `docs/self-improving/` checked into git.
-- Shared CSS at `docs/self-improving/assets/hub.css`. `<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">` on every page.
-- Optional progressive enhancement: small inline `<script>` for filter toggles or fetch-then-render of listing.json. No external dependencies.
+- **Static HTML + CSS + one deferred script.** No framework, CDN, or dependency. Pages are generated by `scripts/build_self_improving_hub.py` (also reached through `geode hub build`) from `docs/self-improving/**/*.html.template` plus the in-code seedgen sub-page shell; never hand-edit a generated `.html`.
+- Shared CSS at `docs/self-improving/assets/hub.css`, shared script at `docs/self-improving/assets/hub.js`, both referenced from every page: `<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">` and `<script src="/geode/self-improving/assets/hub.js" defer></script>`.
+- Every page is written through `write_hub_page`, whose build-time pass (`finalize_hub_page`) wraps each table in its labelled scroll region and adds stable `sec-*` ids plus the "On this page" map. Overflow handling therefore never depends on JS.
+- `hub.js` is enhancement only: the wide-breakpoint nav state (moving focus to Contents if a resize hides the focused link), scroll-region tab stops, tables in client-rendered Markdown (each `.markdown-body[data-md-target]` watches only its own children), and the row filter, which shows its row count from first render. With JS off every page, link and row stays reachable.
+- **Presentation-only refresh of published pages.** Some published values (runtime baselines, local Crucible ledgers, runs whose inputs are gone) have no tracked source, so a rebuild would replace public evidence with empty states. `--refresh-presentation DIR` re-skins a copy of the published `docs/self-improving` tree in place through the same chrome (`refresh_page_presentation` → `render_hub_nav` + `finalize_hub_page`) and reads nothing else. It touches only hub-owned `index.html` files (`<main class="content"` + `hub.css`), never `petri-bundle/**` or `seed-generation/bundle/**`; re-renders each sidebar from that page's own published counts and lists; adds the script, skip link, `main#main` and breadcrumb; unwraps the legacy `.heatmap-scroll` wrapper; and copies the current `hub.css`/`hub.js` into `assets/`. `<main>` content, table cells, code blocks, destinations and historical build stamps are not rewritten. A page that would lose a destination, cell or `<pre>` is left untouched and the run exits 1. It is idempotent. Normal builds still go through the canonical renderers.
 - Deployed via existing `.github/workflows/pages.yml` after path filter widens to `docs/self-improving/**`.
+- Regression: `test_every_generated_page_shares_the_responsive_shell` in `tests/evolve/scaffold_search/test_self_improving_hub_e2e.py` builds the fixture and checks the shell on every generated page.
 
 ## 14. Page Inventory
 

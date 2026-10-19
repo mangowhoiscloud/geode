@@ -6,76 +6,48 @@
 <title>GEODE Self-Improving Hub</title>
 <meta name="description" content="Discovery surface for GEODE's autonomous self-improvement loop — Petri audits, seed-generation runs, autoresearch baseline + mutations.">
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+<script src="/geode/self-improving/assets/hub.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <div class="shell">
 
-  <aside class="sidebar">
-    <nav aria-label="Hub navigation">
-      <div class="brand">GEODE</div>
-      <div class="brand-sub">/self-improving</div>
+  {{ hub_nav }}
 
-      <div class="nav-section">Hub</div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/" class="active" aria-current="page">Overview</a></li>
-      </ul>
-
-      <div class="nav-section">Petri Audit <span class="count">{{ petri_count }}</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
-        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
-          <ul class="sub-nav">
-{{ sidebar_petri_recent }}
-          </ul>
-        </li>
-      </ul>
-
-      <div class="nav-section">Seed Generation <span class="count">{{ seedgen_count_label }}</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/seed-generation/">All runs</a>
-          <ul class="sub-nav">
-{{ sidebar_seedgen_runs }}
-          </ul>
-        </li>
-        <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
-      </ul>
-
-      <div class="nav-section">Autoresearch <span class="count">{{ autoresearch_status_label }}</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
-        <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
-        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
-        <li><a href="/geode/self-improving/autoresearch/runs/">Runs</a></li>
-        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
-      </ul>
-      <div class="nav-section">Crucible <span class="count">{{ crucible_count_label }}</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
-      </ul>
-
-
-      <div class="nav-section">Docs</div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
-        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
-        <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
-      </ul>
-
-      <div class="nav-section">Meta</div>
-      <ul class="nav-list">
-        <li><a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
-      </ul>
-    </nav>
-  </aside>
-
-  <main class="content">
+  <main class="content" id="main">
     <h1 class="page-title">GEODE Self-Improving Hub</h1>
     <p class="page-sub">Anthropic Petri (inspect_ai) audit, self-improving-loop seed-generation, and autoresearch closed-loop. Three surfaces, one publish bundle. Each row shows the recorded model and execution source (PAYG = API key, Legacy Claude CLI = historical receipt, ChatGPT = subscription OAuth, GEODE = self-target wrapper).</p>
 
 {{ stale_baseline_warning }}
 
-    <h2 class="section"><span>Petri Audit &middot; {{ petri_section_label }}</span></h2>
+    <section class="hub-orient" aria-labelledby="in-this-hub" data-page-map>
+      <h2 class="section" id="in-this-hub"><span>In this hub</span></h2>
+      <ol class="orient-list">
+        <li>
+          <h3 class="orient-name"><a href="#petri-audit">Petri Audit</a> <span class="count">{{ petri_section_label }}</span></h3>
+          <p>Recent inspect_ai audit archives with the recorded auditor, target and judge models. Each id opens its log in the viewer.</p>
+          <p class="orient-go"><a href="/geode/self-improving/petri-bundle/">SPA log viewer <span aria-hidden="true">&#x2197;</span></a></p>
+        </li>
+        <li>
+          <h3 class="orient-name"><a href="#seed-generation">Seed Generation</a> <span class="count">{{ seedgen_section_label }}</span></h3>
+          <p>Seed-generation runs with drafted, surviving and evolved candidates and their usage.</p>
+          <p class="orient-go"><a href="/geode/self-improving/seed-generation/">All runs</a></p>
+        </li>
+        <li>
+          <h3 class="orient-name"><a href="#autoresearch">Autoresearch</a> <span class="count">baseline {{ autoresearch_status_label }}</span></h3>
+          <p>Baseline, mutation ledger, results, evidence and run reports for the closed loop.</p>
+          <p class="orient-go"><a href="/geode/self-improving/autoresearch/">Autoresearch overview</a></p>
+        </li>
+        <li>
+          <h3 class="orient-name"><a href="#crucible">Crucible</a> <span class="count">{{ crucible_count_label }}</span></h3>
+          <p>Per-attempt usage from the campaign ledgers. Totals are a metered floor.</p>
+          <p class="orient-go"><a href="{{ crucible_kernel_source_url }}" rel="noopener">Kernel architecture (source) <span aria-hidden="true">&#x2197;</span></a> <a href="{{ crucible_docs_url }}">Bounded search (docs) <span aria-hidden="true">&#x2197;</span></a></p>
+        </li>
+      </ol>
+    </section>
+
+    <h2 class="section" id="petri-audit"><span>Petri Audit &middot; {{ petri_section_label }}</span></h2>
     <table class="records">
       <thead>
         <tr><th>id</th><th>seeds</th><th>auditor</th><th>target</th><th>judge</th><th>started</th></tr>
@@ -85,7 +57,7 @@
       </tbody>
     </table>
 
-    <h2 class="section"><span>Seed Generation &middot; {{ seedgen_section_label }}</span></h2>
+    <h2 class="section" id="seed-generation"><span>Seed Generation &middot; {{ seedgen_section_label }}</span></h2>
     <table class="records">
       <thead>
         <tr><th>run_id</th><th>gen_tag</th><th>target_dim</th><th>harness</th><th>draft &rarr; surv &rarr; evolved</th><th>tokens &middot; cost</th></tr>
@@ -95,7 +67,7 @@
       </tbody>
     </table>
 
-    <h2 class="section"><span>Autoresearch &middot; baseline + mutation ledger</span></h2>
+    <h2 class="section" id="autoresearch"><span>Autoresearch &middot; baseline + mutation ledger</span></h2>
     <table class="records">
       <thead>
         <tr><th>artifact</th><th>last write</th><th>generation</th><th>auditor / target / judge models</th><th>fitness</th></tr>
@@ -105,7 +77,7 @@
       </tbody>
     </table>
 
-    <h2 class="section"><span>Crucible &middot; campaign ledger &middot; {{ crucible_count_label }}</span></h2>
+    <h2 class="section" id="crucible"><span>Crucible &middot; campaign ledger &middot; {{ crucible_count_label }}</span></h2>
     <p class="muted">Per-attempt usage from the append-only campaign ledgers
       (<code>state/ledger.jsonl</code>). Totals are a metered floor: early attempts
       recorded tokens before pricing was wired, and a failed capture leaves an
@@ -119,7 +91,7 @@
       </tbody>
     </table>
 
-    <h2 class="section"><span>Documentation</span></h2>
+    <h2 class="section" id="documentation"><span>Documentation</span></h2>
     <table class="records">
       <thead>
         <tr><th>page</th><th>summary</th></tr>
