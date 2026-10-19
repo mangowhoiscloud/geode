@@ -327,3 +327,28 @@ def test_main_session_settlement_failure_propagates(tmp_path: Path) -> None:
     finally:
         tmp_path.chmod(0o700)
     assert _persisted(tmp_path).run_id == run_id and _active(run_id)
+
+
+def test_failing_completion_callback_does_not_unresolve_a_settled_run(tmp_path: Path) -> None:
+    svc, action_queue, _run_id = _svc_with_dispatched_run(tmp_path)
+    services = _Services(SimpleNamespace(termination_reason="natural", error=None, text="done"))
+
+    def _boom(_result: Any, *, job_id: str) -> None:
+        raise RuntimeError(f"announce {job_id} failed")
+
+    async def _run() -> list[Any]:
+        await drain_scheduler_queue(
+            action_queue=action_queue,
+            services=services,
+            session_lane=_Lane(),
+            global_lane=_Lane(),
+            force_isolated=True,
+            on_complete=_boom,
+            on_settle=lambda jid, rid, status, error: svc.record_run_outcome(
+                jid, rid, status, error=error
+            ),
+        )
+        return await asyncio.gather(*list(_INFLIGHT_SCHEDULED_TASKS), return_exceptions=True)
+
+    assert asyncio.run(_run()) == ["settled"]
+    assert _persisted(tmp_path).last_status == "ok"

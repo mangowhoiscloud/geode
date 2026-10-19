@@ -58,6 +58,17 @@ _LOCK_FILENAME = "scheduled_tasks.lock"
 # owner identity this is the observed-termination authority for same-process
 # runs; it is process-wide because several service instances may share a store.
 _ACTIVE_RUNS: set[str] = set()
+# Fields a run claim writes, restored when a session-only claim's transaction fails.
+_CLAIM_FIELDS = (
+    "running_since_ms",
+    "run_id",
+    "run_owner",
+    "run_kind",
+    "last_status",
+    "last_run_at_ms",
+    "last_scheduled_at_ms",
+    "next_run_at_ms",
+)
 _ACTIVE_RUNS_LOCK = threading.Lock()
 
 
@@ -114,6 +125,9 @@ class SchedulerService:
         # reloaded store at the next save so stale copies never overwrite it.
         self._pending: dict[str, tuple[str, dict[str, Any]]] = {}
         self._txn_depth = 0
+        # Stuck runs already reported, keyed by run ID so a store reload
+        # (which rebuilds job objects) does not re-report them every tick.
+        self._stuck_reported: set[tuple[str, str]] = set()
 
         # Callback protocol (replaces action_queue)
         self._on_job_fired: OnJobFired | None = None
@@ -478,7 +492,14 @@ class SchedulerService:
                 results.append(result)
                 continue
 
-            claimed = self._claim(job.job_id, now, mode="due")
+            try:
+                claimed = self._claim(job.job_id, now, mode="due")
+            except BaseException:
+                if kind == ScheduleKind.CRON:
+                    # The minute was marked fired before the claim; a failed
+                    # claim fired nothing, so this occurrence stays retryable.
+                    self._last_fired_minute.pop(job.job_id, None)
+                raise
             if claimed is None:
                 continue
             results.append(self._execute_job(claimed, now_ms=now))
@@ -563,9 +584,14 @@ class SchedulerService:
         registered = ""
         interrupted: dict[str, Any] | None = None
         claimed: ScheduledJob | None = None
+        # A failed transaction reloads durable rows from disk, but a session-only
+        # job is kept in memory as is, so its claim fields are restored here.
+        session_only: tuple[ScheduledJob, dict[str, Any]] | None = None
         try:
             with self._persisted_transaction():
                 job = self._jobs.get(job_id)
+                if job is not None and not job.durable:
+                    session_only = (job, {name: getattr(job, name) for name in _CLAIM_FIELDS})
                 if job is None:
                     if not scheduled:
                         raise KeyError(f"Job '{job_id}' not found")
@@ -604,6 +630,10 @@ class SchedulerService:
             if registered:
                 with _ACTIVE_RUNS_LOCK:
                     _ACTIVE_RUNS.discard(registered)
+            if session_only is not None:
+                held, fields = session_only
+                for name, value in fields.items():
+                    setattr(held, name, value)
             raise
         # Only reached once the transaction (if any) was written.
         if interrupted is not None:
@@ -797,7 +827,10 @@ class SchedulerService:
         """Lock the store, reload it, let the caller operate, then persist.
 
         Nested transactions on the same thread join the outer one. Nothing is
-        written when the body raises.
+        written when the body raises, and a body or write failure reloads the
+        durable rows so a failed run claim does not survive in memory only.
+        Pending job mutations (``_pending``) are re-applied by the reload and
+        persist with the next successful transaction, as before.
         """
         with self._lock:
             if self._txn_depth:
@@ -812,9 +845,18 @@ class SchedulerService:
                 self._txn_depth = 1
                 try:
                     yield
-                finally:
                     self._txn_depth = 0
-                self._write_locked()
+                    self._write_locked()
+                except BaseException:
+                    self._txn_depth = 0
+                    try:
+                        self._load_locked(strict=True)
+                    except Exception:
+                        log.warning(
+                            "Scheduler store reload after a failed transaction failed",
+                            exc_info=True,
+                        )
+                    raise
 
     @contextlib.contextmanager
     def _persisted_transaction(self) -> Iterator[None]:
@@ -986,7 +1028,10 @@ class SchedulerService:
         ``interrupted``; a still-owned (or unknown legacy) run is only marked
         ``stuck`` for display and keeps blocking a second execution.
 
-        Returns a list of stuck job IDs.
+        A still-owned run is reported once per run ID; later ticks do not
+        repeat the warning or hook while that same run stays stuck.
+
+        Returns the job IDs newly reported (or settled) by this call.
         """
         now = now_ms if now_ms is not None else time.time() * 1000
         with self._lock:
@@ -997,14 +1042,21 @@ class SchedulerService:
                 and (now - job.running_since_ms) > self.STUCK_TIMEOUT_MS
             ]
         stuck: list[str] = []
+        current = {(job.job_id, job.run_id) for job in candidates}
+        self._stuck_reported &= current  # settled or replaced runs are forgotten
+        newly_reported: list[tuple[str, str]] = []
         for job in candidates:
+            owner_gone = bool(job.run_id) and not self._run_alive(job)
+            if not owner_gone and (job.job_id, job.run_id) in self._stuck_reported:
+                job.last_status = "stuck"  # a reload rebuilt the row; keep the label
+                continue
             log.warning(
                 "Stuck job detected: '%s' running for %.0fs (threshold %.0fs)",
                 job.job_id,
                 (now - (job.running_since_ms or now)) / 1000,
                 self.STUCK_TIMEOUT_MS / 1000,
             )
-            if job.run_id and not self._run_alive(job):
+            if owner_gone:
                 self._settle(
                     job.job_id,
                     job.run_id,
@@ -1013,6 +1065,7 @@ class SchedulerService:
                 )
             else:
                 job.last_status = "stuck"
+                newly_reported.append((job.job_id, job.run_id))
             stuck.append(job.job_id)
         if stuck and self._hooks:
             from core.hooks import HookEvent
@@ -1021,6 +1074,8 @@ class SchedulerService:
                 HookEvent.TRIGGER_FIRED,
                 {"stuck_jobs": stuck, "source": "scheduler_stuck_detection"},
             )
+        # Marked only once reported, so a failure earlier in this tick re-reports.
+        self._stuck_reported.update(newly_reported)
         return stuck
 
     def _reload_if_changed(self) -> bool:

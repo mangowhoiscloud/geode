@@ -15,6 +15,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import pytest
 from core.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
@@ -384,3 +385,101 @@ def test_failed_claim_publication_leaves_no_registered_owner(tmp_path: Path) -> 
     assert run["status"] == "dispatched"
     with service._ACTIVE_RUNS_LOCK:
         assert service._ACTIVE_RUNS - before == {run["run_id"]}
+
+
+def test_failed_claim_write_does_not_advance_the_occurrence_in_memory(tmp_path: Path) -> None:
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None)
+    svc.create_job(_job("every"))
+    job = svc.get_job("every")
+    assert job is not None and job.next_run_at_ms is not None
+    due = job.next_run_at_ms + 1
+    with (
+        mock.patch.object(svc, "_write_locked", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.check_due_jobs(now_ms=due)
+    restored = svc.get_job("every")
+    assert restored is not None and restored.next_run_at_ms == job.next_run_at_ms
+    assert restored.running_since_ms is None
+    [result] = svc.check_due_jobs(now_ms=due)
+    assert result["status"] == "dispatched"
+
+
+def test_stuck_run_is_reported_once_per_run(tmp_path: Path) -> None:
+    payloads: list[dict[str, Any]] = []
+    hooks = mock.Mock(
+        trigger=lambda _event, payload: (
+            payloads.append(payload)
+            if payload.get("source") == "scheduler_stuck_detection"
+            else None
+        )
+    )
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None, hooks=hooks)
+    svc.create_job(_job("held"))
+    first = svc.run_now("held")
+    svc.STUCK_TIMEOUT_MS = -1.0
+    assert svc.detect_stuck_jobs() == ["held"]
+    assert svc.detect_stuck_jobs() == []
+    svc.load()  # a store reload rebuilds the row; the same run stays reported
+    assert svc.detect_stuck_jobs() == []
+    assert len(payloads) == 1
+    held = svc.get_job("held")
+    assert held is not None and held.last_status == "stuck"
+    assert svc.run_now("held")["reason"] == "already_running"
+    # A run whose owner is gone is still settled, and a new stuck run is reported.
+    _set_disk_owner(tmp_path, "held", _DEAD_OWNER)
+    second = svc.run_now("held")
+    assert second["status"] == "dispatched" and second["run_id"] != first["run_id"]
+    assert svc.detect_stuck_jobs() == ["held"]
+    assert len(payloads) == 2
+
+
+def test_failed_cron_claim_write_keeps_the_minute_retryable(tmp_path: Path) -> None:
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None)
+    svc.create_job(_job("cron", schedule=Schedule(kind=ScheduleKind.CRON, cron_expr="* * * * *")))
+    now = time.time() * 1000
+    with (
+        mock.patch.object(svc, "_write_locked", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.check_due_jobs(now_ms=now)
+    [result] = svc.check_due_jobs(now_ms=now)
+    assert result["status"] == "dispatched"
+
+
+def test_failed_claim_write_restores_a_session_only_job(tmp_path: Path) -> None:
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None)
+    svc.create_job(_job("durable"))  # a store exists, so claims run in a transaction
+    svc.create_job(_job("session", durable=False))
+    job = svc.get_job("session")
+    assert job is not None and job.next_run_at_ms is not None
+    due = job.next_run_at_ms + 1
+    with (
+        mock.patch.object(svc, "_write_locked", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.run_now("session")
+    assert job.running_since_ms is None and job.run_id == ""
+    assert job.next_run_at_ms == due - 1
+    assert svc.run_now("session")["status"] == "dispatched"
+
+
+def test_stuck_report_survives_a_failure_later_in_the_same_tick(tmp_path: Path) -> None:
+    payloads: list[dict[str, Any]] = []
+    hooks = mock.Mock(trigger=lambda _event, payload: payloads.append(payload))
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None, hooks=hooks)
+    svc.create_job(_job("alive"))
+    svc.create_job(_job("gone"))
+    svc.run_now("alive")
+    svc.run_now("gone")
+    _set_disk_owner(tmp_path, "gone", _DEAD_OWNER)
+    svc.load()
+    svc.STUCK_TIMEOUT_MS = -1.0
+    with (
+        mock.patch.object(svc, "_settle", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.detect_stuck_jobs()
+    payloads.clear()
+    assert "alive" in svc.detect_stuck_jobs()
+    assert any("alive" in p.get("stuck_jobs", []) for p in payloads)

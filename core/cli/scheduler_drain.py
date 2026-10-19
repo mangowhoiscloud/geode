@@ -179,7 +179,17 @@ async def _run_isolated(
         )
         return "stale"
     if on_complete:
-        on_complete(r, job_id=job_id)
+        try:
+            on_complete(r, job_id=job_id)
+        except Exception:
+            # The run is already settled; a failing announcement must not
+            # make the caller report it as unresolved.
+            log.error(
+                "Scheduler job %s run %s settled but its completion callback failed",
+                job_id,
+                run_id[:8],
+                exc_info=True,
+            )
     return "settled"
 
 
@@ -214,8 +224,9 @@ async def drain_scheduler_queue(
     session terminal state is persisted, ``cancelled`` when the turn was
     cancelled, ``skipped`` when no Lane slot was available. ``on_complete``
     fires only after the scheduler accepted that settlement (not for a stale
-    or failed one). A required write that fails leaves the run claimed and
-    is the isolated task's exception (or propagates from a main-session run).
+    or failed one). A required write that fails leaves the run claimed: the
+    isolated task logs it at ERROR and returns ``"unresolved"``; a main-session
+    run propagates the error.
     """
     import queue as _q
 

@@ -135,7 +135,10 @@ functional change.
   over a live run, a manual run does not consume a scheduled occurrence, and a
   stale outcome cannot settle a newer run. Queued action runs settle only from
   the turn's real termination after the session state is saved; a failed
-  required write leaves the run claimed and unsettled.
+  required write leaves the run claimed and unsettled. A failed run-claim
+  write leaves that occurrence retryable (recurring, cron and session-only
+  jobs alike), and a still-owned stuck run is reported once per run instead
+  of on every tick.
 - **Project memory integrity.** PROJECT.md and rule changes lock a separate
   inode, reload, validate and write atomically, so concurrent threads and
   processes do not lose updates and unreadable content is left unchanged.
@@ -152,7 +155,13 @@ functional change.
   audit and the baseline; a missing dimension is unknown, not a best-case score.
   NaN and infinite dimension scores are dropped at extraction and rejected
   before scoring, so they can no longer pass the bootstrap floor, the margin or
-  the random arm. Weights, margins and thresholds are unchanged.
+  the random arm; a non-finite stderr on any dimension is rejected too. With
+  anchor confidence enabled, an anchor dimension missing from the audit blocks
+  promotion (gate, bootstrap and random arm) instead of scoring as best case,
+  and a baseline with only some anchors requires a rebaseline. A
+  non-finite bench field is unmeasured rather than clamped to 1.0, and an
+  unreadable baseline sample count applies the conservative N=1 margin.
+  Weights, margins and thresholds are unchanged.
 - **Petri split judge.** A live `--judge-mode split` audit is refused before
   dispatch; split remains a cost preview.
 

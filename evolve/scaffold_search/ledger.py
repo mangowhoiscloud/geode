@@ -595,8 +595,10 @@ def _load_baseline_sample_count() -> dict[str, int]:
             continue
         try:
             out[k] = int(v)
-        except (TypeError, ValueError):
-            continue
+        except (TypeError, ValueError, OverflowError):
+            # An unreadable count (NaN, infinity, junk) is an unknown sample
+            # size: record 0 so the conservative N=1 margin applies.
+            out[k] = 0
     return out
 
 

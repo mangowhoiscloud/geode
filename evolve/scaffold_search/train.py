@@ -1214,6 +1214,9 @@ def main() -> int:
             _cycle_index,
             dim_means,
             baseline_means,
+            dim_stderr,
+            baseline_stderr,
+            anchor_confidence_mode=_anchor_confidence_mode,
         )
         if ok:
             ledger._write_baseline(dim_means, dim_stderr, **_baseline_provenance)

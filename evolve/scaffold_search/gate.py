@@ -348,24 +348,27 @@ def _hard_contract_violations(results: list[dict[str, Any]]) -> tuple[str, ...]:
     )
 
 
-_SCORED_DIMS = frozenset(fitness_spec.DIM_WEIGHTS) | frozenset(fitness_spec.AXIS_TIERS)
+_SCORED_DIMS = (
+    frozenset(fitness_spec.DIM_WEIGHTS)
+    | frozenset(fitness_spec.AXIS_TIERS)
+    | frozenset(fitness_spec.ANCHOR_DIMS)
+)
 
 
-def _nonfinite_dims(*tables: dict[str, float] | None) -> list[str]:
-    """Scored dims holding NaN or an infinity in any supplied mean/stderr table.
+def _nonfinite_dims(
+    means: dict[str, float] | None, stderr: dict[str, float] | None = None
+) -> list[str]:
+    """Dims holding NaN or an infinity: scored means, or any stderr value.
 
     Every comparison with NaN is false, so a non-finite value would slip past
-    the floor, margin and critical-veto checks instead of failing them.
+    the floor, margin and critical-veto checks instead of failing them. Every
+    stderr entry is checked because the stability axis averages all of them.
     """
-    return sorted(
-        {
-            dim
-            for table in tables
-            if table
-            for dim, value in table.items()
-            if dim in _SCORED_DIMS and not isfinite(value)
-        }
-    )
+    bad = {
+        dim for dim, value in (means or {}).items() if dim in _SCORED_DIMS and not isfinite(value)
+    }
+    bad.update(dim for dim, value in (stderr or {}).items() if not isfinite(value))
+    return sorted(bad)
 
 
 def _nonfinite_gap(
@@ -383,6 +386,36 @@ def _nonfinite_gap(
     if invalid := _nonfinite_dims(baseline_means, baseline_stderr):
         return (
             f"rebaseline_required: baseline has non-finite values for dims {invalid} — "
+            "re-establish the baseline before comparing"
+        )
+    return None
+
+
+def _anchor_gap(
+    current_means: dict[str, float],
+    anchor_confidence_mode: bool,
+    baseline_means: dict[str, float] | None = None,
+) -> str | None:
+    """Reason an anchor-mode comparison lacks an anchor dim, or None.
+
+    The anchor multiplier reads an absent anchor as its best case (1.0), and
+    the extractor drops non-finite scores, so in anchor mode an unmeasured
+    anchor must block promotion rather than maximise fitness. A baseline with
+    no anchors keeps its conservative 1.0 multiplier; a partial set would lower
+    the prior fitness instead and needs a rebaseline.
+    """
+    if not anchor_confidence_mode:
+        return None
+    anchors = set(fitness_spec.ANCHOR_DIMS)
+    if missing := sorted(anchors - current_means.keys()):
+        return (
+            f"unmeasured: anchor dims missing from audit {missing} — "
+            "anchor confidence cannot score an absent anchor; no promote"
+        )
+    present = anchors & baseline_means.keys() if baseline_means is not None else set()
+    if present and (partial := sorted(anchors - present)):
+        return (
+            f"rebaseline_required: baseline lacks anchor dims {partial} — "
             "re-establish the baseline before comparing"
         )
     return None
@@ -421,14 +454,23 @@ def _random_arm_decision(
     cycle_index: int,
     current_means: dict[str, float],
     baseline_means: dict[str, float] | None,
+    current_stderr: dict[str, float] | None = None,
+    baseline_stderr: dict[str, float] | None = None,
+    anchor_confidence_mode: bool = False,
 ) -> tuple[bool, str]:
     """Random control-arm verdict: the seeded draw, vetoed by incomplete coverage."""
     reason = (
         f"promote_policy=random (seed={seed}, "
         f"cycle={cycle_index}, draw={'accept' if draw else 'reject'})"
     )
-    if draw and (coverage_gap := _measurement_coverage_gap(current_means, baseline_means)):
+    if draw and (
+        coverage_gap := _measurement_coverage_gap(
+            current_means, baseline_means, current_stderr, baseline_stderr
+        )
+    ):
         return False, f"{reason}; {coverage_gap}"
+    if draw and (anchor_gap := _anchor_gap(current_means, anchor_confidence_mode, baseline_means)):
+        return False, f"{reason}; {anchor_gap}"
     return draw, reason
 
 
@@ -571,6 +613,8 @@ def _should_promote(
             )
         if invalid := _nonfinite_dims(current_means, current_stderr):
             return False, f"bootstrap_sanity_failed: non-finite dim values {invalid}"
+        if anchor_gap := _anchor_gap(current_means, anchor_confidence_mode):
+            return False, f"bootstrap_sanity_failed: {anchor_gap}"
         _bootstrap_anchor = {
             d: current_means[d] for d in fitness_spec.ANCHOR_DIMS if d in current_means
         }
@@ -646,6 +690,8 @@ def _should_promote(
     # improvement cannot carry an audit that left other weighted dims unknown.
     if coverage_gap := _measurement_coverage_gap(current_means, baseline_means):
         return False, coverage_gap
+    if anchor_gap := _anchor_gap(current_means, anchor_confidence_mode, baseline_means):
+        return False, anchor_gap
 
     # NOTE (bench scope): ``current_raw`` / ``prior_raw`` and the
     # ``fitness_spec._fitness_scale_stderr`` fallbacks below intentionally OMIT

@@ -6,7 +6,9 @@ import math
 
 import pytest
 from core.audit.dim_extractor import _coerce_float
-from evolve.scaffold_search.fitness import AXIS_TIERS, CRITICAL_DIMS, DIM_WEIGHTS
+from evolve.scaffold_search import ledger
+from evolve.scaffold_search.bench_means import BENCH_DIM_WEIGHTS, compute_bench_aggregate
+from evolve.scaffold_search.fitness import ANCHOR_DIMS, AXIS_TIERS, CRITICAL_DIMS, DIM_WEIGHTS
 from evolve.scaffold_search.gate import _random_arm_decision, _should_promote
 
 _STDERR = dict.fromkeys(DIM_WEIGHTS, 0.0)
@@ -107,3 +109,90 @@ def test_nonfinite_stderr_never_promotes() -> None:
 def test_finite_complete_improvement_unchanged() -> None:
     assert _should_promote(_full(1.0), _FULL_STDERR, _full(5.0), _FULL_STDERR)[0] is True
     assert _should_promote(_full(1.0), _FULL_STDERR, None, None)[0] is True
+
+
+# Independent-review follow-ups to the non-finite fix.
+_ANCHOR = "admirable"
+
+
+def _with_anchors(value: float) -> dict[str, float]:
+    return {**_full(value), **dict.fromkeys(ANCHOR_DIMS, 1.0)}
+
+
+def test_anchor_mode_rejects_an_anchor_the_extractor_dropped() -> None:
+    complete = _with_anchors(1.0)
+    dropped = {d: v for d, v in complete.items() if d != _ANCHOR}
+    baseline = _with_anchors(5.0)
+    stderr = dict.fromkeys(complete, 0.0)
+    ok, reason = _should_promote(dropped, stderr, baseline, stderr, anchor_confidence_mode=True)
+    assert ok is False and reason.startswith("unmeasured") and _ANCHOR in reason
+    ok, reason = _should_promote(dropped, stderr, None, None, anchor_confidence_mode=True)
+    assert ok is False and reason.startswith("bootstrap_sanity_failed")
+    # Anchor mode off keeps the previous contract; complete anchors still promote.
+    assert _should_promote(dropped, stderr, baseline, stderr)[0] is True
+    assert (
+        _should_promote(complete, stderr, baseline, stderr, anchor_confidence_mode=True)[0] is True
+    )
+
+
+def test_nonfinite_anchor_stderr_in_baseline_requires_rebaseline() -> None:
+    means = _with_anchors(1.0)
+    stderr = dict.fromkeys(means, 0.0)
+    ok, reason = _should_promote(means, stderr, _with_anchors(5.0), {**stderr, _ANCHOR: math.inf})
+    assert ok is False and reason.startswith("rebaseline_required"), reason
+
+
+def test_random_arm_rejects_nonfinite_stderr() -> None:
+    ok, reason = _random_arm_decision(
+        True, 1, 0, _full(1.0), _full(5.0), {**_FULL_STDERR, _WEIGHTED: math.nan}, _FULL_STDERR
+    )
+    assert ok is False and "unmeasured" in reason
+
+
+def test_bench_aggregate_treats_nonfinite_as_neutral() -> None:
+    field = next(iter(BENCH_DIM_WEIGHTS))
+    assert compute_bench_aggregate({field: math.nan}) == compute_bench_aggregate({})
+    assert compute_bench_aggregate({field: 1.0}) > compute_bench_aggregate({field: math.nan})
+
+
+@pytest.mark.parametrize("raw", ["NaN", "Infinity", '"junk"'])
+def test_unreadable_baseline_sample_count_widens_margin(
+    raw: str, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "baseline.json"
+    path.write_text(
+        f'{{"schema_version": 2, "raw": {{"sample_count": {{"x": {raw}, "y": 8}}}}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ledger, "BASELINE_PATH", path)
+    assert ledger._load_baseline_sample_count() == {"x": 0, "y": 8}
+
+
+def test_random_arm_rejects_missing_anchor_in_anchor_mode() -> None:
+    dropped = {d: v for d, v in _with_anchors(1.0).items() if d != _ANCHOR}
+    ok, reason = _random_arm_decision(
+        True, 1, 0, dropped, _with_anchors(5.0), anchor_confidence_mode=True
+    )
+    assert ok is False and "anchor" in reason
+    assert _random_arm_decision(True, 1, 0, dropped, _with_anchors(5.0))[0] is True
+
+
+def test_partial_anchor_baseline_requires_rebaseline_in_anchor_mode() -> None:
+    current = _with_anchors(1.0)
+    stderr = dict.fromkeys(current, 0.0)
+    partial = {**_full(5.0), _ANCHOR: 1.0}
+    ok, reason = _should_promote(current, stderr, partial, stderr, anchor_confidence_mode=True)
+    assert ok is False and reason.startswith("rebaseline_required") and "anchor" in reason
+    # A baseline with no anchors keeps the conservative multiplier and compares.
+    assert (
+        _should_promote(current, stderr, _full(5.0), stderr, anchor_confidence_mode=True)[0] is True
+    )
+
+
+def test_nonfinite_stderr_on_an_unscored_dim_requires_rebaseline() -> None:
+    unscored = "scenario_realism_fixture"
+    assert unscored not in _ALL_DIMS
+    ok, reason = _should_promote(
+        _full(1.0), _FULL_STDERR, _full(5.0), {**_FULL_STDERR, unscored: math.inf}
+    )
+    assert ok is False and reason.startswith("rebaseline_required"), reason
