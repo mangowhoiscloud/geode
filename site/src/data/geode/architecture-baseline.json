@@ -15,7 +15,7 @@
     "max_branches": 51,
     "max_complexity": 52,
     "max_returns": 18,
-    "max_statements": 207
+    "max_statements": 206
   },
   "context_vars": {
     "classification_counts": {
@@ -543,7 +543,7 @@
   "packages": {
     "core": {
       "python_files": 416,
-      "python_loc": 130534
+      "python_loc": 130537
     },
     "evals": {
       "python_files": 110,
@@ -551,11 +551,11 @@
     },
     "evolve": {
       "python_files": 73,
-      "python_loc": 32055
+      "python_loc": 32113
     },
     "tests": {
-      "python_files": 779,
-      "python_loc": 243236
+      "python_files": 778,
+      "python_loc": 243164
     }
   },
   "schema_version": 6,
