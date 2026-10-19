@@ -2,8 +2,8 @@
   "schema": "jev-report-publication-v1",
   "status": "prepared-not-published",
   "source_sha256": "37d8e11cabce01fe368d8c9f6d623a28a4ee7965d12bc8129e7efb529a73ff34",
-  "html_sha256": "49ccbd64d055b3efe040cc38e9f42f0029f9520894ab25c7a7f1d9d33b6c8a50",
-  "generator_sha256": "027b1a6ba8988c745790d976f06c31ab491bd393fa5e87a1cb618a4488b57f22",
+  "html_sha256": "62992879d7eb23d8e2fdd882a2e7ab9135875b7a02084718b6550d467fe993c6",
+  "generator_sha256": "74181b1018264a63c006a7b0a1464b29b9eac4548981566f6ec0ecf512f88972",
   "evidence_readme": "https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/3bcf4044eb5c2411dd48122d672aef72a83fb30e/reports/e2e-validation/jev-v3-20260927/README.md",
   "date": "2026-09-28",
   "video_url": null,
@@ -872,5 +872,7 @@
   "asset_package_manifest_sha256": "9e4c3442ebcf78df611c43ae9b032a7b221dc0d9489cfe2726a37485198d3986",
   "pdf_generator_sha256": "2d3b336ba98802f1d7c876589fdd19357cb26adcdf9631fd9a3fffe19810956f",
   "pdf_reused_from_manifest_sha256": "9e4c3442ebcf78df611c43ae9b032a7b221dc0d9489cfe2726a37485198d3986",
-  "total_bytes": 79298871
+  "total_bytes": 79298871,
+  "reader_previous_html_sha256": "49ccbd64d055b3efe040cc38e9f42f0029f9520894ab25c7a7f1d9d33b6c8a50",
+  "reader_revision": "2026-10-12-focus-text"
 }

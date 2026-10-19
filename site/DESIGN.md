@@ -10,6 +10,186 @@
 
 ## Current landing and docs contract (2026-09-08)
 
+### Main restoration and Research isolation (operator-directed 2026-10-12)
+
+The main landing (`/` and `/portfolio/`) restores the design from commit
+`fcd0a3b9`, before the TypeUI white-canvas change. Restore its existing dark
+palette, rose controls, spacing, recorded-run surface, agent loop, package
+responsibilities and RSI section. Do not reinterpret or embellish that design.
+Publication lists, cover previews and the Research selector are absent from the
+main body. The header and hero Research links open `/research/` in the current
+language; the existing footer retains its direct source links.
+
+The independent `/research/` collection and readers retain their layout and
+source artwork. The operator-directed 2026-10-13 revision below aligns their
+collection colors with the restored main. The subsequent reader rollback below
+restores the light artifact workspaces; PDFs/PPT, slide pixels, figures and
+videos keep their original palettes and bytes.
+
+**CSS ownership.** `landing.css` is scoped to `.geode-home` and restores the
+prior main declarations. `research.css` is scoped to `.geode-research` and
+preserves collection geometry while inheriting the shared colors. Global document selectors use
+`:has()` with the corresponding root. Both stylesheets can remain loaded during
+client navigation without recoloring the other surface. Shared global tokens,
+Docs and About styles are unchanged.
+
+**Navigation.** The restored `#features`, `#distill` and `#roadmap` sections
+again use native in-page navigation. Old Research fragments still replace-
+navigate to the independent collection, preserving language and selected
+publication. No publication artifact is removed when its main-body preview is
+removed.
+
+**Collection behavior.** A tab click selects and pushes its fragment without
+scrolling. Incoming fragments select the same publication. Panel IDs remain
+separate from selection hashes; Arrow/Home/End move focus and Enter/Space
+activate. GEODE, Jev and JEVDB headers retain `GEODE / Research` return links.
+Each return link retains its publication selection (no hash for the default
+GEODE report, `#jev`, or `#jevdb`) and language. Collection selection
+URLs remain valid; scene-reading links use the explicit resource path, with
+`lang` for language and a page/scene hash for position.
+
+### Research color and copy revision (operator-directed 2026-10-13)
+
+The main and publication collection share the §2 palette. Research keeps its
+existing spacing, typography, selector and unframed media layout. Its dark
+substrate and secondary text inherit `globals.css`; focus uses the rose
+identity accent. Metadata uses the readable secondary ink.
+
+### Reader light-canvas restoration (operator-directed 2026-10-13)
+
+All three “Read scene by scene” destinations retain the light reader chrome
+from `889f2874^`: `/research/geode/`, `/research/jev-system1-offloading/`,
+and `/research/jevdb/`. Restore the existing cool-neutral canvas, dark ink,
+blue focus, neutral download action, and light contents/source sheets without
+changing layout or copy. GEODE and JEVDB share the scoped `.jevdb-reader`
+palette; the standalone Jev projection uses its frozen light reader styles.
+No global token changes or theme switcher apply to the dark main and Research
+collection. Original PDF/PPT, images, diagram semantic colors, slide text and
+build behavior remain source-owned.
+
+Surface copy leads with actions, artifacts and observations. Keep sample
+counts, common denominators, configuration pins, uncertainty, missing-data
+status and author/study attribution next to the relevant evidence. Consolidate
+repeated defensive prose into the existing measurement or source sections;
+removing a disclaimer cannot imply measured superiority or a new experiment.
+
+### Reader touch navigation (2026-10-13)
+
+The artwork canvas accepts a single-finger horizontal swipe: left selects the
+next scene and right the previous scene, without wrapping at either boundary.
+GEODE/JEVDB use their existing selection functions; the Jev route projection
+uses `show()` for whole-scene swipes while its original pager keeps in-scene
+build navigation. The shared `src/lib/reader-swipe.mjs` owns recognition for
+all three readers. Frozen Jev source, PDFs, PPT and slide artwork stay intact.
+
+Start away from the outer 24px browser-navigation edges and move at least
+48–96 CSS pixels (12% of canvas width), within 650ms, with horizontal distance
+at least 1.5 times vertical distance. A vertical/diagonal onset, cancellation,
+second contact, scroll, selection or modal abandons the gesture. Only the
+artwork handles swipes; prose, controls, links within Jev scenes and overview
+thumbnails retain their native interactions. Tapping an image still opens it
+at full size. Swipes never add history at the first/last boundary.
+
+The canvas permits `pan-y pinch-zoom`; at a zoomed visual viewport it restores
+`auto` for panning. Do not disable selection, browser zoom or vertical scroll.
+No mouse drag interception applies. Buttons, keyboard,
+language links and accessible scene announcements remain available.
+
+### Reader desktop navigation (2026-10-13, local review)
+
+A fine-pointer horizontal wheel stroke on artwork selects one whole scene.
+`src/lib/reader-wheel.mjs` owns this optional desktop input; the existing touch
+recognizer is unchanged. React binds it for the canvas lifetime, using Effect
+Events to read the current scene without resetting the momentum lock on render.
+The frozen Jev projection uses the same recognizer and existing `show()` owner.
+
+Only cancelable pixel-mode events without modifiers or pressed buttons qualify.
+The stroke must start horizontally (at least 2:1), accumulate 96 wheel-delta
+pixels within 500ms, and retain its direction. One scene is selected per stroke;
+280ms without wheel input ends the stroke and a 650ms minimum interval prevents
+separated momentum tails from immediately advancing again. These are input
+heuristics, not hardware or OS gesture identification.
+
+Outside the artwork, at the first/last scene boundary, within the viewport's
+outer 24px, on nested controls or a horizontal scroller, input remains native.
+Vertical/diagonal onset, selection, dragging, a modal, zoom, or keyboard/history
+interruption cancels pending navigation. Modifier-wheel zoom is never captured.
+A claimed horizontal tail stays locked across the reader's own scroll-to-top.
+Do not add global overscroll suppression or mouse-drag navigation. WheelEvent
+has no standard physical-device or OS back/forward gesture identifier; do not
+claim this replaces testing on actual trackpads and target browsers.
+
+Existing pager buttons keep their position, 44px height, labels and blue focus
+ring. On fine pointers at widths of at least 768px, their minimum width is 72px
+and keyboard focus uses the existing neutral hover fill. No new controls,
+animation, palette, artwork, layout system or dependency is introduced.
+
+### Research route ownership (2026-10-12)
+
+`/research/` is the standalone publication collection with its existing
+header layout and full publication selector. The restored main header links to this
+collection; no publication list or preview is rendered in the main body.
+Readers live at `/research/geode/`, `/research/jev-system1-offloading/`, and
+`/research/jevdb/`. Canonical metadata and the sitemap identify these resources.
+Language queries select a display language; fragments identify pages or scenes.
+Within the collection, fragments select publications: the default GEODE report
+uses no fragment; Jev uses `#jev` and JEVDB uses `#jevdb`. Historical
+`#research-geode`, `#research-jev`, and `#jevdb-paper-review` addresses still
+select the same publication and normalize with `replaceState`. This preserves
+Back/Forward without adding a redirect entry. Selecting the active tab adds no
+history entry. DOM tab/panel IDs remain separate from public URL fragments.
+Queries stay before fragments; changing language retains selection or scene.
+The collection and readers default to Korean; the existing landing defaults to
+English. Compatibility navigation preserves that distinction.
+
+The old homepage Research hashes and `/resaerch/jev-system1-offloading/` use
+replacement navigation, preserving language and scene without a Back loop.
+The frozen Jev publication remains checked in at its historical location.
+`npm run build` runs `export-research-routes.mjs` after Next static export:
+it projects routes/history and touch/desktop navigation, and rebases file references to the old served
+asset addresses. No PDF, scene source, font, image, or video is regenerated.
+Validate canonical and compatibility behavior against `site/out`, not Next dev.
+
+### Research publications (operator-directed 2026-10-12 revision)
+
+The Research landing is a media-led publication selector. The operator rejected
+large framed description boxes and question/observation/materials columns.
+Use one real, uncropped publication canvas with three visible document tabs:
+GEODE report, Jev study, JEVDB review. Labels and a quiet selected underline
+identify the document; no card background, border frame, corner treatment,
+shadow, autoplay, or decorative illustration is added. The original artwork
+retains its own palette and diagrams. The surface uses the shared dark GEODE tokens through `research.css`.
+
+The original cover opens that same first page or scene. A caption identifies
+the edition and language. Short copy distinguishes the historical GEODE
+report, separate Jev measurements, and external JEVDB review. Inline links
+name actual reader/PDF/PPT/video/evidence destinations. Keep all three tab
+labels visible on mobile. Manual keyboard tab activation avoids changing the
+large image on every arrow press; Arrow keys and Home/End move tab focus.
+Scaffold, Seed, SIL, and related-work directions follow as unframed text.
+
+References inspected for this revision:
+
+- [Primer Brand MediaPlaylist](https://primer.github.io/brand/components/MediaPlaylist/):
+  visible media choices and a shared presentation area.
+- [Primer Brand River](https://primer.github.io/brand/components/River/):
+  concise explanation beside actual media and direct inline links.
+- [Carbon global header](https://www.carbondesignsystem.com/building-blocks/core/patterns/global-header):
+  consistent global document actions separated from local content navigation.
+
+These are interaction and composition references. No library package or new
+visual theme is installed. Native React and the existing typography implement
+the patterns. Unlike Primer's general preference against text-heavy imagery,
+these previews deliberately reproduce the requested source report covers.
+
+`/research/geode/` presents both existing 92-page PDFs in the Jev reading
+workspace. Language changes artwork, text, and PDF while preserving page.
+Chapter navigation, page search, full-size images, overview, extracted text,
+keyboard paging, focus view, and a native source sheet support reading.
+Original page claims are historical, not reevaluated or relabeled as current.
+The Jev reader retains all 57 scenes and 81 builds; focus view and full-scene
+text reveal the original content without redrawing figures or changing results.
+
 ### Harness and research entry (2026-10-06)
 
 The landing leads with **Autonomous Agent Harness** and its separate
@@ -97,6 +277,20 @@ links, replay navigation, overflow and console errors. A local preview is not
 deployment proof.
 
 ## 1. Visual Theme & Atmosphere
+
+### JEVDB paper review reader (operator-approved 2026-10-12)
+
+`/research/jevdb/` reuses the Decision Offloading reader described below:
+its 224px flat scene list, compact header/toolbar,
+large slide canvas, native mobile contents dialog, and right source sheet.
+Reuse the existing Pretendard/mono assets, layout and scoped cool-neutral
+light reader palette. The 19 v25 slide images and original PPT remain unchanged. KO/EN
+controls translate navigation and reading notes; they do not claim a second
+slide edition. The video and PPT stay in the opening header. Every slide has
+one settled build, without artificial animation or a nonfunctional motion
+control. Provide full-size images and original slide text for small screens.
+Paper measurements, schematic examples, future directions, and the separate
+GEODE U8c study keep their own conditions and sources beside the canvas.
 
 ### Jev research artifact exception (operator-approved 2026-09-28)
 
@@ -200,7 +394,9 @@ gold and aqua appear only where their meaning applies.
 
 **Single substrate.** Every page is dark by design. No light mode, no
 dark-panel-on-light-page. Character PNGs were authored on transparent
-backgrounds and sit naturally on this substrate.
+backgrounds and sit naturally on this substrate. Scoped exceptions: the
+original artwork and the operator-restored light research readers. The
+Research collection retains the same dark substrate as the main landing.
 
 **Petri-blue is scoped, not dead.** `--acc-si` keeps the hub's Bootstrap-blue
 identity on exactly two surfaces: the 04-self-improving docs section

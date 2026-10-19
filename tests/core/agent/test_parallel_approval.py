@@ -7,10 +7,10 @@ second prompt was already in flight on the same socket — it timed out
 after 120s and was treated as a denial. The user saw
 ``User denied write operation for 'manage_login' ... (120.0s)``.
 
-Root cause: ``ApprovalWorkflow._approval_lock`` existed (line 80) but was
-unused. ``apply_safety_gates`` checked + prompted + mutated
-``_always_approved_categories`` without holding the lock, so a second
-parallel caller couldn't see the first caller's "A" promotion.
+Root cause: ``ApprovalWorkflow._approval_lock`` existed but was unused. The
+safety gate checked + prompted + mutated ``_always_approved_categories``
+without holding the lock, so a second parallel caller couldn't see the first
+caller's "A" promotion. The oracles below drive the real async gate entry.
 
 This invariant pins:
   1. The lock is held during the entire HITL prompt + mutation sequence.
@@ -20,52 +20,75 @@ This invariant pins:
 
 from __future__ import annotations
 
-import inspect
+import asyncio
 import threading
 import time
 from typing import Any
+from unittest.mock import Mock
 
 import core.agent.approval as _approval_mod
+import pytest
 
 # ---------------------------------------------------------------------------
-# Contract 1 — apply_safety_gates uses _approval_lock
+# Contract 1 — parallel gates never overlap their prompts
 # ---------------------------------------------------------------------------
 
 
-def test_approval_lock_wraps_write_branch() -> None:
-    """Source-level: the WRITE_TOOLS branch must enter ``with self._approval_lock``
-    BEFORE checking ``_always_approved_categories`` so a second caller's
-    re-check observes the first caller's promotion.
-    """
-    src = inspect.getsource(_approval_mod.ApprovalWorkflow.apply_safety_gates)
-    # Locate "if tool_name in WRITE_TOOLS:" and assert the very next line
-    # establishes the lock context.
-    lines = src.splitlines()
-    write_branch = next(
-        (i for i, ln in enumerate(lines) if "if tool_name in WRITE_TOOLS" in ln),
-        -1,
+def _make_gate(approval_responses: list[str]) -> tuple[Any, dict[str, int]]:
+    """Build an ApprovalWorkflow whose callback returns canned responses and
+    records how many prompts were in flight at once."""
+    from core.agent.approval import ApprovalWorkflow
+
+    responses = iter(approval_responses)
+    stats = {"calls": 0, "in_flight": 0, "max_in_flight": 0}
+    guard = threading.Lock()
+
+    def callback(tool_name: str, detail: str, safety_level: str) -> str:
+        with guard:
+            stats["calls"] += 1
+            stats["in_flight"] += 1
+            stats["max_in_flight"] = max(stats["max_in_flight"], stats["in_flight"])
+        # Hold the prompt long enough for an unserialized caller to overlap.
+        time.sleep(0.05)
+        with guard:
+            stats["in_flight"] -= 1
+        return next(responses)
+
+    gate = ApprovalWorkflow(
+        hitl_level=2,
+        auto_approve=False,
+        hooks=None,
+        approval_callback=callback,
     )
-    assert write_branch >= 0, "WRITE_TOOLS branch removed?"
-    follow = "\n".join(lines[write_branch : write_branch + 5])
-    assert "with self._approval_lock" in follow, (
-        "WRITE_TOOLS branch must enter _approval_lock before the always-set "
-        "check + confirm_write. See B6 root cause."
-    )
+    return gate, stats
 
 
-def test_approval_lock_wraps_expensive_branch() -> None:
-    """Same invariant for the EXPENSIVE_TOOLS branch."""
-    src = inspect.getsource(_approval_mod.ApprovalWorkflow.apply_safety_gates)
-    lines = src.splitlines()
-    cost_branch = next(
-        (i for i, ln in enumerate(lines) if "if tool_name in EXPENSIVE_TOOLS" in ln),
-        -1,
-    )
-    assert cost_branch >= 0
-    follow = "\n".join(lines[cost_branch : cost_branch + 5])
-    assert "with self._approval_lock" in follow, (
-        "EXPENSIVE_TOOLS branch must use _approval_lock too — same race shape"
-    )
+@pytest.mark.parametrize(
+    ("tool_name", "tool_input"),
+    [("manage_login", {"subcommand": "use"}), ("petri_audit", {})],
+)
+def test_parallel_one_time_approvals_prompt_serially(
+    tool_name: str, tool_input: dict[str, Any]
+) -> None:
+    """WRITE and EXPENSIVE gates hold the approval lock across the prompt, so
+    two parallel calls each get their own, non-overlapping prompt."""
+    gate, stats = _make_gate(["y", "y"])
+
+    async def scenario() -> list[tuple[Any, ...]]:
+        return list(
+            await asyncio.wait_for(
+                asyncio.gather(
+                    gate.apply_safety_gates_async(tool_name, tool_input),
+                    gate.apply_safety_gates_async(tool_name, tool_input),
+                ),
+                5,
+            )
+        )
+
+    results = asyncio.run(scenario())
+    assert results == [(None, True), (None, True)]
+    assert stats["calls"] == 2
+    assert stats["max_in_flight"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -73,55 +96,77 @@ def test_approval_lock_wraps_expensive_branch() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_gate(approval_responses: list[str]) -> Any:
-    """Build an ApprovalWorkflow whose approval_callback returns canned responses."""
-    from core.agent.approval import ApprovalWorkflow
-
-    responses = iter(approval_responses)
-
-    def callback(tool_name: str, detail: str, safety_level: str) -> str:
-        # Add a small sleep so the threads' timing actually overlaps.
-        time.sleep(0.05)
-        return next(responses)
-
-    return ApprovalWorkflow(
-        hitl_level=2,
-        auto_approve=False,
-        hooks=None,
-        approval_callback=callback,
-    )
-
-
 def test_second_parallel_write_short_circuits_after_always() -> None:
-    """End-to-end: thread A says "a", thread B (started immediately after)
-    must NOT prompt — it sees "write" in always_approved_categories under
-    the lock and approves silently. Pre-fix this hung 120s on the second
-    socket recv.
+    """End-to-end: call A says "a", call B (queued behind A's lock) must NOT
+    prompt — it sees "write" in always_approved_categories under the lock and
+    approves silently. Pre-fix this hung 120s on the second socket recv.
     """
-    gate = _make_gate(["a"])  # only ONE callback response — second must skip
+    gate, stats = _make_gate(["a"])  # only ONE callback response — second must skip
 
-    results: dict[str, tuple[Any, ...]] = {}
+    async def scenario() -> list[tuple[Any, ...]]:
+        first = asyncio.create_task(
+            gate.apply_safety_gates_async("manage_login", {"subcommand": "use"})
+        )
+        # Give A a head-start so it grabs the lock first.
+        await asyncio.sleep(0.01)
+        second = asyncio.create_task(
+            gate.apply_safety_gates_async("manage_login", {"subcommand": "use"})
+        )
+        return list(await asyncio.wait_for(asyncio.gather(first, second), 5))
 
-    def worker(tag: str) -> None:
-        results[tag] = gate.apply_safety_gates("manage_login", {"subcommand": "use"})
-
-    t_a = threading.Thread(target=worker, args=("a",))
-    t_b = threading.Thread(target=worker, args=("b",))
-    t_a.start()
-    # Give A a head-start so it grabs the lock first; B then waits on the lock
-    # and re-reads always_approved_categories after A releases.
-    time.sleep(0.01)
-    t_b.start()
-    t_a.join(timeout=5)
-    t_b.join(timeout=5)
-
-    assert not t_a.is_alive(), "thread A hung — approval lock starvation"
-    assert not t_b.is_alive(), "thread B hung — second caller never short-circuited"
-
-    rejection_a, approved_a = results["a"]
-    rejection_b, approved_b = results["b"]
+    (rejection_a, approved_a), (rejection_b, approved_b) = asyncio.run(scenario())
     assert rejection_a is None and approved_a is True
     assert rejection_b is None and approved_b is True, (
         "second parallel call must observe always-set promotion and approve"
     )
+    assert stats["calls"] == 1
     assert "write" in gate._always_approved_categories
+
+
+def test_cancelled_approval_waiter_releases_late_lock_grant() -> None:
+    async def scenario() -> None:
+        callback = Mock(return_value="y")
+        gate = _approval_mod.ApprovalWorkflow(approval_callback=callback)
+        lock = threading.Lock()
+        waiting = threading.Event()
+        acquired = threading.Event()
+
+        def acquire() -> bool:
+            waiting.set()
+            result = lock.acquire()
+            acquired.set()
+            return result
+
+        gate._approval_lock = Mock(acquire=acquire, release=lock.release)
+        lock.acquire()
+        task = asyncio.create_task(
+            gate.confirm_declared_async(
+                "edit_file", {}, per_invocation=False, contains_personal_data=False
+            )
+        )
+        try:
+            assert await asyncio.to_thread(waiting.wait, 1)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            lock.release()
+            assert await asyncio.to_thread(acquired.wait, 1)
+
+            async def wait_for_release() -> None:
+                while lock.locked():
+                    await asyncio.sleep(0.01)
+
+            await asyncio.wait_for(wait_for_release(), 1)
+            callback.assert_not_called()
+            assert await asyncio.wait_for(
+                gate.confirm_declared_async(
+                    "edit_file", {}, per_invocation=False, contains_personal_data=False
+                ),
+                1,
+            )
+            callback.assert_called_once()
+        finally:
+            if lock.locked():
+                lock.release()
+
+    asyncio.run(scenario())

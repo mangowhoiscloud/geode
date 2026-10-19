@@ -282,8 +282,6 @@ def test_orchestrator_prepends_tool_hints_block(monkeypatch: pytest.MonkeyPatch)
             SLOT_TOOL_HINTS: InContextSlot(
                 name=SLOT_TOOL_HINTS,
                 max_entries=3,
-                rank_by="success_rate",
-                injection_point="system_prompt",
             )
         },
     )
@@ -315,8 +313,6 @@ def test_orchestrator_no_op_when_no_failing_tools(monkeypatch: pytest.MonkeyPatc
             SLOT_TOOL_HINTS: InContextSlot(
                 name=SLOT_TOOL_HINTS,
                 max_entries=3,
-                rank_by="success_rate",
-                injection_point="system_prompt",
             )
         },
     )

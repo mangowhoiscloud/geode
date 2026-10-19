@@ -83,7 +83,7 @@ function Roadmap({ ko }: { ko: boolean }) {
 
       <h2 id="eco2">{ko ? "Eco²와 같은 기준으로 읽기" : "Read Eco² with the same criteria"}</h2>
       <p>{ko ? "Eco²의 답변 재생성은 작업 내 수정이며, 운영 로그·GitOps·개발 에이전트의 지식 보존은 별도 계층입니다. 이를 자율적인 개선 전략이나 recursive inheritance로 합쳐 부르지 않습니다. Eco²의 eval L1/L2/L3, 인프라 layer, 이 문서의 RSI L1–L5도 서로 다른 축입니다." : "Eco² answer regeneration is task-local refinement. Operational logs, GitOps, and retained developer-agent knowledge are separate layers, not one autonomous improvement strategy. Its eval L1/L2/L3, infrastructure layers, and RSI L1–L5 describe different axes."}</p>
-      <p><a href="https://mangowhoiscloud.github.io/eco2/#rsi-roadmap">{ko ? "Eco²의 현재 위치와 로드맵" : "Eco² current scope and roadmap"}</a>{" · "}<a href={href("capabilities/outer-loop")}>{ko ? "Crucible 실행 경계" : "Crucible execution boundaries"}</a></p>
+      <p><a href="https://mangowhois.ai/eco2/#rsi-roadmap">{ko ? "Eco²의 현재 위치와 로드맵" : "Eco² current scope and roadmap"}</a>{" · "}<a href={href("capabilities/outer-loop")}>{ko ? "Crucible 실행 경계" : "Crucible execution boundaries"}</a></p>
     </>
   );
 }

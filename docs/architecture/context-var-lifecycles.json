@@ -198,5 +198,13 @@
     "resetter": "run_timeline_scope finally resets its token; a worker binding ends with its subprocess",
     "lifetime": "one self-improving run scope or one inherited worker subprocess",
     "teardown": "the context manager restores the caller binding; worker-process exit discards its inherited binding"
+  },
+  "evals/petri/adapters/http_anthropic.py:_EXPLICIT_TOOL_CHOICE": {
+    "classification": "request_local_mutable_state",
+    "owner": "evals.petri.adapters.http_anthropic AnthropicPlatformAPI",
+    "setter": "AnthropicPlatformAPI.generate sets the admitted explicit tool_choice for one inspect_ai request",
+    "resetter": "AnthropicPlatformAPI.generate finally resets its token",
+    "lifetime": "one native Anthropic generate call (generate to completion_config)",
+    "teardown": "the generate finally restores the caller context even when the request raises or is cancelled"
   }
 }

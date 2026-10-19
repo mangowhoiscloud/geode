@@ -161,14 +161,12 @@ def test_dead_executor_fire_hook_stays_deleted() -> None:
 
 def test_thin_wrappers_delegate_to_dispatch() -> None:
     """The already-thin module wrappers keep routing through dispatch."""
-    import core.cli as cli_module
     from core.llm.router import _hooks as router_hooks
     from evolve.scaffold_search.loop import _hooks as sil_hooks
 
     for module, func_name in [
         (router_hooks, "_fire_hook"),
         (sil_hooks, "_fire_hook"),
-        (cli_module, "_fire_hook"),
     ]:
         source = inspect.getsource(getattr(module, func_name))
         assert "fire_hook(" in source, f"{module.__name__}.{func_name} does not delegate"
@@ -296,28 +294,37 @@ def test_fixed_seed_orchestrator_payload_does_not_warn(
 # ---------------------------------------------------------------------------
 
 
-def test_rule_changed_cli_handler_emits_action() -> None:
-    """CLI rule CRUD fires RULE_CHANGED with the action discriminator.
+def test_rule_changed_manage_rule_handler_emits_action(tmp_path) -> None:
+    """The manage_rule tool fires RULE_CHANGED with the action discriminator,
+    only after the owner actually applied the mutation.
 
-    (The tool-side sibling is pinned in test_hooks.py
+    (The registry-tool sibling is pinned in test_hooks.py
     ``test_rule_create_fires_hook``; the auto-trigger ``stage`` sibling in
     tests/evolve/scaffold_search/test_ol_a15_telemetry.py.)
     """
-    from unittest.mock import MagicMock, patch
+    from core.cli.tool_handlers.memory import _build_memory_handlers
+    from core.memory.project import ProjectMemory
+    from core.tools.memory_tools import MemoryToolServices
 
-    from core.cli.memory_handler import _handle_rule_action
-
+    hooks = HookSystem()
     fired: list[tuple[HookEvent, dict[str, Any]]] = []
-    mem = MagicMock()
-    mem.update_rule.return_value = True
-    with patch("core.memory.project.ProjectMemory", return_value=mem):
-        _handle_rule_action(
-            "update",
-            {"name": "my-rule"},
-            "body",
-            lambda event, data: fired.append((event, data)),
-        )
-    assert fired == [(HookEvent.RULE_CHANGED, {"action": "updated", "name": "my-rule"})]
+    hooks.register(
+        HookEvent.RULE_CHANGED, lambda event, data: fired.append((event, data)), name="spy"
+    )
+    memory = ProjectMemory(tmp_path)
+    handlers = _build_memory_handlers(MemoryToolServices(project_memory=memory), hooks)
+    manage_rule = handlers["manage_rule"]
+
+    missing = manage_rule(action="update", name="my-rule", content="body")
+    assert missing["status"] == "error" and missing["outcome"] == "not_found"
+    assert fired == []
+    assert manage_rule(action="create", name="my-rule", content="v1")["status"] == "ok"
+    assert manage_rule(action="update", name="my-rule", content="body")["status"] == "ok"
+    assert [data["action"] for _, data in fired] == ["created", "updated"]
+    assert {k: fired[1][1][k] for k in ("action", "name")} == {
+        "action": "updated",
+        "name": "my-rule",
+    }
 
 
 def test_collapsed_events_have_no_per_state_members() -> None:
@@ -405,17 +412,32 @@ def test_activity_and_hook_store_schema_versions_are_pinned():
 
 
 def test_single_approval_requested_per_gate():
-    """The outer safety gates no longer double-emit TOOL_APPROVAL_REQUESTED
+    """The outer safety gate does not double-emit TOOL_APPROVAL_REQUESTED
     around confirm_* (which emits internally, with the richer payload) —
-    Codex LOW-2. Pin: 11 sync/async emission sites, all inside
-    confirm_*/request_*."""
-    import inspect
+    Codex LOW-2. Driven through the real async gate entry."""
+    import asyncio
 
-    from core.agent import approval as approval_mod
+    from core.agent.approval import ApprovalWorkflow
 
-    src = inspect.getsource(approval_mod)
-    assert src.count("HookEvent.TOOL_APPROVAL_REQUESTED") == 11
-    gates_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates)
-    assert "TOOL_APPROVAL_REQUESTED" not in gates_src
-    gates_async_src = inspect.getsource(approval_mod.ApprovalWorkflow.apply_safety_gates_async)
-    assert "TOOL_APPROVAL_REQUESTED" not in gates_async_src
+    fired: list[HookEvent] = []
+
+    class _Hooks:
+        def trigger(self, event: HookEvent, data: dict[str, Any] | None = None) -> list[Any]:
+            fired.append(event)
+            return []
+
+        async def trigger_async(
+            self, event: HookEvent, data: dict[str, Any] | None = None
+        ) -> list[Any]:
+            fired.append(event)
+            return []
+
+    hooks: Any = _Hooks()
+    workflow = ApprovalWorkflow(
+        hooks=hooks,
+        approval_callback=lambda _name, _detail, _level: "y",
+    )
+    for tool_name in ("memory_save", "petri_audit"):
+        fired.clear()
+        assert asyncio.run(workflow.apply_safety_gates_async(tool_name, {})) == (None, True)
+        assert fired.count(HookEvent.TOOL_APPROVAL_REQUESTED) == 1

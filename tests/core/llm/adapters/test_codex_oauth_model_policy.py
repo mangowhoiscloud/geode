@@ -41,7 +41,7 @@ def test_required_policy_blocks_mismatch_before_client(
     monkeypatch.setattr(adapter, "_get_client", client)
 
     with pytest.raises(ValueError, match="disallowed by the required model policy"):
-        asyncio.run(_request(adapter, method, "gpt-5.5"))
+        asyncio.run(_request(adapter, method, "gpt-6-sol"))
     client.assert_not_called()
     with pytest.raises(_ClientBoundaryError):
         asyncio.run(_request(adapter, method, "gpt-5.6-sol"))
@@ -74,8 +74,8 @@ def test_default_configuration_preserves_existing_admission(
     monkeypatch.setattr(adapter, "_get_client", client)
 
     with pytest.raises(_ClientBoundaryError):
-        asyncio.run(_request(adapter, method, "gpt-5.5"))
-    client.assert_called_once_with("gpt-5.5")
+        asyncio.run(_request(adapter, method, "gpt-6.1-sol"))
+    client.assert_called_once_with("gpt-6.1-sol")
 
 
 @pytest.mark.parametrize("mutation", ["replace", "remove", "malform"])
@@ -93,12 +93,12 @@ def test_adapter_snapshots_required_policy_for_lifetime(
     elif mutation == "malform":
         path.write_text("{{invalid toml}}")
     else:
-        path.write_text('[policy]\nallowlist = ["gpt-5.5"]\n')
+        path.write_text('[policy]\nallowlist = ["gpt-6-sol"]\n')
     # Neither file changes nor a settings reload widens this live adapter.
     monkeypatch.setattr(settings, "model_policy_path", "")
 
     with pytest.raises(ValueError, match="disallowed by the required model policy"):
-        asyncio.run(_request(adapter, "acomplete", "gpt-5.5"))
+        asyncio.run(_request(adapter, "acomplete", "gpt-6-sol"))
     client.assert_not_called()
     with pytest.raises(_ClientBoundaryError):
         asyncio.run(_request(adapter, "acomplete", "gpt-5.6-sol"))
@@ -114,7 +114,7 @@ def test_required_policy_checks_resolved_default_model(
     path = tmp_path / "policy.toml"
     path.write_text('[policy]\nallowlist = ["gpt-5.6-sol"]\n')
     monkeypatch.setattr(settings, "model_policy_path", str(path))
-    monkeypatch.setattr(cfg, "CODEX_PRIMARY", "gpt-5.5")
+    monkeypatch.setattr(cfg, "CODEX_PRIMARY", "gpt-6-sol")
     adapter = CodexOAuthAdapter()
     client = Mock(side_effect=_ClientBoundaryError)
     monkeypatch.setattr(adapter, "_get_client", client)
@@ -125,7 +125,10 @@ def test_required_policy_checks_resolved_default_model(
 
 
 @pytest.mark.parametrize("method", ["acomplete", "astream", "aweb_search", "acomplete_text"])
-@pytest.mark.parametrize("model", ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"])
+@pytest.mark.parametrize(
+    "model",
+    ["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"],
+)
 def test_retired_subscription_model_rejected_before_credentials(
     monkeypatch: pytest.MonkeyPatch, method: str, model: str
 ) -> None:
@@ -150,17 +153,19 @@ def test_retired_subscription_list_does_not_advertise_user_overrides(
     monkeypatch.setattr(cfg, "CODEX_FALLBACK_CHAIN", ["gpt-5.2", "gpt-5.5", "gpt-5.6-sol"])
     assert [model.id for model in CodexOAuthAdapter().list_models()] == [
         "gpt-6-astra",
+        "gpt-6.1-sol",
         "gpt-6-sol",
         "gpt-6-luna",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-5.6-luna",
-        "gpt-5.5",  # Explicit configuration remains valid until retirement.
-    ]
+    ]  # The configured gpt-5.5 left Codex on 2026-10-14 and is not advertised.
     assert cfg.CODEX_PRIMARY == "gpt-5.4"  # no automatic config migration
 
 
-@pytest.mark.parametrize("model", ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"])
+@pytest.mark.parametrize(
+    "model", ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"]
+)
 def test_platform_models_still_reach_the_existing_client_boundary(
     monkeypatch: pytest.MonkeyPatch, model: str
 ) -> None:

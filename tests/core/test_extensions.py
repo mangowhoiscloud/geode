@@ -177,3 +177,31 @@ def test_policy_file_schema_is_graceful_by_default_and_strict_for_override(
                 explicit_override_strict=True,
             )
         )
+
+
+def test_import_defers_config_until_default_policy_is_read(tmp_path: Any) -> None:
+    import os
+    import subprocess
+    import sys
+
+    invalid = tmp_path / "override.json"
+    invalid.write_text('{"version": 2, "extensions": {}}', encoding="utf-8")
+    probe = (
+        "import os, sys\n"
+        "import core.extensions as ext\n"
+        "print('core.config' in sys.modules)\n"
+        "os.environ['GEODE_EXTENSION_POLICY_OVERRIDE'] = sys.argv[1]\n"
+        "try:\n"
+        "    ext.load_default_extension_policy()\n"
+        "except RuntimeError as exc:\n"
+        "    print('rejected', 'version=1' in str(exc))\n"
+    )
+    env = {k: v for k, v in os.environ.items() if k != "GEODE_EXTENSION_POLICY_OVERRIDE"}
+    completed = subprocess.run(  # noqa: S603 -- current interpreter, fixed probe
+        [sys.executable, "-c", probe, str(invalid)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert completed.stdout.split() == ["False", "rejected", "True"]

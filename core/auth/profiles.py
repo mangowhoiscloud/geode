@@ -17,8 +17,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from core.config.env_io import mask_key
-
 
 class CredentialType(Enum):
     """Credential type with implicit priority (lower ordinal = higher priority)."""
@@ -121,6 +119,9 @@ class AuthProfile:
 
     @property
     def masked_key(self) -> str:
+        # Importing core.config loads the routing manifest; only rendering needs it.
+        from core.config.env_io import mask_key
+
         return mask_key(self.key)
 
     def sort_key(self) -> tuple[int, float]:

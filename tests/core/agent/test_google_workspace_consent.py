@@ -131,9 +131,11 @@ def test_sensitive_denial_fails_closed_with_no_execution() -> None:
         return "n"
 
     workflow = ApprovalWorkflow(hitl_level=2, approval_callback=deny)
-    rejection, approved = workflow.apply_safety_gates(
-        "gmail_search",
-        {"query": "from:private@example.com"},
+    rejection, approved = asyncio.run(
+        workflow.apply_safety_gates_async(
+            "gmail_search",
+            {"query": "from:private@example.com"},
+        )
     )
     assert approved is False
     assert rejection is not None and rejection["denied"] is True
@@ -147,7 +149,9 @@ def test_sensitive_approval_is_recorded() -> None:
         hitl_level=2,
         approval_callback=lambda _name, _detail, _level: "y",
     )
-    rejection, approved = workflow.apply_safety_gates("google_docs_read", {"document_id": "d1"})
+    rejection, approved = asyncio.run(
+        workflow.apply_safety_gates_async("google_docs_read", {"document_id": "d1"})
+    )
     assert rejection is None
     assert approved is True
 
@@ -162,7 +166,9 @@ def test_sensitive_access_cannot_be_always_allowed() -> None:
 
     workflow = ApprovalWorkflow(hitl_level=0, approval_callback=always)
     for _ in range(2):
-        rejection, approved = workflow.apply_safety_gates("gmail_search", {"query": "is:unread"})
+        rejection, approved = asyncio.run(
+            workflow.apply_safety_gates_async("gmail_search", {"query": "is:unread"})
+        )
         assert approved is False
         assert rejection is not None and rejection["denied"] is True
     assert calls == 2
@@ -181,9 +187,11 @@ def test_google_mutation_ignores_skip_permissions_and_cached_write_allow() -> No
     token = _skip_permissions_var.set(True)
     try:
         for _ in range(2):
-            rejection, approved = workflow.apply_safety_gates(
-                "gmail_send",
-                {"to": "reader@example.com", "subject": "Review", "body": "private"},
+            rejection, approved = asyncio.run(
+                workflow.apply_safety_gates_async(
+                    "gmail_send",
+                    {"to": "reader@example.com", "subject": "Review", "body": "private"},
+                )
             )
             assert rejection is None
             assert approved is True

@@ -13,12 +13,15 @@ Usage::
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
 import os
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +65,41 @@ def atomic_write_text(
         with contextlib.suppress(OSError):
             os.unlink(tmp_path)
         raise
+
+
+@contextmanager
+def exclusive_file_lock(lock_path: Path, *, timeout_s: float = 10.0) -> Iterator[None]:
+    """Hold an exclusive ``flock`` on *lock_path* for one read-modify-write.
+
+    The lock lives on its own inode next to the data: ``atomic_write_text``
+    replaces the data file, so a lock on the data file itself would be lost
+    by the very write it protects. Separate descriptors exclude each other,
+    so this serializes threads as well as processes, and the kernel drops the
+    lock when its holder dies. The lock file is opened without following a
+    symlink and created owner-only.
+
+    Raises:
+        TimeoutError: The lock was not acquired within *timeout_s*.
+    """
+    lock_path = Path(lock_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        deadline = time.monotonic() + timeout_s
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Could not acquire lock: {lock_path}") from None
+                time.sleep(0.02)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
 
 
 def atomic_write_json(

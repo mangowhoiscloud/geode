@@ -20,8 +20,8 @@
 
 [model.defaults]
 anthropic = "claude-opus-5-5"
-anthropic_secondary = "claude-sonnet-5"
-anthropic_budget = "claude-haiku-4-5-20251001"
+anthropic_secondary = "claude-sonnet-5-5"
+anthropic_budget = "claude-haiku-5-5"
 openai = "gpt-6-sol"
 codex = "gpt-6-sol"
 glm = "glm-5.3"
@@ -38,7 +38,7 @@ glm = "glm-5.3"
 # transient-error coverage can opt in by editing ``~/.geode/routing.toml``:
 #
 #   [model.fallbacks]
-#   anthropic = ["claude-opus-5-5", "claude-sonnet-5"]
+#   anthropic = ["claude-opus-5-5", "claude-sonnet-5-5"]
 #
 # By default, primary failure raises ``BillingError`` (quota path) or
 # the last exception (transient path) and the user picks the next model

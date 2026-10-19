@@ -11,7 +11,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from core.mcp.calendar_port import CalendarEvent
+from core.mcp.base_notification import parse_mcp_result
+from core.mcp.calendar_port import CalendarEvent, CalendarReadError
 
 log = logging.getLogger(__name__)
 
@@ -61,10 +62,15 @@ class BaseCalendarAdapter:
             return False
         assert self._manager is not None
         try:
-            result = await self._manager.acall_tool(
-                self._server_name, "delete_event", {self._delete_id_key: event_id}
+            result = parse_mcp_result(
+                await self._manager.acall_tool(
+                    self._server_name, "delete_event", {self._delete_id_key: event_id}
+                )
             )
-            return "error" not in result
+            if result.get("error"):
+                log.warning("%s delete_event error: %s", self._source.title(), result["error"])
+                return False
+            return True
         except Exception as exc:
             log.warning("%s delete_event failed: %s", self._source.title(), exc)
             return False
@@ -77,23 +83,30 @@ class BaseCalendarAdapter:
         calendar_name: str | None = None,
         max_results: int = 20,
     ) -> list[CalendarEvent]:
-        """Async MCP-backed event listing."""
+        """Async MCP-backed event listing.
+
+        An unavailable server lists nothing; a failed call raises
+        :class:`CalendarReadError` instead of looking like an empty schedule.
+        """
         if not await self.ais_available():
             return []
         assert self._manager is not None
         now = datetime.now(UTC)
         time_min = (start or now).isoformat()
         time_max = (end or now + timedelta(days=7)).isoformat()
+        source = self._source.title()
         try:
             args = self._build_list_args(time_min, time_max, max_results, calendar_name)
-            result = await self._manager.acall_tool(self._server_name, "list_events", args)
-            if "error" in result:
-                log.warning("%s list_events error: %s", self._source.title(), result["error"])
-                return []
+            result = parse_mcp_result(
+                await self._manager.acall_tool(self._server_name, "list_events", args)
+            )
+            if result.get("error"):
+                raise CalendarReadError(f"{source} list_events failed: {result['error']}")
             return self._parse_events(self._extract_event_items(result))
+        except CalendarReadError:
+            raise
         except Exception as exc:
-            log.warning("%s list_events failed: %s", self._source.title(), exc)
-            return []
+            raise CalendarReadError(f"{source} list_events failed: {exc}") from exc
 
     async def acreate_event(
         self,
@@ -110,11 +123,19 @@ class BaseCalendarAdapter:
             raise RuntimeError(f"{self._source.title()} MCP server not available")
         assert self._manager is not None
         args = self._build_create_args(title, start, end, description, location, calendar_name)
-        result = await self._manager.acall_tool(self._server_name, "create_event", args)
-        if "error" in result:
+        result = parse_mcp_result(
+            await self._manager.acall_tool(self._server_name, "create_event", args)
+        )
+        if result.get("error"):
             raise RuntimeError(f"{self._source.title()} create_event failed: {result['error']}")
+        event_id = self._extract_event_id(result)
+        if not event_id:
+            raise RuntimeError(
+                f"{self._source.title()} create_event returned no event id; "
+                "the event cannot be confirmed"
+            )
         return CalendarEvent(
-            event_id=self._extract_event_id(result),
+            event_id=event_id,
             title=title,
             start=start,
             end=end,
@@ -131,10 +152,16 @@ class BaseCalendarAdapter:
             return []
         assert self._manager is not None
         try:
-            result = await self._manager.acall_tool(self._server_name, "list_calendars", {})
-            return self._extract_calendar_names(result)
-        except Exception:
-            return []
+            result = parse_mcp_result(
+                await self._manager.acall_tool(self._server_name, "list_calendars", {})
+            )
+        except Exception as exc:
+            raise CalendarReadError(f"{self._source.title()} list_calendars failed: {exc}") from exc
+        if result.get("error"):
+            raise CalendarReadError(
+                f"{self._source.title()} list_calendars failed: {result['error']}"
+            )
+        return self._extract_calendar_names(result)
 
     # --- Template methods for subclass overrides ---
 

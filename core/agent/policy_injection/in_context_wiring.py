@@ -223,9 +223,8 @@ def apply_in_context_slots(
             endpoint). Caller passes the list verbatim; orchestrator
             never mutates in place.
         system: The system prompt text. ``""`` when the caller hasn't
-            set one. Always returned alongside ``messages`` so a future
-            slot reader (``memory_recall`` / ``rubric_excerpts``) that
-            wants ``injection_point="system_prompt"`` can transform it.
+            set one. Always returned alongside ``messages`` because the
+            system-prompt slots prepend their blocks to it.
 
     Returns:
         ``(new_messages, new_system)`` — both are fresh objects when any

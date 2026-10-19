@@ -103,8 +103,8 @@ def test_get_binding_auditor_default(monkeypatch: pytest.MonkeyPatch) -> None:
     assert binding.source == "api_key"
     assert binding.provider == "anthropic"
     assert binding.adapter_module == "evals.petri.adapters.http_anthropic"
-    assert binding.inspect_prefix == "anthropic"
-    assert binding.inspect_id == "anthropic/claude-opus-4-7"
+    assert binding.inspect_prefix == "anthropic-platform"
+    assert binding.inspect_id == "anthropic-platform/claude-opus-4-7"
 
 
 def test_get_binding_anthropic_survives_subscription_fallback_gate(
@@ -120,7 +120,7 @@ def test_get_binding_judge_default(monkeypatch: pytest.MonkeyPatch) -> None:
     binding = get_binding("judge")
     assert binding.role == "judge"
     assert binding.model == "claude-sonnet-4-6"
-    assert binding.inspect_id == "anthropic/claude-sonnet-4-6"
+    assert binding.inspect_id == "anthropic-platform/claude-sonnet-4-6"
 
 
 def test_get_binding_target_uses_geode_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,7 +144,7 @@ def test_get_binding_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     binding = get_binding("auditor", model="claude-opus-4-7")
     assert binding.model == "claude-opus-4-7"
-    assert binding.inspect_id == "anthropic/claude-opus-4-7"
+    assert binding.inspect_id == "anthropic-platform/claude-opus-4-7"
 
 
 def test_get_binding_source_override(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -160,10 +160,10 @@ def test_get_binding_model_not_in_allowed_raises() -> None:
         get_binding("auditor", model="glm-4-6")
 
 
-def test_get_binding_judge_rejects_gpt54_mini() -> None:
-    """judge.allowed_models = [opus, sonnet, gpt-5.5] — gpt-5.4-mini not in."""
+def test_get_binding_judge_rejects_model_outside_catalog_and_listed_extras() -> None:
+    """Current offerings and listed extras are admitted; anything else is rejected."""
     with pytest.raises(ValueError, match="not in allowed_models"):
-        get_binding("judge", model="gpt-5.4-mini")
+        get_binding("judge", model="gpt-custom-judge")
 
 
 def test_get_binding_unknown_role_raises() -> None:

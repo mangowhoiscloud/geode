@@ -102,7 +102,9 @@ export default function Page() {
               <code>_handle_approval_request</code>)는 스피너를 잠시 멈추고{" "}
               <code>◆ Approval · &lt;tool&gt; (&lt;category&gt;)</code> 헤더에 한
               줄 요약, 그리고 <code>y allow · n deny · a always-allow</code> 키
-              안내를 로즈 색으로 띄웁니다.
+              안내를 로즈 색으로 띄웁니다. <code>y</code>는 그 요청 한 번만
+              허용하며, 반복해서 답해도 상시 허용으로 바뀌지 않습니다. 세션 동안
+              유지되는 허용은 명시적인 <code>a</code>뿐입니다.
             </p>
 
             <h2>최상위 명령</h2>
@@ -364,7 +366,10 @@ export default function Page() {
               shows a rose-styled{" "}
               <code>◆ Approval · &lt;tool&gt; (&lt;category&gt;)</code> header
               with a one-line detail and the key legend{" "}
-              <code>y allow · n deny · a always-allow</code>.
+              <code>y allow · n deny · a always-allow</code>. <code>y</code>{" "}
+              approves only that request, and repeating it never turns into a
+              standing allow; only an explicit <code>a</code> persists for the
+              session.
             </p>
 
             <h2>Top-level commands</h2>

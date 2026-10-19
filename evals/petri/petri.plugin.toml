@@ -34,59 +34,35 @@ enabled_roles = ["auditor", "target", "judge"]
 #     output. Operators promote to Opus / GPT-5.5 via
 #     `[self_improving_loop.petri.target].model` when they have a
 #     specific evaluation budget.
+#
+# ``allowed_models`` lists only extra historical or alias ids: every current
+# Anthropic/OpenAI offering in core/llm/model_catalog.py is admitted for each
+# role that sets ``current_models = true``; omit it for a deliberately narrower role.
 
 [petri.role.auditor]
+current_models = true
 default_model = "claude-opus-4-7"
 allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
     "claude-haiku-4-5",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4",
 ]
 role_contract = "roles/auditor.md"
 
 [petri.role.target]
+current_models = true
 # Target always routes through GeodeModelAPI (`geode/<model>`) regardless of
 # provider — the audit evaluates GEODE-as-a-system. The user only pins the base
 # LLM GEODE uses internally.
 default_model = "claude-haiku-4-5"
 allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
     "claude-haiku-4-5",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.4-mini",
     "glm-4-6",
 ]
 role_contract = "roles/target.md"
 
 [petri.role.judge]
+current_models = true
 default_model = "claude-sonnet-4-6"
-allowed_models = [
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-sonnet-4-6",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-]
+allowed_models = []
 role_contract = "roles/judge.md"
 
 # ── Sources (per provider) ─────────────────────────────────────────────────────
@@ -111,13 +87,13 @@ allowed = ["api_key"]
 
 [petri.adapter.anthropic.api_key]
 module = "evals.petri.adapters.http_anthropic"
-inspect_prefix = "anthropic"
+inspect_prefix = "anthropic-platform"
 auth_env_vars = ["ANTHROPIC_API_KEY"]
 endpoint = "https://api.anthropic.com"
 
 [petri.adapter.openai.api_key]
 module = "evals.petri.adapters.http_openai"
-inspect_prefix = "openai"
+inspect_prefix = "openai-platform"
 auth_env_vars = ["OPENAI_API_KEY"]
 endpoint = "https://api.openai.com"
 

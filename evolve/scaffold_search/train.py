@@ -1206,10 +1206,17 @@ def main() -> int:
         # PROMOTE decision is a SEEDED coin-flip, NOT the fitness gate. The draw
         # is ``Random(promote_policy_seed + cycle_index)`` so the entire random
         # campaign is reproducible from the recorded seed (no bare randomness).
-        ok = gate._random_accept_draw(promote_policy_seed, _cycle_index)
-        reason = (
-            f"promote_policy=random (seed={promote_policy_seed}, "
-            f"cycle={_cycle_index}, draw={'accept' if ok else 'reject'})"
+        # The control arm randomizes selection, not measurement validity: an
+        # incomplete audit never becomes the baseline whatever the draw.
+        ok, reason = gate._random_arm_decision(
+            gate._random_accept_draw(promote_policy_seed, _cycle_index),
+            promote_policy_seed,
+            _cycle_index,
+            dim_means,
+            baseline_means,
+            dim_stderr,
+            baseline_stderr,
+            anchor_confidence_mode=_anchor_confidence_mode,
         )
         if ok:
             ledger._write_baseline(dim_means, dim_stderr, **_baseline_provenance)

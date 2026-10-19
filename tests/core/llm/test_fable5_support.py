@@ -58,12 +58,15 @@ def test_pricing_and_context_window() -> None:
 
 
 def test_plugin_allowlists_include_fable() -> None:
-    for rel in (
-        "evals/seed_generation/seed_generation.plugin.toml",
-        "evals/petri/petri.plugin.toml",
-    ):
-        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
-        assert FABLE in text, rel
+    from evals.petri.manifest import load_manifest as load_petri
+    from evals.seed_generation.manifest import load_manifest as load_seed
+
+    # Loaded role membership (the catalog-derived allowlists), not TOML text.
+    petri, seed = load_petri(), load_seed()
+    for role in ("auditor", "target", "judge"):
+        assert {FABLE} <= set(petri.get_role(role).allowed_models), role
+    for role in seed.roles:
+        assert {FABLE} <= set(seed.get_role(role).allowed_models), role
 
 
 def test_refusal_stop_reason_flows_to_result() -> None:

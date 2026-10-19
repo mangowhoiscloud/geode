@@ -24,7 +24,7 @@ class TestC3FileLock:
     """Verify inter-process file lock on scheduler save/load."""
 
     def test_save_atomic_write(self, tmp_path: Path) -> None:
-        """save() should atomically write job store using O_EXCL lock."""
+        """save() writes the store atomically under a separate lock-file inode."""
         from core.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
 
         store = tmp_path / "jobs.json"
@@ -40,8 +40,11 @@ class TestC3FileLock:
         svc.save()
 
         assert store.exists()
-        # Lock file is transient (O_EXCL + release), so not persisted after save
-        assert not (tmp_path / "scheduled_tasks.lock").exists()
+        # The flock lives on its own inode (the store itself is replaced by
+        # os.replace); the lock file persists and is released, not deleted.
+        lock = tmp_path / "scheduled_tasks.lock"
+        assert lock.exists()
+        assert not list(tmp_path.glob(".jobs.json.*.tmp"))
 
     def test_load_with_lock(self, tmp_path: Path) -> None:
         """load() should work correctly with file locking."""
@@ -279,7 +282,10 @@ class TestM3StuckJobDetection:
 
         assert stuck == ["stuck-1"]
         assert job.last_status == "stuck"
-        assert job.running_since_ms is None
+        # Elapsed time is not observed termination: an unowned (legacy) run keeps
+        # its claim, so a second execution cannot overlap the original.
+        assert job.running_since_ms == 1.0
+        assert svc.run_now("stuck-1")["reason"] == "already_running"
 
     def test_not_stuck_below_threshold(self) -> None:
         from core.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService

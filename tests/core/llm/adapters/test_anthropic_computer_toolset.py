@@ -18,19 +18,21 @@ from core.llm.errors import LLMResponseValidationError
 from core.tools.handlers.single_tool import _build_computer_use_handler
 
 
-def _request() -> AdapterCallRequest:
+def _request(model: str = "claude-opus-5-5") -> AdapterCallRequest:
     return AdapterCallRequest(
-        model="claude-opus-5-5",
+        model=model,
         messages=(),
         executable_tool_names=frozenset({"computer"}),
         tools=(ToolSpec(name="computer", description="Desktop", input_schema={"type": "object"}),),
     )
 
 
-def test_toolset_wire_is_serial_and_withholds_unimplemented_members() -> None:
+# Claude 5.5 models on the direct API accept only the toolset (checked 2026-10-14).
+@pytest.mark.parametrize("model", ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"])
+def test_toolset_wire_is_serial_and_withholds_unimplemented_members(model: str) -> None:
     with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=True):
-        kwargs = build_create_kwargs(_request())
-        assert kwargs == build_stream_kwargs(_request())
+        kwargs = build_create_kwargs(_request(model))
+        assert kwargs == build_stream_kwargs(_request(model))
         tool = kwargs["tools"][0]
         assert len(kwargs["tools"]) == 1
         assert tool == {
@@ -42,7 +44,7 @@ def test_toolset_wire_is_serial_and_withholds_unimplemented_members() -> None:
         }
         assert kwargs["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
         assert "computer-use-" not in kwargs["extra_headers"]["anthropic-beta"]
-        none = build_create_kwargs(replace(_request(), tool_choice="none"))
+        none = build_create_kwargs(replace(_request(model), tool_choice="none"))
         assert none["tool_choice"] == {"type": "none"}
 
 

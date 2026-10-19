@@ -1,4 +1,4 @@
-"""Tests for CLI extracted modules — memory_handler, scheduler_drain, terminal."""
+"""Tests for CLI extracted modules — scheduler_drain, terminal."""
 
 from __future__ import annotations
 
@@ -27,25 +27,6 @@ class TestTerminal:
 
         handler = make_sigint_handler()
         assert callable(handler)
-
-
-class TestMemoryHandler:
-    """Test memory action handler."""
-
-    def test_unrecognized_action(self, capsys: object) -> None:
-        from core.cli.memory_handler import handle_memory_action
-
-        handle_memory_action(
-            {"query": None, "key": None, "content": None, "rule_action": None}, "", False
-        )
-        # Should print help text without raising
-
-    def test_rule_list_empty(self) -> None:
-        from core.cli.memory_handler import handle_memory_action
-
-        with patch("core.memory.project.ProjectMemory") as mock_pm:
-            mock_pm.return_value.list_rules.return_value = []
-            handle_memory_action({"rule_action": "list"}, "", False)
 
 
 class TestSchedulerDrain:

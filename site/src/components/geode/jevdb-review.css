@@ -1,0 +1,111 @@
+/* Reader chrome follows export-jev-report.mjs; v25 slide pixels stay source-owned. */
+@font-face { font-family: "Jev Reader"; src: url("/geode/resaerch/jev-system1-offloading/assets/fonts/Pretendard-Regular.otf") format("opentype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Jev Reader"; src: url("/geode/resaerch/jev-system1-offloading/assets/fonts/Pretendard-Bold.otf") format("opentype"); font-weight: 600 700; font-display: swap; }
+@font-face { font-family: "Jev Reader Mono"; src: url("/geode/resaerch/jev-system1-offloading/assets/fonts/IBMPlexMono-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+.jevdb-reader { --reader-paper: #f3f4f7; --reader-ink: #171b27; --reader-muted: #515c6a; --reader-accent: #304fc4; --reader-line: #cbd1dc; --reader-canvas: #edf0f4; --reader-surface: #e2e6ee; min-height: 100dvh; background: var(--reader-canvas); color: var(--reader-ink); font: 400 15px/1.55 "Jev Reader", sans-serif; word-break: keep-all; overflow-wrap: anywhere; padding-bottom: 24px; }
+.jevdb-reader a { color: inherit; text-decoration: none; }
+html:has(.jevdb-reader) { background: #edf0f4; scrollbar-color: #cbd1dc #edf0f4; scroll-behavior: auto; }
+.jevdb-reader * { scrollbar-color: var(--reader-line) var(--reader-canvas); }
+.jevdb-reader ::selection { background: #e3e8f8; color: var(--reader-ink); }
+.jevdb-reader button, .jevdb-reader a { touch-action: manipulation; }
+.jevdb-reader button { cursor: pointer; }
+.jevdb-reader :focus-visible { outline: 2px solid var(--reader-accent); outline-offset: 3px; }
+.jevdb-reader button:disabled { color: var(--reader-muted); opacity: .6; cursor: not-allowed; }
+.jevdb-reader .jevdb-skip { position: absolute; top: -100px; }
+.jevdb-reader .jevdb-skip:focus { top: 8px; left: 8px; background: var(--reader-paper); padding: 12px; z-index: 3; }
+.jevdb-header { width: calc(100% - 48px); max-width: 1376px; margin: auto; padding: 16px 0; min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.jevdb-identity, .jevdb-actions, .jevdb-languages, .jevdb-tools, .jevdb-pager { display: flex; align-items: center; }
+.jevdb-identity { gap: 20px; min-width: 0; }
+.jevdb-home { font-weight: 700; letter-spacing: .03em; padding-right: 20px; border-right: 1px solid var(--reader-line); display: inline-flex; align-items: center; min-height: 44px; white-space: nowrap; flex-shrink: 0; }
+.jevdb-header h1 { font-size: 18px; line-height: 1.3; font-weight: 600; letter-spacing: -.02em; margin: 0; }
+.jevdb-header p { margin: 3px 0 0; font-size: 12px; line-height: 1.35; color: var(--reader-muted); }
+.jevdb-actions { flex-shrink: 0; gap: 16px; }
+.jevdb-languages { padding: 2px; border: 1px solid var(--reader-line); border-radius: 6px; gap: 2px; }
+.jevdb-header button, .jevdb-actions a, .jevdb-toolbar button, .jevdb-dialog-heading button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; white-space: nowrap; padding: 0 12px; border-radius: 4px; font-size: 13px; font-weight: 500; }
+.jevdb-languages button { min-width: 68px; color: var(--reader-muted); }
+.jevdb-languages button[aria-pressed="true"] { color: var(--reader-ink); background: var(--reader-paper); box-shadow: 0 1px 2px #171b2712; }
+.jevdb-header .jevdb-download { padding: 0 18px; background: var(--reader-ink); color: var(--reader-paper); font-weight: 600; border: 1px solid var(--reader-ink); }
+.jevdb-header .jevdb-download:hover { background: #252523; }
+.jevdb-video:hover, .jevdb-toolbar button:not(:disabled):hover, .jevdb-dialog-heading button:hover { background: var(--reader-surface); }
+.jevdb-workspace { width: calc(100% - 48px); max-width: 1376px; margin: auto; display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 24px; }
+.jevdb-contents-hidden { grid-template-columns: minmax(0, 1fr); }
+.jevdb-content { min-width: 0; }
+.jevdb-toc { position: sticky; top: 16px; align-self: start; height: calc(100dvh - 32px); display: flex; flex-direction: column; padding-right: 12px; border-right: 1px solid var(--reader-line); }
+.jevdb-contents-hidden .jevdb-toc { display: none; }
+.jevdb-toc h2 { min-height: 64px; display: flex; align-items: center; gap: 4px; margin: 0; font-size: 13px; font-weight: 600; }
+.jevdb-toc small, .jevdb-dialog-heading small { font-size: 12px; font-weight: 400; color: var(--reader-muted); }
+.jevdb-scene-list { overflow: auto; overscroll-behavior: contain; padding: 4px 4px 12px; }
+.jevdb-scene-list a { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; min-height: 44px; padding: 10px 8px; margin-bottom: 2px; border-radius: 4px; color: var(--reader-muted); font-size: 12px; line-height: 1.45; }
+.jevdb-scene-list a > span:first-child { font-family: "Jev Reader Mono", monospace; font-size: 11px; padding-top: 1px; }
+.jevdb-scene-list a:hover, .jevdb-scene-list a[aria-current="page"] { background: var(--reader-surface); color: var(--reader-ink); }
+.jevdb-scene-list a[aria-current="page"] { font-weight: 600; }
+.jevdb-toolbar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 12px; padding: 10px 0; border-top: 1px solid var(--reader-line); background: var(--reader-canvas); }
+.jevdb-tools { flex-wrap: wrap; gap: 4px; }
+.jevdb-toolbar button { border: 1px solid transparent; }
+.jevdb-toolbar .jevdb-contents-mobile { display: none; }
+.jevdb-toolbar button[aria-pressed="true"] { background: var(--reader-surface); border-color: var(--reader-line); }
+.jevdb-static-label { color: var(--reader-muted); font-size: 12px; padding: 0 8px; }
+.jevdb-pager { gap: 8px; flex-shrink: 0; }
+.jevdb-counter { margin: 0 4px; min-width: 166px; text-align: center; color: var(--reader-muted); font: 12px/1.3 "Jev Reader Mono", monospace; font-variant-numeric: tabular-nums; }
+.jevdb-canvas { display: block; background: var(--reader-paper); outline: 1px solid var(--reader-line); box-shadow: 0 2px 12px #171b270a; }
+.jevdb-canvas img { display: block; width: 100%; height: auto; }
+.jevdb-caption-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--reader-muted); font-size: 12px; padding-top: 8px; }
+.jevdb-caption-row a { min-height: 44px; display: inline-flex; align-items: center; flex-shrink: 0; text-decoration: underline; text-underline-offset: 4px; }
+.jevdb-reading-note { padding: 20px 0 4px; border-top: 1px solid var(--reader-line); margin-top: 8px; }
+.jevdb-note-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 12px; }
+.jevdb-note-heading h2 { font-size: 18px; line-height: 1.4; font-weight: 600; letter-spacing: -.02em; margin: 0; }
+.jevdb-note-heading > span { flex-shrink: 0; font: 12px "Jev Reader Mono", monospace; color: var(--reader-muted); }
+.jevdb-reading-note p { margin: 0 0 12px; max-width: 84ch; font-size: 14px; line-height: 1.7; }
+.jevdb-reading-note .jevdb-scope { color: var(--reader-accent); font-size: 12px; }
+.jevdb-reading-note .jevdb-citation { color: var(--reader-muted); font-size: 12px; }
+.jevdb-transcript-button, .jevdb-related { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; text-decoration: underline !important; text-underline-offset: 4px; margin-right: 20px; }
+.jevdb-transcript { border-left: 2px solid var(--reader-line); padding-left: 16px; margin-top: 12px; }
+.jevdb-transcript p { font-size: 13px; }
+.jevdb-overview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; }
+.jevdb-overview button { text-align: left; min-width: 0; border-radius: 2px; }
+.jevdb-overview img { width: 100%; height: auto; border: 1px solid var(--reader-line); }
+.jevdb-overview span { display: block; padding-top: 8px; font-size: 12px; color: var(--reader-muted); }
+.jevdb-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 24px; border-top: 1px solid var(--reader-line); padding-top: 16px; margin-top: 20px; }
+.jevdb-footer p { font-size: 12px; line-height: 1.65; color: var(--reader-muted); margin: 0; }
+.jevdb-footer button { min-height: 44px; padding: 0; border-radius: 4px; font-size: 13px; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--reader-line); }
+.jevdb-footer button:hover { text-decoration-color: currentColor; }
+body:has(.jevdb-dialog[open]) { overflow: hidden; }
+.jevdb-dialog { position: fixed; margin: 0; padding: 0; max-height: none; border: 1px solid var(--reader-line); border-radius: 6px; background: var(--reader-canvas); color: var(--reader-ink); overflow: hidden; }
+.jevdb-dialog[open] { display: flex; flex-direction: column; }
+.jevdb-dialog::backdrop { background: color-mix(in srgb, var(--reader-ink) 30%, transparent); }
+.jevdb-toc-dialog { inset: 16px auto 16px 16px; width: min(360px, calc(100vw - 32px)); height: calc(100dvh - 32px); }
+.jevdb-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--reader-line); flex-shrink: 0; }
+.jevdb-dialog-heading h2 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.4; }
+.jevdb-dialog-heading button { min-width: 64px; border: 1px solid var(--reader-line); }
+.jevdb-sources { inset: 16px 16px 16px auto; width: 600px; max-width: calc(100vw - 32px); height: calc(100dvh - 32px); }
+.jevdb-sources-body { overflow: auto; overscroll-behavior: contain; min-height: 0; padding: 20px 24px 28px; }
+.jevdb-sources-body p { font-size: 13px; line-height: 1.65; color: var(--reader-muted); margin: 0; }
+.jevdb-sources-body section { margin-top: 28px; }
+.jevdb-sources-body h3 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+.jevdb-sources-body ul { padding: 0; margin: 0 0 16px; list-style: none; }
+.jevdb-sources-body li a { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: baseline; min-height: 44px; padding: 10px 0; font-size: 13px; color: var(--reader-muted); }
+.jevdb-sources-body li a > span:first-child { font: 11px "Jev Reader Mono", monospace; }
+.jevdb-sources-body a:hover { color: var(--reader-ink); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 1199px) { .jevdb-toolbar { flex-wrap: wrap; } .jevdb-pager { margin-left: auto; } .jevdb-actions { gap: 8px; } }
+@media (max-width: 1023px) { .jevdb-workspace { grid-template-columns: minmax(0, 1fr); } .jevdb-toc { display: none; } .jevdb-toolbar .jevdb-contents-desktop { display: none; } .jevdb-toolbar .jevdb-contents-mobile { display: inline-flex; } .jevdb-header { flex-wrap: wrap; gap: 12px; } .jevdb-actions { margin-left: auto; } }
+@media (max-width: 767px) {
+  .jevdb-header { display: grid; grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 12px 0; gap: 10px; }
+  .jevdb-identity { gap: 14px; } .jevdb-home { padding-right: 14px; } .jevdb-header h1 { font-size: 16px; }
+  .jevdb-actions { justify-content: space-between; gap: 6px; margin: 0; flex-wrap: wrap; }
+  .jevdb-actions a { padding: 0 8px; } .jevdb-header .jevdb-download { padding: 0 12px; } .jevdb-languages button { min-width: 60px; padding: 0 8px; }
+  .jevdb-workspace { width: calc(100% - 32px); }
+  .jevdb-toolbar { flex-direction: column; align-items: stretch; gap: 8px; padding: 8px 0; margin-bottom: 10px; }
+  .jevdb-tools { justify-content: space-between; gap: 2px; } .jevdb-toolbar button { padding: 0 10px; }
+  .jevdb-pager { justify-content: space-between; gap: 0; margin: 0; } .jevdb-counter { min-width: 0; margin: 0 2px; font-size: 11px; }
+  .jevdb-static-label { font-size: 11px; padding: 0; } .jevdb-caption-row { font-size: 11px; }
+  .jevdb-footer { grid-template-columns: 1fr; gap: 8px; margin-top: 16px; } .jevdb-footer button { justify-self: start; }
+  .jevdb-overview { grid-template-columns: minmax(0, 1fr); }
+  .jevdb-sources { inset: 8px; width: calc(100vw - 16px); max-width: none; height: calc(100dvh - 16px); }
+  .jevdb-dialog-heading { padding: 12px 16px; } .jevdb-sources-body { padding: 20px 16px 24px; }
+}
+@media print { .jevdb-header, .jevdb-toc, .jevdb-toolbar, .jevdb-dialog { display: none !important; } .jevdb-workspace { display: block; width: 100%; } }
+
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  .jevdb-pager button { min-width: 72px; }
+  .jevdb-pager button:focus-visible { background: var(--reader-surface); }
+}

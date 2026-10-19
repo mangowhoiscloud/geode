@@ -80,7 +80,9 @@ class TestApprovalGatesBypass:
 
     def test_write_gate_bypassed_when_skip(self) -> None:
         set_skip_permissions(True)
-        rejection, approved = _wf().apply_safety_gates("edit_file", {"path": "x", "content": "y"})
+        rejection, approved = asyncio.run(
+            _wf().apply_safety_gates_async("edit_file", {"path": "x", "content": "y"})
+        )
         assert rejection is None
         assert approved is True
 
@@ -89,7 +91,7 @@ class TestApprovalGatesBypass:
         wf = _wf()
         for _ in range(3):  # auto-deny path returns rejection without prompting
             wf.track_decision("edit_file", "n")
-        _rejection, approved = wf.apply_safety_gates("edit_file", {"path": "x"})
+        _rejection, approved = asyncio.run(wf.apply_safety_gates_async("edit_file", {"path": "x"}))
         assert approved is False
 
     def test_bash_auto_approved_when_skip(self) -> None:

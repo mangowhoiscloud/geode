@@ -534,7 +534,12 @@ def build_stream_kwargs(
 def report_input_transformations(response: Any) -> None:
     """Surface provider-confirmed reasoning loss without logging signed content."""
     transformations = getattr(response, "input_transformations", None) or []
-    for reason in ("prefix_binding_mismatch", "model_binding_mismatch"):
+    # Sonnet/Haiku 5.5 blocks are also account-bound (organization mismatch).
+    for reason in (
+        "prefix_binding_mismatch",
+        "model_binding_mismatch",
+        "organization_binding_mismatch",
+    ):
         count = sum(
             (entry.get("reason") if isinstance(entry, dict) else getattr(entry, "reason", None))
             == reason

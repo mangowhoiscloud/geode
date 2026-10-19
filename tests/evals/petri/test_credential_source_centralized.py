@@ -97,7 +97,7 @@ def test_explicit_per_role_api_key_routes_to_anthropic_api() -> None:
     from evals.petri.models import to_inspect_model
 
     api_key_routed = to_inspect_model("claude-opus-4-8", source="api_key")
-    assert api_key_routed.startswith("anthropic/")
+    assert api_key_routed.startswith("anthropic-platform/")
     with pytest.raises(RuntimeError, match="integration is retired"):
         to_inspect_model("claude-opus-4-8", source="claude-cli")
 

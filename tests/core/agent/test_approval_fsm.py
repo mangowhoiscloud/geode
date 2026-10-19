@@ -334,7 +334,9 @@ class TestGateIntegration:
         record = wf.begin_record("memory_save")
         assert record is not None and record.category == "write"
         with _console_input("core.agent.approval.console", "a"):
-            approved = wf.confirm_write("memory_save", {"content": "x"}, record=record)
+            approved = asyncio.run(
+                wf.confirm_write_async("memory_save", {"content": "x"}, record=record)
+            )
         assert approved is True
         assert "write" in wf._always_approved_categories
         assert record.state == "granted"
@@ -345,7 +347,9 @@ class TestGateIntegration:
         wf = _workflow()
         record = wf.begin_record("memory_save")
         with _console_input("core.agent.approval.console", "n"):
-            approved = wf.confirm_write("memory_save", {"content": "x"}, record=record)
+            approved = asyncio.run(
+                wf.confirm_write_async("memory_save", {"content": "x"}, record=record)
+            )
         assert approved is False
         assert record is not None
         assert record.state == "denied"
@@ -356,7 +360,7 @@ class TestGateIntegration:
         record = wf.begin_record("petri_audit")
         assert record is not None and record.category == "expensive"
         with _console_input("core.agent.approval.console", "a"):
-            approved = wf.confirm_cost("petri_audit", 5.0, record=record)
+            approved = asyncio.run(wf.confirm_cost_async("petri_audit", 5.0, record=record))
         assert approved is True
         assert "cost" in wf._always_approved_categories
         assert record.state == "granted"
@@ -366,7 +370,9 @@ class TestGateIntegration:
         record = wf.begin_record("run_bash")
         assert record is not None and record.category == "bash"
         with _console_input("core.agent.approval.console", "a"):
-            approved = wf.request_bash_approval("rm -rf ./build", "cleanup", record=record)
+            approved = asyncio.run(
+                wf.request_bash_approval_async("rm -rf ./build", "cleanup", record=record)
+            )
         assert approved is True
         assert "bash" in wf._always_approved_categories
         assert record.state == "granted"
@@ -376,7 +382,9 @@ class TestGateIntegration:
         record = wf.begin_mcp_record("custom-server", "some_tool")
         assert record.category == "mcp"
         with _console_input("core.agent.approval.console", "a"):
-            approved = wf.confirm_mcp("custom-server", "some_tool", record=record)
+            approved = asyncio.run(
+                wf.confirm_mcp_async("custom-server", "some_tool", record=record)
+            )
         assert approved is True
         assert "mcp:custom-server" in wf._always_approved_categories
         assert record.state == "granted"
@@ -416,7 +424,9 @@ class TestGateIntegration:
             wf.track_decision("memory_save", "n")
         record = wf.begin_record("memory_save")
         with patch("core.cli._restore_terminal"):
-            approved = wf.confirm_write("memory_save", {"content": "x"}, record=record)
+            approved = asyncio.run(
+                wf.confirm_write_async("memory_save", {"content": "x"}, record=record)
+            )
         assert approved is False
         assert record is not None
         assert record.state == "denied"
@@ -611,7 +621,7 @@ class _FakeStreamWriter:
 
 
 class TestIPCApprovalRoundTrip:
-    @pytest.mark.parametrize("path", ["write", "write_async", "declared_async"])
+    @pytest.mark.parametrize("path", ["write_async", "declared_async"])
     @pytest.mark.parametrize("decision", ["y", "n"])
     def test_switch_model_detail_reaches_approval_callback(self, path: str, decision: str) -> None:
         from core.server.ipc_server.poller import _AsyncClientEndpoint
@@ -624,11 +634,7 @@ class TestIPCApprovalRoundTrip:
             assert record is not None
             endpoint.feed_approval_response(decision, record.approval_id)
             arguments = {"role": "judgment", "model_hint": "llm"}
-            if path == "write":
-                approved = await asyncio.to_thread(
-                    workflow.confirm_write, "switch_model", arguments, record
-                )
-            elif path == "write_async":
+            if path == "write_async":
                 approved = await workflow.confirm_write_async("switch_model", arguments, record)
             else:
                 approved = await workflow.confirm_declared_async(

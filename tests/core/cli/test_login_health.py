@@ -222,3 +222,46 @@ def test_login_health_renders_actionable_suggestion(capsys: pytest.CaptureFixtur
         "actionable suggestion missing — `_HEALTH_SUGGESTIONS[cooling_down]` "
         "must surface so the user sees how to recover"
     )
+
+
+def test_login_health_expired_advice_matches_credential_owner(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Native GEODE OAuth recovers via `/login openai`; an imported Codex CLI
+    token recovers via `codex login` + `/login refresh`."""
+    from core.cli.commands.login import _login_health
+
+    store = ProfileStore()
+    for name, managed_by in (("openai-codex:native", ""), ("openai-codex:codex-cli", "codex-cli")):
+        store.add(
+            AuthProfile(
+                name=name,
+                provider="openai-codex",
+                credential_type=CredentialType.OAUTH,
+                key="expired-token",
+                expires_at=1.0,
+                managed_by=managed_by,
+            )
+        )
+
+    with _patch_health(store):
+        _login_health("openai-codex:native")
+    native = " ".join(capsys.readouterr().out.split())
+    with _patch_health(store):
+        _login_health("openai-codex:codex-cli")
+    imported = " ".join(capsys.readouterr().out.split())
+
+    assert "expired" in native and "/login openai" in native
+    assert "codex login" not in native
+    assert "codex login" in imported and "/login refresh" in imported
+
+
+def test_login_health_cooldown_advice_does_not_claim_use_switches_provider() -> None:
+    """`/login use` only reorders plans for their own provider; provider
+    switches go through `/model`."""
+    from core.cli.commands.login import _HEALTH_SUGGESTIONS
+
+    advice = _HEALTH_SUGGESTIONS["cooling_down"]
+    assert "same provider" in advice
+    assert "/model" in advice
+    assert "switch providers" not in advice

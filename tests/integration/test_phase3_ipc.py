@@ -57,6 +57,8 @@ def _mock_session_loop() -> MagicMock:
         _checkpoint=None,
     )
     loop.executor._bash._working_dir = str(Path.cwd())
+    # AgenticLoop.amark_session_completed is async; the clean-exit edge awaits it.
+    loop.amark_session_completed = AsyncMock()
     return loop
 
 

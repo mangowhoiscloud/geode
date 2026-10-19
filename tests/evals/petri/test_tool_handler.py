@@ -43,8 +43,8 @@ def test_petri_audit_handler_defaults(monkeypatch) -> None:
     assert result["audit"]["dry_run"] is True
     cmd = result["audit"]["command"]
     manifest = load_manifest()
-    assert f"auditor=anthropic/{manifest.get_role('auditor').default_model}" in cmd
-    assert f"judge=anthropic/{manifest.get_role('judge').default_model}" in cmd
+    assert f"auditor=anthropic-platform/{manifest.get_role('auditor').default_model}" in cmd
+    assert f"judge=anthropic-platform/{manifest.get_role('judge').default_model}" in cmd
 
 
 def test_petri_audit_handler_unknown_model_returns_error() -> None:

@@ -60,17 +60,24 @@ def test_explicit_source_checks_its_real_adapter_credentials(
     from core.llm.routing import resolve_routing
 
     _wire_openai_credentials(monkeypatch, oauth=oauth, payg=payg)
-    target = resolve_routing("gpt-5.5")
+    target = resolve_routing("gpt-6.1-sol")
     if oauth:
         assert target is not None and target.plan.provider == "openai-codex"
     else:
         assert target is None  # explicit OAuth never falls through to a PAYG key
-    assert _state.model_available("gpt-5.5") is oauth
+    assert _state.model_available("gpt-6.1-sol") is oauth
     assert _state.model_available("gpt-5.4", source="payg") is payg
-    assert _state.model_available("gpt-5.5", source="subscription") is oauth
+    assert _state.model_available("gpt-6.1-sol", source="subscription") is oauth
+    # GPT-5.5 left Codex on 2026-10-14 but stays on the Platform API: an OAuth
+    # credential cannot admit it, and a PAYG key is never borrowed for it.
+    assert _state.model_available("gpt-5.5", source="subscription") is False
+    assert _state.model_available("gpt-5.5", source="payg") is payg
 
 
-@pytest.mark.parametrize("retired", ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"])
+@pytest.mark.parametrize(
+    "retired",
+    ["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"],
+)
 def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_current_row(
     monkeypatch: pytest.MonkeyPatch, retired: str
 ) -> None:
@@ -79,12 +86,7 @@ def test_subscription_picker_excludes_retired_offerings_but_keeps_disabled_curre
     _wire_openai_credentials(monkeypatch, oauth=True, payg=True)
     rows = _state.get_model_profiles()
     assert retired not in {row.id for row in rows}
-    assert "gpt-5.5" not in {row.id for row in rows}  # Not a new subscription choice.
-    # The October 14 retirement is future: retain an explicit saved selection
-    # without treating it as a retired route or silently remapping it.
-    legacy = _state.get_model_profiles(configured_model_ids=("gpt-5.5",))
-    assert len([row for row in legacy if row.id == "gpt-5.5"]) == 1
-    assert _state.model_unavailable_reason("gpt-5.5", source="subscription") is None
+    assert "gpt-6.1-sol" in {row.id for row in rows}
 
     configured = _state.get_model_profiles(configured_model_ids=(retired, retired))
     matches = [row for row in configured if row.id == retired]
@@ -99,10 +101,13 @@ def test_picker_reloads_source_without_hiding_platform_models(
     monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
     assert "gpt-5.4" not in {row.id for row in _state.get_model_profiles()}
     monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "payg")
-    assert {"gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"} <= {
-        row.id for row in _state.get_model_profiles()
-    }
+    platform = {row.id: row.label for row in _state.get_model_profiles()}
+    assert {"gpt-6.1-sol", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"} <= set(platform)
+    # API-deprecated rows remain selectable, visibly labelled, until shutdown.
+    assert "retires 2027-04-01" in platform["gpt-5.3-codex"]
+    assert "retires 2027-04-01" in platform["gpt-5.4-nano"]
     assert _state.model_unavailable_reason("gpt-5.4") is None
+    assert _state.model_unavailable_reason("gpt-5.3-codex") is None
 
 
 @pytest.mark.parametrize("source", ["payg", "subscription"])
@@ -267,4 +272,98 @@ def test_explicit_retired_selection_reports_reason_before_credentials_or_writes(
     assert "retired on 2026-08-31" in str(printer.call_args_list)
     assert "gpt-6-sol explicitly" in str(printer.call_args_list)
     credential_check.assert_not_called()
+    persist.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "model_id", ["claude-sonnet-4-5-20250929", "gpt-5.3-codex", "gpt-5.4-nano"]
+)
+def test_unconfigured_deprecated_payg_id_stays_selectable_by_command_and_tool(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, model_id: str
+) -> None:
+    import asyncio
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop, AgenticLoopConfig
+    from core.agent.tool_executor import ToolExecutor
+    from core.cli.tool_handlers import cli_handler_groups
+    from core.tools.base import ToolContext
+
+    # Supported until the provider retires them (2026-11-30 / 2027-04-01).
+    _wire_openai_credentials(monkeypatch, oauth=False, payg=True)
+    monkeypatch.setattr(settings, "openai_credential_source", "api_key")
+    monkeypatch.setattr(settings, "anthropic_api_key", "offline-key")
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "payg")
+    monkeypatch.setattr(model, "_current_model_for_role", lambda role, client=None: "gpt-6-sol")
+    assert _state.model_unavailable_reason(model_id) is None
+    applied = Mock()
+    monkeypatch.setattr(model, "_apply_model", applied)
+    model.cmd_model(model_id)
+    assert applied.call_args.args[0].id == model_id
+
+    monkeypatch.setattr("core.paths.get_project_root", lambda: tmp_path)
+    handler = dict(next(group for name, group in cli_handler_groups() if name == "system"))[
+        "switch_model"
+    ]
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(),
+        model="gpt-6-sol",
+        provider="openai",
+        quiet=True,
+        config=AgenticLoopConfig(source="payg", effort="low"),
+    )
+    result = asyncio.run(handler(model_hint=model_id, _tool_context=ToolContext(agent_loop=loop)))
+    assert result["status"] == "pending", result
+    assert result["model_config"]["model"] == model_id
+
+
+@pytest.mark.parametrize(
+    ("retired", "status", "remedy"),
+    [
+        ("gpt-5.4", "retired on 2026-08-31", "gpt-6-sol explicitly"),
+        ("gpt-5.5", "retired on 2026-10-14", "gpt-6-sol (gpt-6-luna on Free and Go plans)"),
+    ],
+)
+def test_explicit_subscription_command_denial_names_replacement_without_writes(
+    monkeypatch: pytest.MonkeyPatch, retired: str, status: str, remedy: str
+) -> None:
+    from core.cli import commands
+    from core.config import env_io
+
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
+    monkeypatch.setattr(settings, "model", "gpt-6.1-sol")
+    printer, persist = Mock(), Mock()
+    monkeypatch.setattr(commands.console, "print", printer)
+    monkeypatch.setattr(env_io, "upsert_config_toml", persist)
+
+    model.cmd_model(retired)
+
+    assert status in str(printer.call_args_list) and remedy in str(printer.call_args_list)
+    assert settings.model == "gpt-6.1-sol"
+    persist.assert_not_called()
+
+
+@pytest.mark.parametrize("role", ["primary", "reflection"])
+def test_gpt61_sol_under_existing_none_effort_is_rejected_atomically(
+    monkeypatch: pytest.MonkeyPatch, role: str
+) -> None:
+    from core.cli import commands
+    from core.config import env_io
+
+    _wire_openai_credentials(monkeypatch, oauth=True, payg=False)
+    monkeypatch.setattr(_state, "_selected_openai_source", lambda model="": "subscription")
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "agentic_effort", "none")
+    monkeypatch.setattr(settings, "cognitive_reflection_model", "")
+    printer, persist = Mock(), Mock()
+    monkeypatch.setattr(commands.console, "print", printer)
+    monkeypatch.setattr(env_io, "upsert_config_toml", persist)
+
+    model.cmd_model("gpt-6.1-sol" if role == "primary" else "reflection gpt-6.1-sol")
+
+    assert "effort" in str(printer.call_args_list) and "none" in str(printer.call_args_list)
+    assert (settings.model, settings.agentic_effort) == ("gpt-6-sol", "none")
+    assert settings.cognitive_reflection_model == ""
+    assert settings.openai_credential_source == "oauth"
     persist.assert_not_called()

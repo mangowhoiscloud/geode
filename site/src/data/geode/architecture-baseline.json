@@ -15,17 +15,17 @@
     "max_branches": 51,
     "max_complexity": 52,
     "max_returns": 18,
-    "max_statements": 207
+    "max_statements": 206
   },
   "context_vars": {
     "classification_counts": {
       "cache": 1,
       "diagnostic_scope": 7,
       "request_identity": 8,
-      "request_local_mutable_state": 9,
+      "request_local_mutable_state": 10,
       "service_locator": 0
     },
-    "count": 25,
+    "count": 26,
     "items": [
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
@@ -389,6 +389,21 @@
       },
       {
         "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
+        "classification": "request_local_mutable_state",
+        "context_name": "geode_tool_choice",
+        "has_default": true,
+        "implementation": "ContextVar",
+        "lifetime": "one native Anthropic generate call (generate to completion_config)",
+        "line": 37,
+        "owner": "evals.petri.adapters.http_anthropic AnthropicPlatformAPI",
+        "path": "evals/petri/adapters/http_anthropic.py",
+        "resetter": "AnthropicPlatformAPI.generate finally resets its token",
+        "setter": "AnthropicPlatformAPI.generate sets the admitted explicit tool_choice for one inspect_ai request",
+        "symbol": "_EXPLICIT_TOOL_CHOICE",
+        "teardown": "the generate finally restores the caller context even when the request raises or is cancelled"
+      },
+      {
+        "async_propagation_test": "tests/scripts/test_architecture_baseline.py::test_context_var_inventory_propagates_and_resets",
         "classification": "diagnostic_scope",
         "context_name": "self_improving_loop_run_timeline",
         "has_default": true,
@@ -409,7 +424,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1182,
+      "file_loc": 1184,
       "method_count": 39,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -527,20 +542,20 @@
   },
   "packages": {
     "core": {
-      "python_files": 417,
-      "python_loc": 129775
+      "python_files": 416,
+      "python_loc": 130603
     },
     "evals": {
       "python_files": 110,
-      "python_loc": 45455
+      "python_loc": 45775
     },
     "evolve": {
       "python_files": 73,
-      "python_loc": 32002
+      "python_loc": 32169
     },
     "tests": {
-      "python_files": 768,
-      "python_loc": 239941
+      "python_files": 778,
+      "python_loc": 243885
     }
   },
   "schema_version": 6,

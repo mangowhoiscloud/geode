@@ -156,7 +156,9 @@ def test_registered_selection_commits_after_tool_batch_without_changing_defaults
         assert len(requests) == 1
 
 
-def test_selection_requires_owner_and_rejects_invalid_candidate(monkeypatch, tmp_path):
+# Neither GPT-6 Astra nor GPT-6.1 Sol accepts the session's existing ``none`` effort.
+@pytest.mark.parametrize("hint", ["gpt-6-astra", "gpt-6.1-sol"])
+def test_selection_requires_owner_and_rejects_invalid_candidate(monkeypatch, tmp_path, hint):
     import asyncio
 
     from core.agent.conversation import ConversationContext
@@ -184,10 +186,10 @@ def test_selection_requires_owner_and_rejects_invalid_candidate(monkeypatch, tmp
         ),
     )
     original = loop._model_settings
-    result = asyncio.run(
-        handler(model_hint="gpt-6-astra", _tool_context=ToolContext(agent_loop=loop))
-    )
+    result = asyncio.run(handler(model_hint=hint, _tool_context=ToolContext(agent_loop=loop)))
     assert result["error_type"] == "validation"
+    assert "none" in result["error"]
+    assert (loop.model, loop._effort, loop._source) == ("gpt-6-sol", "none", "subscription")
     assert loop._pending_model_settings is None and loop._model_settings is original
     source_handler = handlers["manage_login"]
     assert source_handler(subcommand="source", args="openai api_key")["error_type"] == "dependency"

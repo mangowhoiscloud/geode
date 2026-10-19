@@ -35,15 +35,19 @@ export function LocaleProvider({
   // Explicit ?lang= param only — never the browser locale. The param wins
   // over the surface default when that surface allows language switching.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const lang = params.get("lang");
-    // Defer until after hydration; the server cannot observe the query string.
-    const timer = window.setTimeout(() => {
-      if (allowQueryOverride && (lang === "en" || lang === "ko")) setLocale(lang);
+    const readLocale = () => {
+      const lang = new URLSearchParams(window.location.search).get("lang");
+      setLocale(allowQueryOverride && (lang === "en" || lang === "ko") ? lang : defaultLocale);
       setQueryReady(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [allowQueryOverride]);
+    };
+    // Defer until after hydration; the server cannot observe the query string.
+    const timer = window.setTimeout(readLocale, 0);
+    window.addEventListener("popstate", readLocale);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("popstate", readLocale);
+    };
+  }, [allowQueryOverride, defaultLocale]);
 
   // Update html lang attribute + URL param (param present only when the
   // locale differs from this surface's default, so default URLs stay clean).
@@ -57,7 +61,7 @@ export function LocaleProvider({
     } else {
       url.searchParams.delete("lang");
     }
-    window.history.replaceState({}, "", url.toString());
+    window.history.replaceState(window.history.state, "", url.toString());
   }, [locale, defaultLocale, queryReady]);
 
   return (

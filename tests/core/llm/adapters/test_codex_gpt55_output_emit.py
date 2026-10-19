@@ -101,7 +101,7 @@ def test_build_worker_request_falls_back_when_effort_empty(
 
 
 def test_ranker_voter_subtasks_pin_effort_none() -> None:
-    """Ranker SubTask construction pins ``effort="none"`` on EVERY voter task.
+    """Ranker SubTask construction pins ``effort="none"`` where the model accepts it.
 
     Sprint G supersedes the prior ``effort="low"`` pin (which smoke
     21 confirmed ineffective — gpt-5.5 still produced 7+ empty-text
@@ -110,6 +110,8 @@ def test_ranker_voter_subtasks_pin_effort_none() -> None:
     includes ``"none"`` to disable reasoning entirely so the model
     emits user-facing text directly. The voter A/B/tie + rationale
     task is single-step classification — no reasoning depth needed.
+    A model without ``none`` (Claude Sonnet 4.5 has no native effort control)
+    keeps its own contract instead of receiving an unsupported value.
     """
     voters = [
         VoterBinding(
@@ -140,7 +142,9 @@ def test_ranker_voter_subtasks_pin_effort_none() -> None:
     assert len(tasks) == len(voters), (
         f"Ranker must spawn one task per voter — got {len(tasks)} tasks for {len(voters)} voters."
     )
-    for task in tasks:
+    claude_task, gpt_task = tasks
+    assert claude_task.effort == ""  # no effort control: the worker default applies
+    for task in (gpt_task,):
         assert task.effort == "none", (
             f"Voter SubTask {task.task_id} must pin effort='none' to keep "
             f"gpt-5.5 from burning the output budget on encrypted reasoning. "
@@ -185,8 +189,8 @@ def test_ranker_voter_subtasks_still_pin_response_schema() -> None:
         pilot_means={},
         candidate_bodies={"c_a": "a", "c_b": "b"},
     )
-    assert tasks[0].response_schema == VOTE_SCHEMA
-    assert tasks[0].effort == "none"
+    assert [task.response_schema for task in tasks] == [VOTE_SCHEMA, VOTE_SCHEMA]
+    assert tasks[1].effort == "none"  # the gpt-5.5 voter
 
 
 def test_gpt5_family_spec_supports_none_effort() -> None:

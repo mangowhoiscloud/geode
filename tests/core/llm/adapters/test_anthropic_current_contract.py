@@ -1,4 +1,4 @@
-"""Offline wire regressions for the public Claude contract retrieved 2026-09-24."""
+"""Offline wire regressions for the public Claude contract retrieved 2026-09-24/10-14."""
 
 from dataclasses import replace
 from types import SimpleNamespace
@@ -16,7 +16,15 @@ from core.llm.model_capabilities import get_anthropic_model_spec
 
 
 @pytest.mark.parametrize(
-    "model", ["claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5"]
+    "model",
+    [
+        "claude-fable-5-1",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+        "claude-opus-5",
+        "claude-sonnet-5",
+    ],
 )
 def test_current_models_share_stream_and_completion_contract(model: str) -> None:
     request = AdapterCallRequest(model=model, messages=(), effort="xhigh", temperature=0.2)
@@ -28,7 +36,9 @@ def test_current_models_share_stream_and_completion_contract(model: str) -> None
     assert get_anthropic_model_spec(model).max_output_tokens == 128_000
 
 
-@pytest.mark.parametrize("model", ["claude-fable-5-1", "claude-opus-5-5"])
+@pytest.mark.parametrize(
+    "model", ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+)
 def test_bound_models_preserve_signed_history_and_report_prefix_changes(
     model: str, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -58,7 +68,7 @@ def test_bound_models_preserve_signed_history_and_report_prefix_changes(
     assert "opaque" not in caplog.text
 
 
-@pytest.mark.parametrize("model", ["claude-fable-5-1", "claude-opus-5-5"])
+@pytest.mark.parametrize("model", ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5"])
 @pytest.mark.parametrize("choice", ["required", {"type": "tool", "name": "lookup"}])
 def test_forced_tool_choice_fails_locally(model: str, choice: str | dict[str, str]) -> None:
     request = AdapterCallRequest(
@@ -71,6 +81,55 @@ def test_forced_tool_choice_fails_locally(model: str, choice: str | dict[str, st
         build_create_kwargs(request)
     with pytest.raises(LLMRequestValidationError, match="forced tool_choice"):
         build_stream_kwargs(request)
+
+
+@pytest.mark.parametrize("choice", ["required", {"type": "tool", "name": "lookup"}])
+def test_haiku_55_keeps_documented_forced_tool_choice(choice: str | dict[str, str]) -> None:
+    request = AdapterCallRequest(
+        model="claude-haiku-5-5",
+        messages=(),
+        tool_choice=choice,
+        tools=(ToolSpec(name="lookup", description="Lookup", input_schema={"type": "object"}),),
+    )
+    kwargs = build_create_kwargs(request)
+    assert kwargs["tool_choice"]["type"] == ("any" if choice == "required" else "tool")
+    assert kwargs["thinking"]["type"] == "adaptive"  # never disabled or between_tools
+
+
+@pytest.mark.parametrize(
+    ("model", "default", "efforts"),
+    [
+        ("claude-sonnet-5-5", "high", ("low", "medium", "high", "xhigh", "max")),
+        ("claude-haiku-5-5", "medium", ("low", "medium", "high", "xhigh", "max")),
+    ],
+)
+def test_new_claude_effort_is_serialized_unchanged(
+    model: str, default: str, efforts: tuple[str, ...]
+) -> None:
+    from core.cli.effort_picker import default_effort, supported_efforts
+
+    assert supported_efforts(model, "anthropic") == efforts
+    assert default_effort(model, "anthropic") == default
+    for effort in efforts:
+        kwargs = build_create_kwargs(AdapterCallRequest(model=model, messages=(), effort=effort))
+        assert kwargs["output_config"] == {"effort": effort}
+    with pytest.raises(LLMRequestValidationError, match="does not support effort"):
+        build_create_kwargs(AdapterCallRequest(model=model, messages=(), effort="none"))
+
+
+def test_account_bound_thinking_drop_is_reported_without_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    translate_response(
+        SimpleNamespace(
+            content=[],
+            usage=None,
+            input_transformations=[
+                {"type": "thinking_dropped", "reason": "organization_binding_mismatch"}
+            ],
+        )
+    )
+    assert "organization_binding_mismatch blocks=1" in caplog.text
 
 
 def test_structured_output_preserves_schema_and_effort() -> None:
@@ -165,13 +224,21 @@ def test_current_models_are_listed_from_catalog() -> None:
     ids = [model.id for model in adapter.list_models()]
     assert set(model_ids_for_source(provider="anthropic", source="payg")) <= set(ids)
     assert len(ids) == len(set(ids))
-    assert {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5"} <= {
-        model.id for model in adapter.list_models()
-    }
+    assert {
+        "claude-fable-5-1",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+        "claude-opus-5",
+        "claude-sonnet-5",
+    } <= {model.id for model in adapter.list_models()}
+    assert "claude-sonnet-4-5-20250929" in ids  # deprecated, usable until 2026-11-30
 
 
+# Sonnet 5.5 returns progress notes between tool calls as thinking blocks.
+@pytest.mark.parametrize("model", ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"])
 def test_stream_preserves_sdk_tools_signed_content_and_cache_usage(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, model: str
 ) -> None:
     import asyncio
     import json
@@ -187,7 +254,7 @@ def test_stream_preserves_sdk_tools_signed_content_and_cache_usage(
                 "id": "msg_fixture",
                 "type": "message",
                 "role": "assistant",
-                "model": "claude-opus-5-5",
+                "model": model,
                 "content": [],
                 "stop_reason": None,
                 "stop_sequence": None,
@@ -262,12 +329,28 @@ def test_stream_preserves_sdk_tools_signed_content_and_cache_usage(
             monkeypatch.setattr(
                 AnthropicPaygAdapter, "_get_client", lambda _self, _model="": client
             )
+            adapter = AnthropicPaygAdapter()
             stream = [
                 event
-                async for event in AnthropicPaygAdapter().astream(
-                    AdapterCallRequest(
-                        model="claude-opus-5-5", messages=(Message(role="user", content="go"),)
-                    )
+                async for event in adapter.astream(
+                    AdapterCallRequest(model=model, messages=(Message(role="user", content="go"),))
+                )
+            ]
+            # Second turn through the same SDK transport: signed native content
+            # and the tool result must reach the wire unchanged.
+            second_turn = (
+                Message(role="user", content="go"),
+                Message(
+                    role="assistant",
+                    content="lookup",
+                    anthropic_content=stream[-1].payload["anthropic_content"],
+                ),
+                Message(role="tool", content="42", tool_use_id="tool_fixture"),
+            )
+            _ = [
+                event
+                async for event in adapter.astream(
+                    AdapterCallRequest(model=model, messages=second_turn)
                 )
             ]
         assert [event.kind for event in stream] == ["text", "thinking", "tool_use", "usage", "stop"]
@@ -289,8 +372,22 @@ def test_stream_preserves_sdk_tools_signed_content_and_cache_usage(
             "text",
             "tool_use",
         ]
-        assert len(requests) == 1
-        assert json.loads(requests[0].content)["thinking"]["type"] == "adaptive"
+        assert len(requests) == 2
+        for request in requests:
+            wire = json.loads(request.content)
+            assert wire["model"] == model
+            assert wire["thinking"]["type"] == "adaptive"
+            assert wire["thinking"]["block_binding"] == {"prefix_mismatch_behavior": "drop_block"}
+        replay = json.loads(requests[1].content)["messages"]
+        assert [message["role"] for message in replay] == ["user", "assistant", "user"]
+        # Thinking and text replay byte-for-byte; the cache owner may mark the last block.
+        assert replay[1]["content"][:2] == list(final["anthropic_content"][:2])
+        replay[1]["content"][2].pop("cache_control", None)
+        assert replay[1]["content"][2] == final["anthropic_content"][2]
+        assert replay[1]["content"][0]["signature"] == "opaque-fixture"
+        assert replay[2]["content"][0]["type"] == "tool_result"
+        assert replay[2]["content"][0]["tool_use_id"] == "tool_fixture"
+        assert replay[2]["content"][0]["content"] == "42"
 
     asyncio.run(check())
 

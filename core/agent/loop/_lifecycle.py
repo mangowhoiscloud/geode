@@ -103,6 +103,11 @@ def collect_guard_state(loop: AgenticLoop) -> dict[str, Any]:
         "last_verify_rubric_misses": list(getattr(metrics, "last_verify_rubric_misses", ())),
         "last_verify_reflection_hint": str(getattr(metrics, "last_verify_reflection_hint", "")),
         "last_verify_should_retry": bool(getattr(metrics, "last_verify_should_retry", False)),
+        # Mailbox items already in ``messages`` but not yet acknowledged.
+        "admitted_mailbox": {
+            "recipient": getattr(loop, "_session_id", ""),
+            "ids": sorted(getattr(loop, "_admitted_mailbox_ids", set())),
+        },
     }
 
 
@@ -165,6 +170,18 @@ def apply_guard_state(loop: AgenticLoop, data: Any) -> None:
         )
         metrics.last_verify_reflection_hint = str(data.get("last_verify_reflection_hint") or "")
         metrics.last_verify_should_retry = bool(data.get("last_verify_should_retry", False))
+    # Trusted, recipient-scoped admission receipt; anything malformed resets to
+    # empty (fail closed: an unread item is then delivered again, never hidden).
+    receipt = data.get("admitted_mailbox")
+    ids = receipt.get("ids") if isinstance(receipt, dict) else None
+    owned = isinstance(receipt, dict) and receipt.get("recipient") == getattr(
+        loop, "_session_id", ""
+    )
+    loop._admitted_mailbox_ids = (
+        {i for i in ids if isinstance(i, int) and not isinstance(i, bool) and i > 0}
+        if owned and isinstance(ids, list)
+        else set()
+    )
 
 
 def restore_loop_state(loop: AgenticLoop, state: Any) -> None:

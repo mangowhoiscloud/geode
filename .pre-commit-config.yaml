@@ -46,13 +46,13 @@ repos:
       - id: check-toml
       - id: check-added-large-files
         args: [--maxkb=500]
-        # Only the approved oversized Jev files use the SHA/100-MiB gate below.
+        # Source-bound reports and the reviewed PPTX have integrity hooks below.
         exclude: >-
-          (?x)^site/public/(report(?:-en)?\.pdf|
+          (?x)^(site/src/data/geode/report-pages\.json|research/jevdb-seminar-v25\.pptx|site/public/(report(?:-en)?\.pdf|
           resaerch/jev-system1-offloading/(index\.html|report-(ko|en)\.pdf|
           assets/(replay-comparison|u8c-a|u8c-b|i6-natural-a|i6-natural-b|u8n-a|u8n-b)\.mp4|
           assets/fonts/(SourceHanSerifKR-Bold|Pretendard-Regular|Pretendard-Bold|
-          Pretendard-Medium|Pretendard-SemiBold|Pretendard-ExtraBold)\.otf))$
+          Pretendard-Medium|Pretendard-SemiBold|Pretendard-ExtraBold)\.otf)))$
       - id: check-merge-conflict
       - id: debug-statements
 
@@ -93,6 +93,20 @@ repos:
         language: system
         pass_filenames: false
         files: ^(site/public/resaerch/jev-system1-offloading/|site/scripts/(export-jev-report|test-jev-report-export)\.mjs$|docs/research/jev-report-assets\.json$|\.pre-commit-config\.yaml$)
+
+      - id: research-slides-integrity
+        name: reviewed research slides integrity
+        entry: node site/scripts/export-research-slides.mjs --check
+        language: system
+        pass_filenames: false
+        files: ^(research/jevdb-seminar-v25\.pptx$|site/scripts/export-research-slides\.mjs$|\.pre-commit-config\.yaml$)
+
+      - id: report-pages-integrity
+        name: source-bound report pages integrity
+        entry: node site/scripts/verify-report-pages.mjs
+        language: system
+        pass_filenames: false
+        files: ^(site/public/(report(?:-en)?\.pdf$|research/(geode-report|previews)/)|site/src/data/geode/report-pages\.json$|site/scripts/(export-geode-report\.py|verify-report-pages\.mjs)$|\.pre-commit-config\.yaml$)
 
       - id: automation-contracts
         name: workflow and shell contracts

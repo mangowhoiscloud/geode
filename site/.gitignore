@@ -20,6 +20,7 @@
 # next.js
 /.next/
 /out/
+/public/research/jevdb-seminar-v25.pptx
 
 # production
 /build
