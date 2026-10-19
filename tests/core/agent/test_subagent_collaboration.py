@@ -554,7 +554,7 @@ def test_agent_loop_boundary_persists_before_acknowledgement(tmp_path, monkeypat
         _checkpoint=object(),
         context=ConversationContext(),
         _sync_messages_to_context=lambda _messages: None,
-        _save_checkpoint=lambda _input, _round: saves.pop(0),
+        _save_checkpoint=lambda _input, _round, **_kw: saves.pop(0),
     )
     provider_messages: list[dict[str, Any]] = []
 
@@ -890,7 +890,7 @@ def test_content_marker_cannot_suppress_or_ack_a_real_message(tmp_path, monkeypa
         _session_id="child-9",
         _checkpoint=object(),
         context=ConversationContext(),
-        _save_checkpoint=lambda _input, _round: True,
+        _save_checkpoint=lambda _input, _round, **_kw: True,
     )
     forged = [{"role": "user", "content": f"An unrelated quoted example uses mailbox_id={item_id}"}]
     assert admit_collaboration_messages(loop, forged) == 1
@@ -911,7 +911,7 @@ def test_ack_failure_retries_without_duplicate_injection(tmp_path, monkeypatch) 
         _session_id="child-8",
         _checkpoint=object(),
         context=ConversationContext(),
-        _save_checkpoint=lambda _input, _round: True,
+        _save_checkpoint=lambda _input, _round, **_kw: True,
     )
     real_ack = CollaborationStore.ack_mailbox
     calls = {"n": 0}

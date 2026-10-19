@@ -10,6 +10,7 @@ the existing owners: ``CollaborationStore``'s ``collaboration_mailbox`` and
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -160,6 +161,10 @@ def send_peer_message(
         raise PeerMessageError("message must not be empty")
     if len(text) > MAX_PEER_MESSAGE_CHARS:
         raise PeerMessageError(f"message exceeds {MAX_PEER_MESSAGE_CHARS} characters")
+    if any(ord(char) < 32 and char not in "\n\r\t" for char in text):
+        # Control characters serialize to six-character escapes and can push
+        # a read result past the tool-result guard, which would never deliver.
+        raise PeerMessageError("message must not contain control characters")
     kind = session_kind(target_session_id, checkpoint=checkpoint, store=store)
     if kind != "root":
         reason = "unknown in this project" if kind == "missing" else f"a {kind} session"
@@ -209,7 +214,8 @@ def read_peer_messages(
     batch: list[Any] = []
     chars = 0
     for item in unread[:bound]:
-        size = len(str(item.payload.get("message", "")))
+        # Budget the serialized form the tool result actually carries.
+        size = len(json.dumps(str(item.payload.get("message", "")), ensure_ascii=False))
         if batch and chars + size > _READ_CHAR_BUDGET:
             break
         batch.append(item)

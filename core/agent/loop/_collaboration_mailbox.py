@@ -152,7 +152,9 @@ def admit_collaboration_messages(
         from . import _context
 
         _context.sync_messages_to_context(loop, messages)
-        if not loop._save_checkpoint(user_input, round_idx):
+        # Strict: an acknowledgement needs the SQLite transcript (the SoT a
+        # restart reads) to hold what it acknowledges, not just the JSON cache.
+        if not loop._save_checkpoint(user_input, round_idx, strict_messages=True):
             return injected
         persisted = [item.id for item in children if item.id in admitted]
         persisted += [item.id for item in peers if item.id in admitted and item.id in delivered]

@@ -157,7 +157,7 @@ def _loop(session_id: str, saves: list[bool]) -> Any:
         _session_id=session_id,
         _checkpoint=object(),
         context=ConversationContext(),
-        _save_checkpoint=lambda _input, _round: saves.pop(0),
+        _save_checkpoint=lambda _input, _round, **_kw: saves.pop(0),
     )
 
 
@@ -431,7 +431,7 @@ def test_read_whose_result_was_not_checkpointed_returns_to_unread(project: Path)
     again = _read_tool(project, loop)
     assert [m["message_id"] for m in again["messages"]] == [receipt.message_id]
     _record_read(messages, again, "toolu_y")
-    loop._save_checkpoint = lambda _input, _round: True
+    loop._save_checkpoint = lambda _input, _round, **_kw: True
     admit_collaboration_messages(loop, messages)
     assert peer_message_status(receipt.message_id)["status"] == "applied"
 
@@ -502,3 +502,48 @@ def test_operator_send_from_a_session_without_checkpoint_is_the_operator(project
     assert receipt.sender_session_id == "operator"
     with pytest.raises(PeerMessageError):
         send_peer_message(SessionPrincipal(session_id="s-not-saved-yet"), "s-root-b", "hi")
+
+
+# Second re-review follow-ups (P2-1 serialized budget, P2-2 strict ack save).
+
+
+def test_control_characters_are_refused_but_lines_and_tabs_are_kept(project: Path) -> None:
+    with pytest.raises(PeerMessageError, match="control characters"):
+        send_peer_message(OPERATOR, "s-root-b", "a\x01b")
+    receipt = send_peer_message(OPERATOR, "s-root-b", "line one\n\tline two")
+    assert receipt.status == "queued"
+
+
+def test_read_budget_counts_the_serialized_result(project: Path) -> None:
+    """Escapes count: three 3,000-char quote runs serialize to ~6,000 each."""
+    for _ in range(3):
+        send_peer_message(OPERATOR, "s-root-b", '"' * 3000)
+    loop = _loop("s-root-b", [])
+    loop._admitted_mailbox_ids = set()
+    first = _read_tool(project, loop)
+    assert len(first["messages"]) == 1 and first["remaining"] == 2
+    import json
+
+    assert len(json.dumps(first, ensure_ascii=False)) < 8_000 + 1_000
+
+
+def test_acknowledgement_uses_a_strict_checkpoint(project: Path) -> None:
+    """P2-2: the ack save must refuse a stale SQLite transcript."""
+    receipt = send_peer_message(SessionPrincipal(session_id="s-root-a"), "s-root-b", "x")
+    calls: list[dict[str, Any]] = []
+
+    def strict_failing_save(_input: str, _round: int, **kwargs: Any) -> bool:
+        calls.append(kwargs)
+        if kwargs.get("strict_messages"):
+            raise RuntimeError("sessions.db mirror failed")
+        return True
+
+    loop = _loop("s-root-b", [])
+    loop._admitted_mailbox_ids = set()
+    loop._save_checkpoint = strict_failing_save
+    messages: list[dict[str, Any]] = []
+    admit_collaboration_messages(loop, messages)
+    _record_read(messages, _read_tool(project, loop), "toolu_s")
+    admit_collaboration_messages(loop, messages)
+    assert calls and all(call.get("strict_messages") is True for call in calls)
+    assert peer_message_status(receipt.message_id)["status"] == "queued"
