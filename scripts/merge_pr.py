@@ -4,13 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import re
 import shutil
 import subprocess
 from typing import Any
 
+from scripts import check_architecture_roadmap as roadmap_checker
+
 REPOSITORY = "mangowhoiscloud/geode"
+TRACKING_PATH = roadmap_checker.ROADMAP_RELATIVE
 CHECK_APP_ID = 15368
 REQUIRED_WORKFLOWS = {
     ".github/workflows/ci.yml": (
@@ -80,17 +85,20 @@ def _identity(pr: dict[str, Any]) -> dict[str, Any]:
         head["repo"]["full_name"] == base["repo"]["full_name"] == REPOSITORY,
         "fork or repository mismatch",
     )
-    flow = (head["ref"], base["ref"])
-    _require(
-        flow == ("develop", "main")
-        or (
-            base["ref"] == "develop"
-            and head["ref"] not in {"main", "develop"}
-            and not head["ref"].startswith("sync/")
-        ),
-        "unsupported protected-branch flow; integrate main in the feature branch, not a sync PR",
-    )
+    topic = head["ref"] not in {"main", "develop"} and not head["ref"].startswith("sync/")
+    if (head["ref"], base["ref"]) == ("develop", "main"):
+        flow = "promotion"
+    elif topic and base["ref"] == "develop":
+        flow = "feature"
+    elif topic and base["ref"] == "main":
+        # Candidate only: admission requires a roadmap-only §0.3 closure proof.
+        flow = "tracking"
+    else:
+        raise MergeGuardError(
+            "unsupported protected-branch flow; integrate main in the feature branch, not a sync PR"
+        )
     return {
+        "flow": flow,
         "head_ref": head["ref"],
         "head_sha": _sha(head["sha"]),
         "base_ref": base["ref"],
@@ -132,6 +140,116 @@ def _validate_workflow(pr: dict[str, Any], run: dict[str, Any], path: str) -> No
     )
 
 
+def _roadmap_text(content: dict[str, Any]) -> str:
+    _require(
+        content["type"] == "file"
+        and content["path"] == TRACKING_PATH
+        and content["encoding"] == "base64"
+        and isinstance(content["content"], str),
+        "roadmap content is not a regular base64 file",
+    )
+    try:
+        data = base64.b64decode("".join(content["content"].split()), validate=True)
+        text = data.decode("utf-8")
+    except ValueError as exc:  # binascii.Error, non-ASCII input, and UnicodeDecodeError
+        raise MergeGuardError("roadmap content is not valid base64 UTF-8") from exc
+    blob = hashlib.sha1(b"blob %d\0" % len(data) + data, usedforsecurity=False).hexdigest()
+    _require(
+        content["size"] == len(data) and _sha(content["sha"]) == blob,
+        "roadmap content does not match its git blob identity",
+    )
+    return text
+
+
+def _roadmap_tree_entry(commit_sha: str) -> dict[str, Any]:
+    """Walk exact commit -> root -> docs -> architecture trees to the roadmap entry.
+
+    Contents ``type`` hides Git modes; only non-recursive Git tree entries prove them.
+    """
+    commit = _api(f"git/commits/{commit_sha}")
+    _require(_sha(commit["sha"]) == commit_sha, "roadmap commit identity mismatch")
+    tree_sha = _sha(commit["tree"]["sha"])
+    entry: dict[str, Any] = {}
+    for depth, name in enumerate(TRACKING_PATH.split("/")):
+        if depth:
+            _require(
+                entry["type"] == "tree" and entry["mode"] == "040000",
+                "roadmap parent path is not a directory",
+            )
+            tree_sha = _sha(entry["sha"])
+        tree = _api(f"git/trees/{tree_sha}")
+        _require(
+            _sha(tree["sha"]) == tree_sha
+            and tree["truncated"] is False
+            and isinstance(tree["tree"], list),
+            "roadmap tree evidence is mismatched or truncated",
+        )
+        matches = [row for row in tree["tree"] if row["path"] == name]
+        _require(len(matches) == 1, "roadmap tree path is missing or ambiguous")
+        entry = matches[0]
+    return entry
+
+
+def _validate_tracking(
+    identity: dict[str, Any],
+    pr: dict[str, Any],
+    comparison: dict[str, Any],
+    contents: tuple[dict[str, Any], dict[str, Any]] | None,
+    entries: tuple[dict[str, Any], dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Admit topic -> main only as a roadmap §0.3 IN_DEVELOP -> DONE closure."""
+    if contents is None or entries is None:
+        raise MergeGuardError("tracking roadmap content is missing")
+    for content, tree_entry in zip(contents, entries, strict=True):
+        _require(
+            tree_entry["type"] == "blob"
+            and tree_entry["mode"] == "100644"
+            and _sha(tree_entry["sha"]) == _sha(content["sha"]),
+            "roadmap must remain a regular 100644 blob bound to its content",
+        )
+    _require(identity["base_sha"] == identity["main_sha"], "tracking base must be current main")
+    files = comparison["files"]
+    _require(
+        type(pr["changed_files"]) is int
+        and pr["changed_files"] == 1
+        and isinstance(files, list)
+        and len(files) == 1,
+        "tracking PR must change exactly one file",
+    )
+    (entry,) = files
+    _require(
+        entry["filename"] == TRACKING_PATH
+        and entry["status"] == "modified"
+        and "previous_filename" not in entry,
+        "tracking PR may only modify the architecture roadmap",
+    )
+    base_content, head_content = contents
+    _require(
+        _sha(head_content["sha"]) == _sha(entry["sha"])
+        and base_content["sha"] != head_content["sha"],
+        "roadmap blob differs from the compared diff",
+    )
+    base_text, head_text = _roadmap_text(base_content), _roadmap_text(head_content)
+    try:
+        errors = roadmap_checker.check(
+            head_text, base_text, base_ref="origin/main", target_branch="main"
+        )
+        before = {gap.id: gap.status for gap in roadmap_checker.parse_roadmap(base_text).gaps}
+        after = roadmap_checker.parse_roadmap(head_text).gaps
+    except (ValueError, IndexError) as exc:  # RoadmapParseError or hostile-shape parser faults
+        raise MergeGuardError("tracking roadmap is unparsable") from exc
+    # Checker findings echo PR-authored text; report only the count.
+    _require(not errors, f"tracking roadmap violates {len(errors)} invariant(s); run the checker")
+    closed = [gap.id for gap in after if (before.get(gap.id), gap.status) == ("IN_DEVELOP", "DONE")]
+    _require(bool(closed), "tracking PR closes no IN_DEVELOP package")
+    return {
+        "path": TRACKING_PATH,
+        "base_blob": base_content["sha"],
+        "head_blob": head_content["sha"],
+        "closed_gaps": closed,
+    }
+
+
 def validate_snapshot(
     pr: dict[str, Any],
     base: dict[str, Any],
@@ -143,6 +261,8 @@ def validate_snapshot(
     repository: dict[str, Any],
     main: dict[str, Any],
     comparison: dict[str, Any],
+    roadmap_contents: tuple[dict[str, Any], dict[str, Any]] | None = None,
+    roadmap_entries: tuple[dict[str, Any], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure admission predicate; job success never overrides missing server policy."""
     identity = _identity(pr)
@@ -159,6 +279,10 @@ def validate_snapshot(
         and _sha(comparison["merge_base_commit"]["sha"]) == identity["main_sha"],
         "PR head must contain current main; merge main into the feature branch and rerun CI",
     )
+    if identity["flow"] == "tracking":
+        identity["tracking"] = _validate_tracking(
+            identity, pr, comparison, roadmap_contents, roadmap_entries
+        )
     _require(
         pr["mergeable"] is True and pr["mergeable_state"] == "clean", "PR mergeability is not clean"
     )
@@ -316,8 +440,30 @@ def _snapshot(number: int, receipt: dict[str, Any] | None = None) -> dict[str, A
     main = _api("branches/main")
     main_sha = _sha(main["commit"]["sha"])
     comparison = _api(f"compare/{main_sha}...{identity['head_sha']}")
+    roadmap_contents = roadmap_entries = None
+    if identity["flow"] == "tracking":
+        # Exact-commit blobs and tree modes from GitHub; never the PR checkout or local HEAD.
+        roadmap_contents = (
+            _api(f"contents/{TRACKING_PATH}?ref={identity['base_sha']}"),
+            _api(f"contents/{TRACKING_PATH}?ref={identity['head_sha']}"),
+        )
+        roadmap_entries = (
+            _roadmap_tree_entry(identity["base_sha"]),
+            _roadmap_tree_entry(identity["head_sha"]),
+        )
     return validate_snapshot(
-        pr, base, protection, checks, view, required, workflows, repository, main, comparison
+        pr,
+        base,
+        protection,
+        checks,
+        view,
+        required,
+        workflows,
+        repository,
+        main,
+        comparison,
+        roadmap_contents,
+        roadmap_entries,
     )
 
 

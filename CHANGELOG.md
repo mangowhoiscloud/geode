@@ -71,6 +71,16 @@ functional change.
   case page at `mangowhois.ai/eco2/`; the retired GitHub Pages address
   returned 404.
 
+- **Guarded roadmap closure merges.** `scripts/merge_pr.py` now admits the
+  roadmap §0.3 tracking-only topic → `main` PR instead of rejecting every
+  non-promotion main target. Admission additionally requires the current-main
+  diff to modify only `docs/architecture/extensibility-roadmap.md`, reads both
+  exact-commit blobs from GitHub and verifies their git blob ids, proves from
+  the commits' Git trees that the file stays a regular `100644` blob, then runs the
+  existing roadmap checker and requires at least one `IN_DEVELOP` → `DONE`
+  closure. Every existing protection, check, ancestry, double-snapshot and
+  merge-parent requirement is unchanged. Receipts name the `flow` and, for
+  closures, the blob ids and closed GAPs.
 - **Current models in evaluations.** Petri and seed-generation roles now admit
   current catalog offerings (opt-in `current_models = true`; pinned defaults
   and custom `allowed_models` unchanged), so explicit GPT-6/6.1 and Claude 5.5
