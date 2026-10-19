@@ -520,6 +520,141 @@ def test_css_asset_referenced_and_present(built_html: str) -> None:
         assert f".{chip}" in css_text, f"hub.css missing .{chip} rule"
 
 
+def test_every_generated_page_shares_the_responsive_shell(tmp_path: Path) -> None:
+    """Master DESIGN.md §5/§12: every generated page, template or seedgen
+    sub-page, carries the same shell. Deferred hub.js, a skip link to
+    ``main#main``, the one ``data-hub-nav`` disclosure (closed in the HTML so
+    narrow screens start at the content), a current-page mark, and every
+    table inside a labelled, focusable scroll region so no page scrolls
+    sideways as a whole."""
+    out = tmp_path / "out"
+    result = _run_builder(
+        out,
+        bundle_root=FIXTURE_ROOT / "petri-bundle",
+        autoresearch_root=FIXTURE_ROOT / "autoresearch",
+    )
+    assert result.returncode == 0, result.stderr
+    pages = sorted(out.rglob("index.html"))
+    assert len(pages) >= 15, f"expected templates + sub-pages, got {len(pages)}"
+    wrapped_open = re.compile(
+        r'<div class="table-scroll" role="region" tabindex="0" aria-label="[^"]+"><table\b'
+    )
+    for page in pages:
+        html = page.read_text(encoding="utf-8")
+        name = page.relative_to(out).as_posix()
+        assert '<script src="/geode/self-improving/assets/hub.js" defer></script>' in html, name
+        assert '<a class="skip-link" href="#main">' in html, name
+        assert '<main class="content" id="main">' in html, name
+        assert html.count('<details class="hub-nav" data-hub-nav>') == 1, name
+        assert 'aria-current="page"' in html, name
+        # A published page is a recorded snapshot: the nav never says "live".
+        assert 'Autoresearch <span class="count">snapshot</span>' in html, name
+        # The inherited docs route 404s; the nav links the pinned kernel source.
+        assert "/geode/docs/architecture/crucible-kernel" not in html, name
+        assert (
+            "/blob/80b130c3113ddaca9d4712d81a277005143c28aa/docs/architecture/crucible-kernel.md"
+            in html
+        )
+        assert html.count("<table") == len(wrapped_open.findall(html)), f"{name}: bare table"
+        assert html.count("</table>") == html.count("</table></div>"), f"{name}: open region"
+
+
+# A published page in the pre-schema-2 shell (sidebar format of the 2026-05/07 builds).
+_LEGACY_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lineage c1 — run-a — GEODE Self-Improving Hub</title>
+<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar">
+    <nav aria-label="Hub navigation">
+      <div class="brand">GEODE</div>
+      <div class="nav-section">Hub</div>
+      <ul class="nav-list"><li><a href="/geode/self-improving/">Overview</a></li></ul>
+      <div class="nav-section">Petri Audit <span class="count">26</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
+          <ul class="sub-nav">
+            <li><a href="/geode/self-improving/petri-bundle/#/logs/a.eval">audit_a</a></li>
+          </ul>
+        </li>
+      </ul>
+      <div class="nav-section">Seed Generation <span class="count">7 runs</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/self-improving/seed-generation/" class="active">All runs</a>
+          <ul class="sub-nav">
+            <li class="side-group-label">gen1</li>
+            <li class="side-group-leaf"><a href="/geode/self-improving/seed-generation/run-a/">a</a></li>
+          </ul>
+        </li>
+      </ul>
+      <div class="nav-section">Autoresearch <span class="count">live</span></div>
+      <div class="nav-section">Crucible <span class="count">26 attempts</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <h1 class="page-title">Lineage c1 — run-a</h1>
+    <div class="heatmap-scroll" role="region" aria-label="Pilot dim heatmap">
+      <table class="records heatmap"><tbody><tr><td class="id">c1</td><td>0.42</td></tr></tbody></table>
+    </div>
+    <pre class="msg">kept verbatim</pre>
+    <p class="version-stamp">built 2026-05-26 05:05.</p>
+  </main>
+</div>
+</body>
+</html>
+"""
+
+
+def test_refresh_presentation_keeps_published_evidence(tmp_path: Path) -> None:
+    """``--refresh-presentation`` re-skins a COPY of published pages without
+    recomputing anything (published values may have no tracked source). Counts,
+    rows, code, destinations and the historical stamp survive, Inspect bundle
+    bytes are untouched even when they look hub-shaped, and a rerun is a no-op."""
+    from scripts.build_self_improving_hub import main
+
+    site = tmp_path / "self-improving"
+    page = site / "seed-generation" / "run-a" / "lineage" / "c1" / "index.html"
+    viewer = site / "seed-generation" / "bundle" / "index.html"
+    for path in (page, viewer):
+        path.parent.mkdir(parents=True)
+        path.write_text(_LEGACY_PAGE, encoding="utf-8")
+
+    assert main(["--refresh-presentation", str(site)]) == 0
+    html = page.read_text(encoding="utf-8")
+    assert viewer.read_text(encoding="utf-8") == _LEGACY_PAGE, "Inspect bundle bytes changed"
+    assert html.count('<details class="hub-nav" data-hub-nav>') == 1
+    assert '<main class="content" id="main">' in html and "Skip to content" in html
+    assert '<span class="count">26 attempts</span>' in html, "published Crucible count lost"
+    # Chrome corrections only: status wording and the one audited 404 destination.
+    assert 'Autoresearch <span class="count">snapshot</span>' in html
+    assert ">live<" not in html
+    assert 'href="/geode/docs/architecture/crucible-kernel"' not in html
+    assert "/docs/architecture/crucible-kernel.md" in html
+    assert 'href="/geode/self-improving/petri-bundle/#/logs/a.eval"' in html
+    assert 'href="/geode/self-improving/seed-generation/run-a/" data-ancestor' in html
+    assert '<span aria-current="page">Lineage c1</span>' in html
+    assert "heatmap-scroll" not in html and html.count('class="table-scroll"') == 1
+    for kept in (
+        '<td class="id">c1</td><td>0.42</td>',
+        '<pre class="msg">kept verbatim</pre>',
+        "built 2026-05-26 05:05.",
+    ):
+        assert kept in html, f"published content changed: {kept}"
+    assert (site / "assets" / "hub.js").is_file()
+
+    assert main(["--refresh-presentation", str(site)]) == 0
+    assert page.read_text(encoding="utf-8") == html, "refresh is not idempotent"
+
+
 # ---------------------------------------------------------------------------
 # 11. Seed-generation surface (index + per-run detail)
 # ---------------------------------------------------------------------------
@@ -2170,8 +2305,10 @@ def test_pr2_agent_detail_paginates_via_details(built_seedgen_pages: dict[str, s
     """`/agent/<task_id>/` renders turn-by-turn `<details>` blocks + session_end summary."""
     html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/agent/gen-c-001")
     assert html, "gen-c-001 agent detail page missing"
-    assert html.count("<details") >= 3, (
-        f"expected ≥3 <details> blocks in agent detail; got {html.count('<details')}"
+    # Count inside <main> only: the shared nav carries its own disclosures.
+    body = html.split('<main class="content"', 1)[1]
+    assert body.count("<details") >= 3, (
+        f"expected ≥3 <details> blocks in agent detail; got {body.count('<details')}"
     )
     assert "session_end" in html
     # Cost (USD, $0 on subscription) was replaced by token counts (2026-05-29).
@@ -2470,7 +2607,13 @@ def test_viewer_diff_link_gated_on_diff_page(tmp_path: Path) -> None:
 
 
 def test_pr2_subpages_no_js_framework(built_seedgen_pages: dict[str, str]) -> None:
-    """Cotton discipline — PR 2 sub-pages must be pure static HTML."""
+    """Cotton discipline — PR 2 sub-pages stay server-rendered static HTML.
+
+    Master DESIGN.md §13 (schema 2) admits exactly one script: the hub's own
+    deferred enhancement ``assets/hub.js``. No framework, CDN or inline
+    runtime, and the content plus navigation are already in the HTML, so
+    nothing on these pages depends on a script running."""
+    enhancement = '<script src="/geode/self-improving/assets/hub.js" defer></script>'
     for key in (
         f"{SEEDGEN_FIXTURE_RUN_ID}/agents",
         f"{SEEDGEN_FIXTURE_RUN_ID}/timeline",
@@ -2480,7 +2623,13 @@ def test_pr2_subpages_no_js_framework(built_seedgen_pages: dict[str, str]) -> No
         html = built_seedgen_pages.get(key)
         if html is None:
             continue
-        assert "<script" not in html, f"sub-page {key} has JS — cotton rule violated"
+        assert html.count(enhancement) == 1, f"sub-page {key} lacks the shared enhancement"
+        assert "<script" not in html.replace(enhancement, ""), (
+            f"sub-page {key} has JS beyond assets/hub.js — cotton rule violated"
+        )
+        # Server-rendered: nav links and the page body exist without JS.
+        assert 'href="/geode/self-improving/seed-generation/"' in html, key
+        assert '<h1 class="page-title">' in html.split('<main class="content" id="main">', 1)[1]
 
 
 def test_pr1_tournament_schema_complete() -> None:

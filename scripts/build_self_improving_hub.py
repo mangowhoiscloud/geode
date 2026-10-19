@@ -42,8 +42,11 @@ import logging
 import math
 import os
 import re
+import shutil
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from html import unescape as html_unescape
 from pathlib import Path, PurePosixPath
 from statistics import NormalDist
 from typing import Any
@@ -190,7 +193,8 @@ AUTORESEARCH_BASELINE_NAMESPACES: tuple[str, ...] = (
 # Sparkline characters from low to high.
 _SPARKLINE_CHARS: str = "▁▂▃▄▅▆▇█"
 
-DESIGN_SCHEMA_VERSION = 1
+# Tracks ``schema_version`` of docs/design/self-improving-hub-system.md (3 = research room theme).
+DESIGN_SCHEMA_VERSION = 3
 PETRI_ROW_LIMIT = 10
 PETRI_SIDEBAR_LIMIT = 3
 # Autoresearch-loop mutator default for the lineage table's mutations.jsonl
@@ -778,14 +782,16 @@ def render_sidebar_seedgen(rows: list[SeedGenRow]) -> str:
         grouped.setdefault(row.gen_tag or "untagged", []).append(row)
     out: list[str] = []
     for gen_tag, tag_rows in grouped.items():
-        out.append(f'            <li class="side-group-label">{html_escape(gen_tag)}</li>')
-        for row in tag_rows:
-            url = f"/geode/self-improving/seed-generation/{html_escape(row.run_id)}/"
-            leaf = row.target_dim or row.run_id
-            out.append(
-                f'            <li class="side-group-leaf"><a href="{url}" '
-                f'title="{html_escape(row.run_id)}">{html_escape(leaf)}</a></li>'
-            )
+        leaves = "".join(
+            f'<li><a href="{_SEEDGEN_URL}{html_escape(row.run_id)}/" '
+            f'title="{html_escape(row.run_id)}">'
+            f"{html_escape(row.target_dim or row.run_id)}</a></li>"
+            for row in tag_rows
+        )
+        out.append(
+            f'            <li class="side-group"><span class="side-group-label">'
+            f"{html_escape(gen_tag)}</span><ul>{leaves}</ul></li>"
+        )
     return "\n".join(out)
 
 
@@ -1114,13 +1120,9 @@ def _render_pilot_heatmap(state: dict[str, Any]) -> str:
         body_rows.append("            <tr>" + "".join(cells) + "</tr>")
     head = "          <thead><tr>" + "".join(header_cells) + "</tr></thead>"
     body = "          <tbody>\n" + "\n".join(body_rows) + "\n          </tbody>"
-    # Wrap in a scroll container so 22 cols degrade gracefully on narrow
-    # screens (the table itself uses min-width so cells stay legible).
-    return (
-        '<div class="heatmap-scroll" role="region" aria-label="Pilot dim heatmap">\n'
-        f'  <table class="records heatmap">\n{head}\n{body}\n          </table>\n'
-        "</div>"
-    )
+    # write_hub_page gives it the shared labelled scroll region; the table's
+    # min-width keeps the 20 score columns legible on narrow screens.
+    return f'  <table class="records heatmap">\n{head}\n{body}\n          </table>\n'
 
 
 def _cid_viewer_link(cid: str, run_id: str, *, code: bool = False) -> str:
@@ -1566,6 +1568,7 @@ def render_seedgen_index(
     autoresearch_status_label: str,
     geode_version: str,
     build_date: str,
+    crucible_count_label: str = "ledger",
 ) -> Path:
     """Render the seed-generation index page to ``<out_dir>/index.html``."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1577,6 +1580,7 @@ def render_seedgen_index(
         "seedgen_count_label": seedgen_count_label,
         "sidebar_seedgen_runs": sidebar_seedgen_runs,
         "autoresearch_status_label": autoresearch_status_label,
+        "crucible_count_label": crucible_count_label,
         "runs_section_label": runs_label,
         "runs_rows": _render_seedgen_index_rows(rows),
         "geode_version": geode_version,
@@ -1584,12 +1588,13 @@ def render_seedgen_index(
         "build_date": build_date,
         **cost_mapping,
     }
+    mapping.update(_hub_chrome(mapping, _SEEDGEN_URL, [("Seed generation", None)]))
     rendered = substitute(template, mapping)
     leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
     if leftover:
         raise RuntimeError(f"seedgen index unresolved markers: {sorted(set(leftover))}")
     out_path = out_dir / "index.html"
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -1609,6 +1614,7 @@ def render_seedgen_run(
     geode_version: str,
     build_date: str,
     run_bundle_dir: Path | None = None,
+    crucible_count_label: str = "ledger",
 ) -> Path:
     """Render one per-run detail page to ``<out_dir>/<run_id>/index.html``."""
     run_out = out_dir / run_meta.run_id
@@ -1655,6 +1661,7 @@ def render_seedgen_run(
         "seedgen_count_label": seedgen_count_label,
         "sidebar_seedgen_runs": sidebar_seedgen_runs,
         "autoresearch_status_label": autoresearch_status_label,
+        "crucible_count_label": crucible_count_label,
         "run_id": html_escape(run_meta.run_id),
         "gen_tag": html_escape(run_meta.gen_tag or "—"),
         "target_dim": html_escape(run_meta.target_dim or "—"),
@@ -1696,6 +1703,13 @@ def render_seedgen_run(
     # signature so future revisions can surface elo / pilot directly from
     # the survivors.json projection without touching call sites.
     _ = survivors_doc
+    mapping.update(
+        _hub_chrome(
+            mapping,
+            f"{_SEEDGEN_URL}{mapping['run_id']}/",
+            [("Seed generation", _SEEDGEN_URL), (run_meta.run_id, None)],
+        )
+    )
 
     rendered = substitute(template, mapping)
     leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
@@ -1704,7 +1718,7 @@ def render_seedgen_run(
             f"seedgen run {run_meta.run_id} unresolved markers: {sorted(set(leftover))}"
         )
     out_path = run_out / "index.html"
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     # PR-SEEDS-HIRES P2 (2026-05-26) — emit hi-res sub-pages per run.
     _emit_seedgen_run_subpages(
         run_id=run_meta.run_id,
@@ -1717,6 +1731,7 @@ def render_seedgen_run(
         petri_count=petri_count,
         seedgen_count_label=seedgen_count_label,
         autoresearch_status_label=autoresearch_status_label,
+        crucible_count_label=crucible_count_label,
     )
     return out_path
 
@@ -1740,6 +1755,7 @@ def _emit_seedgen_run_subpages(
     petri_count: int,
     seedgen_count_label: str,
     autoresearch_status_label: str,
+    crucible_count_label: str = "ledger",
 ) -> None:
     """Emit the 4 hi-res sub-pages for a single run.
 
@@ -1768,6 +1784,7 @@ def _emit_seedgen_run_subpages(
         "petri_count": str(petri_count),
         "seedgen_count_label": seedgen_count_label,
         "autoresearch_status_label": autoresearch_status_label,
+        "crucible_count_label": crucible_count_label,
         "run_id": html_escape(run_id),
     }
 
@@ -1781,7 +1798,7 @@ def _emit_seedgen_run_subpages(
         common=common,
     )
     (out_dir / "agents").mkdir(parents=True, exist_ok=True)
-    (out_dir / "agents" / "index.html").write_text(agents_index_html, encoding="utf-8")
+    write_hub_page(out_dir / "agents" / "index.html", agents_index_html)
 
     # /agent/<task_id>/index.html
     for sa in subagents:
@@ -1794,7 +1811,7 @@ def _emit_seedgen_run_subpages(
         )
         agent_out = out_dir / "agent" / task_id
         agent_out.mkdir(parents=True, exist_ok=True)
-        (agent_out / "index.html").write_text(detail_html, encoding="utf-8")
+        write_hub_page(agent_out / "index.html", detail_html)
 
     # /timeline/index.html
     timeline_html = _render_seedgen_subpage(
@@ -1804,7 +1821,7 @@ def _emit_seedgen_run_subpages(
         common=common,
     )
     (out_dir / "timeline").mkdir(parents=True, exist_ok=True)
-    (out_dir / "timeline" / "index.html").write_text(timeline_html, encoding="utf-8")
+    write_hub_page(out_dir / "timeline" / "index.html", timeline_html)
 
     # /tournament/index.html
     tournament_html = _render_seedgen_subpage(
@@ -1814,7 +1831,7 @@ def _emit_seedgen_run_subpages(
         common=common,
     )
     (out_dir / "tournament").mkdir(parents=True, exist_ok=True)
-    (out_dir / "tournament" / "index.html").write_text(tournament_html, encoding="utf-8")
+    write_hub_page(out_dir / "tournament" / "index.html", tournament_html)
 
     # PR-SEEDS-HIRES P3 (2026-05-26) — /lineage/index.html + per-candidate pages
     if run_bundle_dir is not None:
@@ -1839,6 +1856,7 @@ def _emit_seedgen_run_subpages(
                 autoresearch_status_label=common["autoresearch_status_label"],
                 geode_version=common["geode_version"],
                 build_date=common["build_date"],
+                crucible_count_label=crucible_count_label,
             )
             # PR-HUB-VIS-CYCLE1 (2026-05-28) — all-MD catalog page
             catalog_body = _render_candidates_catalog_body(run_id, state, run_bundle_dir)
@@ -1849,7 +1867,7 @@ def _emit_seedgen_run_subpages(
                 common=common,
             )
             (out_dir / "candidates").mkdir(parents=True, exist_ok=True)
-            (out_dir / "candidates" / "index.html").write_text(catalog_html, encoding="utf-8")
+            write_hub_page(out_dir / "candidates" / "index.html", catalog_html)
 
             # PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — per-cid MD viewer.
             # Enumerates every cid the hub links to (drafts, evolved, on-disk
@@ -1871,7 +1889,7 @@ def _emit_seedgen_run_subpages(
                 )
                 cand_viewer_dir = out_dir / "candidates" / cid
                 cand_viewer_dir.mkdir(parents=True, exist_ok=True)
-                (cand_viewer_dir / "index.html").write_text(cand_viewer_html, encoding="utf-8")
+                write_hub_page(cand_viewer_dir / "index.html", cand_viewer_html)
 
 
 def _resolve_subagent_model(
@@ -2027,98 +2045,485 @@ def _phase_from_task_id(task_id: str) -> str:
     return "unknown"
 
 
-def _render_hub_sidebar(
-    common: dict[str, str],
-    *,
-    active_section: str = "seedgen",
-) -> str:
-    """Render the rich sidebar shared by all hub pages.
+# --------------------------------------------------------------------------- #
+# Shared page chrome: one nav, breadcrumb and finalizer for every hub page    #
+# --------------------------------------------------------------------------- #
+# Every generated page (11 templates + the seedgen sub-pages) takes its nav from
+# render_hub_nav and is written through write_hub_page, so the responsive shell
+# contract (docs/design/self-improving-hub-system.md §5-§7, §12) cannot drift
+# per page. The nav is a native <details> disclosure: closed in the HTML (mobile
+# content starts at once), opened as a sidebar at the wide breakpoint by
+# assets/hub.js, and still operable with JS off.
+_HUB_URL = "/geode/self-improving/"
+_SEEDGEN_URL = f"{_HUB_URL}seed-generation/"
+_AUTORESEARCH_URL = f"{_HUB_URL}autoresearch/"
+_EXTERNAL_MARK = ' <span aria-hidden="true">&#x2197;</span>'
+# The inherited /geode/docs/architecture/crucible-kernel link has no docs route
+# (404, audited 2026-10-08). Link the exact kernel source pinned at the audited
+# base revision, plus the official Crucible docs page.
+_CRUCIBLE_KERNEL_SOURCE_URL = (
+    f"{GEODE_REPO_URL}/blob/80b130c3113ddaca9d4712d81a277005143c28aa"
+    "/docs/architecture/crucible-kernel.md"
+)
+_CRUCIBLE_DOCS_URL = "/geode/docs/capabilities/outer-loop/"
+_NAV_HREF_RE = re.compile(r'href="(/geode/self-improving/[^"#]*)"')
+_NAV_GROUP_RE = re.compile(r'<details class="nav-group">(.*?)</details>', re.DOTALL)
 
-    Mirrors the ``<aside class="sidebar">`` block in
-    ``docs/self-improving/seed-generation/run.html.template`` so sub-pages
-    (agents / timeline / tournament / lineage / candidates) inherit the
-    same brand, section counts, nav-list classes, and CSS hooks as
-    cycle-root pages — previously, this function emitted a flatter shell
-    that hub.css did not target (no ``.sidebar`` / ``.brand-sub`` /
-    ``.count`` / ``.nav-list`` rules), so deep paths rendered as
-    plain-text bullets without the dense-table layout.
 
-    ``active_section`` marks one of {"hub", "petri", "seedgen",
-    "autoresearch"} as the current top-level area so the matching link
-    gets ``class="active" aria-current="page"``.
+def _mark_current(nav_html: str, current: str) -> str:
+    """Mark the nav link for ``current`` with ``aria-current="page"``.
+
+    A page without its own nav entry (a run sub-page, a run report) marks its
+    closest ancestor link with ``data-ancestor`` instead, so the reader keeps
+    their place without a false ``aria-current`` claim.
     """
-    base = "/geode/self-improving"
-    active = {
-        "hub": ' class="active" aria-current="page"' if active_section == "hub" else "",
-        "petri": (' class="active" aria-current="page"' if active_section == "petri" else ""),
-        "seedgen": (' class="active" aria-current="page"' if active_section == "seedgen" else ""),
-        "autoresearch": (
-            ' class="active" aria-current="page"' if active_section == "autoresearch" else ""
-        ),
-    }
-    petri_recent = common["sidebar_petri_recent"]
-    seedgen_runs = common["sidebar_seedgen_runs"]
-    petri_count = common["petri_count"]
-    seedgen_count_label = common["seedgen_count_label"]
-    ar_label = html_escape(common["autoresearch_status_label"])
+    exact = f'href="{current}"'
+    if exact in nav_html:
+        return nav_html.replace(exact, f'{exact} aria-current="page"', 1)
+    ancestors = [
+        href
+        for href in _NAV_HREF_RE.findall(nav_html)
+        if href != _HUB_URL and current.startswith(href)
+    ]
+    if not ancestors:
+        return nav_html
+    ancestor = f'href="{max(ancestors, key=len)}"'
+    return nav_html.replace(ancestor, f"{ancestor} data-ancestor", 1)
+
+
+def _open_current_group(match: re.Match[str]) -> str:
+    """Open a collapsible nav list when it holds the current page or its ancestor."""
+    group = match.group(1)
+    if 'aria-current="page"' in group or " data-ancestor" in group:
+        return f'<details class="nav-group" open>{group}</details>'
+    return match.group(0)
+
+
+def render_hub_nav(fields: Mapping[str, str], current: str) -> str:
+    """Render the ``<aside class="sidebar">`` shared by every hub page.
+
+    ``fields`` is the page's template mapping (it already carries the sidebar
+    lists and section counts); ``current`` is the page URL. Long recent-audit
+    and run lists sit in nested disclosures that open when they hold the
+    current page, so the core routes stay visible.
+    """
+    base = _HUB_URL
+    crucible_label = html_escape(fields.get("crucible_count_label", "ledger"))
+    nav = f"""<nav aria-label="Hub navigation">
+        <div class="nav-section">Hub</div>
+        <ul class="nav-list">
+          <li><a href="{base}">Overview</a></li>
+        </ul>
+
+        <div class="nav-section">Petri Audit \
+<span class="count">{html_escape(fields["petri_count"])}</span></div>
+        <ul class="nav-list">
+          <li><a href="{base}petri-bundle/">SPA log viewer{_EXTERNAL_MARK}</a></li>
+          <li><details class="nav-group"><summary>Recent audits</summary>
+            <ul class="sub-nav">
+{fields["sidebar_petri_recent"]}
+            </ul></details></li>
+        </ul>
+
+        <div class="nav-section">Seed Generation \
+<span class="count">{html_escape(fields["seedgen_count_label"])}</span></div>
+        <ul class="nav-list">
+          <li><a href="{base}seed-generation/">All runs</a></li>
+          <li><details class="nav-group"><summary>Runs by campaign</summary>
+            <ul class="sub-nav">
+{fields["sidebar_seedgen_runs"]}
+            </ul></details></li>
+          <li><a href="{base}seed-generation/bundle/">Phase log viewer{_EXTERNAL_MARK}</a></li>
+          <li><a href="/geode/docs/petri/seeds">Seed runs (docs){_EXTERNAL_MARK}</a></li>
+        </ul>
+
+        <div class="nav-section">Autoresearch \
+<span class="count">{html_escape(fields["autoresearch_status_label"])}</span></div>
+        <ul class="nav-list">
+          <li><a href="{base}autoresearch/">Overview</a></li>
+          <li><a href="{base}autoresearch/baseline/">Baseline</a></li>
+          <li><a href="{base}autoresearch/mutations/">Mutations</a></li>
+          <li><a href="{base}autoresearch/results/">Results</a></li>
+          <li><a href="{base}autoresearch/evidence/">Evidence</a></li>
+          <li><a href="{base}autoresearch/runs/">Runs</a></li>
+          <li><a href="{base}autoresearch/policies/">Policies</a></li>
+        </ul>
+
+        <div class="nav-section">Crucible <span class="count">{crucible_label}</span></div>
+        <ul class="nav-list">
+          <li><a href="{_CRUCIBLE_KERNEL_SOURCE_URL}" rel="noopener">\
+Kernel architecture (source){_EXTERNAL_MARK}</a></li>
+          <li><a href="{_CRUCIBLE_DOCS_URL}">Bounded search (docs){_EXTERNAL_MARK}</a></li>
+        </ul>
+
+        <div class="nav-section">Docs</div>
+        <ul class="nav-list">
+          <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
+          <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+          <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
+        </ul>
+
+        <div class="nav-section">Meta</div>
+        <ul class="nav-list">
+          <li><a href="{GEODE_REPO_URL}" rel="noopener">GitHub{_EXTERNAL_MARK}</a></li>
+        </ul>
+      </nav>"""
+    nav = _NAV_GROUP_RE.sub(_open_current_group, _mark_current(nav, current))
     return f"""<aside class="sidebar">
-    <nav aria-label="Hub navigation">
-      <div class="brand">GEODE</div>
-      <div class="brand-sub">/self-improving</div>
-
-      <div class="nav-section">Hub</div>
-      <ul class="nav-list">
-        <li><a href="{base}/"{active["hub"]}>Overview</a></li>
-      </ul>
-
-      <div class="nav-section">Petri Audit <span class="count">{petri_count}</span></div>
-      <ul class="nav-list">
-        <li><a href="{base}/petri-bundle/">SPA log viewer &#x2197;</a></li>
-        <li><a href="{base}/petri-bundle/"{active["petri"]}>Recent audits</a>
-          <ul class="sub-nav">
-{petri_recent}
-          </ul>
-        </li>
-      </ul>
-
-      <div class="nav-section">Seed Generation \
-<span class="count">{seedgen_count_label}</span></div>
-      <ul class="nav-list">
-        <li><a href="{base}/seed-generation/"{active["seedgen"]}>All runs</a>
-          <ul class="sub-nav">
-{seedgen_runs}
-          </ul>
-        </li>
-        <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
-      </ul>
-
-      <div class="nav-section">Autoresearch <span class="count">{ar_label}</span></div>
-      <ul class="nav-list">
-        <li><a href="{base}/autoresearch/baseline/">Baseline</a></li>
-        <li><a href="{base}/autoresearch/mutations/">Mutations</a></li>
-        <li><a href="{base}/autoresearch/results/">Results</a></li>
-        <li><a href="{base}/autoresearch/policies/">Policies</a></li>
-      </ul>
-
-      <div class="nav-section">Crucible <span class="count">ledger</span></div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
-      </ul>
-
-      <div class="nav-section">Docs</div>
-      <ul class="nav-list">
-        <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
-        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
-        <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
-      </ul>
-
-      <div class="nav-section">Meta</div>
-      <ul class="nav-list">
-        <li>\
-<a href="{GEODE_REPO_URL}" rel="noopener">GitHub &#x2197;</a></li>
-      </ul>
-    </nav>
+    <a class="brand" href="{base}">GEODE<span class="brand-sub">/self-improving</span></a>
+    <details class="hub-nav" data-hub-nav>
+      <summary>Contents</summary>
+      {nav}
+    </details>
   </aside>"""
+
+
+def render_hub_crumbs(trail: Sequence[tuple[str, str | None]]) -> str:
+    """Breadcrumb from the hub root down to the page (last entry: ``href=None``)."""
+    if not trail:
+        return ""
+    items = [f'<li><a href="{_HUB_URL}">Self-Improving Hub</a></li>']
+    for label, href in trail:
+        text = html_escape(label)
+        items.append(
+            f'<li><a href="{href}">{text}</a></li>'
+            if href
+            else f'<li><span aria-current="page">{text}</span></li>'
+        )
+    return f'<nav class="crumbs" aria-label="Breadcrumb"><ol>{"".join(items)}</ol></nav>'
+
+
+def _hub_chrome(
+    fields: Mapping[str, str],
+    current: str,
+    trail: Sequence[tuple[str, str | None]] = (),
+) -> dict[str, str]:
+    """Template markers ``{{ hub_nav }}`` / ``{{ hub_crumbs }}`` for one page."""
+    return {"hub_nav": render_hub_nav(fields, current), "hub_crumbs": render_hub_crumbs(trail)}
+
+
+_Trail = list[tuple[str, str | None]]
+
+
+def _seedgen_trail(title: str, active_link: str) -> tuple[str, _Trail]:
+    """(nav URL, breadcrumb) for a seedgen sub-page titled ``"<page> — <run_id>"``.
+
+    ``active_link`` is the sub-view's URL segment under the run (``agents`` /
+    ``lineage`` / ...), or ``active`` for the cross-run page.
+    """
+    head, sep, run_id = title.rpartition(" — ")
+    if not sep:
+        head, run_id = title, ""
+    current = f"{_SEEDGEN_URL}{active_link}/"
+    trail: _Trail = [("Seed generation", _SEEDGEN_URL)]
+    if run_id:
+        run_url = f"{_SEEDGEN_URL}{html_escape(run_id)}/"
+        current = f"{run_url}{active_link}/"
+        trail.append((run_id, run_url))
+        if head != active_link.capitalize():
+            trail.append((active_link.capitalize(), current))
+    trail.append((head, None))
+    return current, trail
+
+
+def _autoresearch_trail(*pages: tuple[str, str]) -> tuple[str, _Trail]:
+    """(page URL, breadcrumb) from (label, path below ``autoresearch/``) pairs."""
+    trail: _Trail = [("Autoresearch", _AUTORESEARCH_URL)]
+    trail += [(label, f"{_AUTORESEARCH_URL}{path}") for label, path in pages]
+    current = trail[-1][1] or _AUTORESEARCH_URL
+    trail[-1] = (trail[-1][0], None)
+    return current, trail
+
+
+# Scanned in document order: headings name the tables that follow them.
+_TABLE_SCAN_RE = re.compile(
+    r"<script\b.*?</script>|<!--.*?-->"
+    r'|<details class="section-fold"[^>]*>\s*<summary>(?P<fold>.*?)</summary>'
+    r"|<h(?P<level>[1-4])\b[^>]*>(?P<heading>.*?)</h(?P=level)>"
+    r"|(?P<open><table\b)|(?P<close></table>)",
+    re.DOTALL,
+)
+_SECTION_HEAD_RE = re.compile(r'<h2 class="section"(?P<attrs>[^>]*)>(?P<body>.*?)</h2>', re.DOTALL)
+_SCROLL_OPEN_TAIL_RE = re.compile(r'<div class="table-scroll"[^>]*>\s*$')
+# Pages that already carry a section map (run page, hub landing, a refreshed page).
+_OWN_MAP_MARKS = ('class="run-map"', "data-page-map", 'class="page-map"')
+_ID_ATTR_RE = re.compile(r'\bid="([^"]+)"')
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _plain_text(fragment: str) -> str:
+    return " ".join(_TAG_RE.sub(" ", fragment).split())
+
+
+def _wrap_tables(page: str) -> str:
+    """Put every table in a labelled, keyboard-reachable horizontal scroll region.
+
+    Wide evidence tables scroll inside their own region instead of widening
+    the page (WCAG 1.4.10 allows local scrolling for 2-D data). No column is
+    hidden; the region is named after the nearest preceding heading. A table
+    already inside a region is left alone, so the pass is idempotent.
+    """
+    label = "Data table"
+    out: list[str] = []
+    pos = 0
+    opened: list[bool] = []  # per open <table>: did this pass add its region?
+    for match in _TABLE_SCAN_RE.finditer(page):
+        heading = match.group("fold") or match.group("heading")
+        if heading:
+            label = _plain_text(heading).replace('"', "&quot;") or label
+        elif match.group("open"):
+            lookback = max(0, match.start() - 600)
+            fresh = _SCROLL_OPEN_TAIL_RE.search(page, lookback, match.start()) is None
+            opened.append(fresh)
+            if fresh:
+                out += [
+                    page[pos : match.start()],
+                    f'<div class="table-scroll" role="region" tabindex="0" aria-label="{label}">',
+                ]
+                pos = match.start()
+        elif match.group("close") and opened and opened.pop():
+            out += [page[pos : match.end()], "</div>"]
+            pos = match.end()
+    out.append(page[pos:])
+    return "".join(out)
+
+
+def _section_title(body: str) -> str:
+    """``Petri Audit &middot; 26 archives`` -> ``Petri Audit`` (counts drift, names do not)."""
+    text = html_unescape(_plain_text(body))
+    named = [part.strip() for part in text.split("·") if any(ch.isalpha() for ch in part)]
+    return named[0] if named else text
+
+
+def _add_page_map(page: str) -> str:
+    """Give section headings stable ids; list them when a page has three or more.
+
+    Pages that carry their own map (the run page's ``run-map``, the hub
+    landing's ``data-page-map`` orientation list) keep it instead.
+    """
+    used = set(_ID_ATTR_RE.findall(page))
+    sections: list[tuple[str, str]] = []
+
+    def _with_id(match: re.Match[str]) -> str:
+        attrs, body = match.group("attrs"), match.group("body")
+        title = _section_title(body)
+        existing = _ID_ATTR_RE.search(attrs)
+        if existing:
+            anchor = existing.group(1)
+        else:
+            slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "section"
+            anchor, n = f"sec-{slug}", 2
+            while anchor in used:
+                anchor, n = f"sec-{slug}-{n}", n + 1
+            used.add(anchor)
+            attrs = f'{attrs} id="{anchor}"'
+        sections.append((anchor, title))
+        return f'<h2 class="section"{attrs}>{body}</h2>'
+
+    page = _SECTION_HEAD_RE.sub(_with_id, page)
+    first = _SECTION_HEAD_RE.search(page)
+    own_map = any(mark in page for mark in _OWN_MAP_MARKS)
+    if first is None or len(sections) < 3 or own_map:
+        return page
+    links = "".join(f'<li><a href="#{a}">{html_escape(t)}</a></li>' for a, t in sections)
+    page_map = (
+        '<nav class="page-map" aria-labelledby="page-map-label">'
+        f'<span class="scope" id="page-map-label">On this page</span><ul>{links}</ul></nav>\n    '
+    )
+    return page[: first.start()] + page_map + page[first.start() :]
+
+
+def finalize_hub_page(page: str) -> str:
+    """Build-time pass shared by every generated hub page."""
+    return _add_page_map(_wrap_tables(page))
+
+
+def write_hub_page(path: Path, page: str) -> None:
+    path.write_text(finalize_hub_page(page), encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# --refresh-presentation: re-skin already-published pages, data untouched     #
+# --------------------------------------------------------------------------- #
+# Some published values (runtime baselines, local Crucible ledgers, runs whose
+# inputs are gone) have no tracked source, so rebuilding would turn public
+# evidence into empty states. This mode reads only a COPY of the published
+# docs/self-improving tree and swaps the shell around each page's own <main>.
+_VENDORED_PREFIXES = (("petri-bundle",), ("seed-generation", "bundle"))  # Inspect View bytes
+_HUB_ASSETS_DIR = REPO_ROOT / "docs" / "self-improving" / "assets"
+_HUB_CSS_TAG = '<link rel="stylesheet" href="/geode/self-improving/assets/hub.css">'
+_HUB_JS_TAG = '<script src="/geode/self-improving/assets/hub.js" defer></script>'
+_SKIP_LINK = '<a class="skip-link" href="#main">Skip to content</a>'
+_ASIDE_RE = re.compile(r'<aside class="sidebar">.*?</aside>', re.DOTALL)
+_UL_TAG_RE = re.compile(r"<ul\b|</ul>")
+_NAV_MARK_RE = re.compile(r' (?:aria-current="page"|data-ancestor|class="active")')
+_LEGACY_SCROLL_RE = re.compile(
+    r'<div class="heatmap-scroll"[^>]*>\s*(<table\b.*?</table>)\s*</div>', re.DOTALL
+)
+_H1_RE = re.compile(r"<h1\b[^>]*>(.*?)</h1>", re.DOTALL)
+_HREF_RE = re.compile(r'href="([^"]*)"')
+# The one audited destination correction (old -> new); every other href is kept.
+_HREF_CORRECTIONS = {"/geode/docs/architecture/crucible-kernel": _CRUCIBLE_KERNEL_SOURCE_URL}
+# Sidebar status wording: a published archive is a recorded snapshot, not "live".
+_STATUS_CORRECTIONS = {"live": "snapshot"}
+
+
+def _nav_section(aside: str, label: str) -> str:
+    """Sidebar markup from one ``nav-section`` label up to the next."""
+    start = aside.find(f'<div class="nav-section">{label}')
+    if start < 0:
+        return ""
+    end = aside.find('<div class="nav-section">', start + 1)
+    return aside[start:end] if end > 0 else aside[start:]
+
+
+def _nav_section_count(chunk: str) -> str:
+    match = re.match(r'<div class="nav-section">[^<]*<span class="count">([^<]*)</span>', chunk)
+    return html_unescape(match.group(1)) if match else ""
+
+
+def _nav_sub_list(chunk: str) -> str:
+    """Inner items of the section's ``ul.sub-nav``, nested lists kept whole."""
+    open_tag = '<ul class="sub-nav">'
+    start = chunk.find(open_tag)
+    if start < 0:
+        return ""
+    body_start, depth = start + len(open_tag), 1
+    for tag in _UL_TAG_RE.finditer(chunk, body_start):
+        depth += -1 if tag.group(0) == "</ul>" else 1
+        if depth == 0:
+            return _NAV_MARK_RE.sub("", chunk[body_start : tag.start()]).strip()
+    return ""
+
+
+def _published_nav_fields(aside: str) -> dict[str, str]:
+    """Counts and recent lists exactly as the published sidebar shows them."""
+    petri = _nav_section(aside, "Petri Audit")
+    seedgen = _nav_section(aside, "Seed Generation")
+    status = _nav_section_count(_nav_section(aside, "Autoresearch"))
+    return {
+        "petri_count": _nav_section_count(petri),
+        "sidebar_petri_recent": _nav_sub_list(petri),
+        "seedgen_count_label": _nav_section_count(seedgen),
+        "sidebar_seedgen_runs": _nav_sub_list(seedgen),
+        "autoresearch_status_label": _STATUS_CORRECTIONS.get(status, status),
+        "crucible_count_label": _nav_section_count(_nav_section(aside, "Crucible")),
+    }
+
+
+def _published_trail(parts: tuple[str, ...], page: str) -> _Trail:
+    """Breadcrumb for a published page from its path and its own first ``<h1>``."""
+    if not parts:
+        return []
+    h1 = _H1_RE.search(page, page.find('<main class="content"'))
+    title = html_unescape(_plain_text(h1.group(1))) if h1 else parts[-1]
+    if parts[0] == "autoresearch":
+        pages = [(parts[1].capitalize(), f"{parts[1]}/")] if len(parts) > 1 else []
+        if len(parts) > 2:
+            pages.append((title, "/".join(parts[1:]) + "/"))
+        return _autoresearch_trail(*pages)[1]
+    if parts[0] == "seed-generation":
+        if len(parts) == 1:
+            return [("Seed generation", None)]
+        if len(parts) == 2 and parts[1] != "active":
+            return [("Seed generation", _SEEDGEN_URL), (parts[1], None)]
+        view = "active" if len(parts) == 2 else {"agent": "agents"}.get(parts[2], parts[2])
+        return _seedgen_trail(title, view)[1]
+    return [(title, None)]
+
+
+def refresh_page_presentation(page: str, parts: tuple[str, ...]) -> str:
+    """Re-skin one published hub page without rewriting its evidence.
+
+    The sidebar is re-rendered from its own published counts and lists, the
+    head gains the shared script, the body a skip link, ``<main>`` an id and a
+    breadcrumb, the legacy heatmap wrapper is dropped, and ``finalize_hub_page``
+    adds table regions, section ids and the page map. Table cells, code blocks,
+    prose, destinations and the historical build stamp are kept as published.
+    Running it again changes nothing.
+    """
+    aside = _ASIDE_RE.search(page)
+    if aside is None or '<main class="content"' not in page or _HUB_CSS_TAG not in page:
+        raise ValueError("not a hub-owned page")
+    current = _HUB_URL + "".join(f"{part}/" for part in parts)
+    nav = render_hub_nav(_published_nav_fields(aside.group(0)), current)
+    page = page[: aside.start()] + nav + page[aside.end() :]
+    if _HUB_JS_TAG not in page:
+        page = page.replace(_HUB_CSS_TAG, f"{_HUB_CSS_TAG}\n{_HUB_JS_TAG}", 1)
+    if _SKIP_LINK not in page:
+        page = page.replace("<body>", f"<body>\n{_SKIP_LINK}", 1)
+    main_open = '<main class="content" id="main">'
+    if main_open not in page:
+        crumbs = render_hub_crumbs(_published_trail(parts, page))
+        crumb_line = f"\n    {crumbs}" if crumbs else ""  # hub root has no breadcrumb
+        page = page.replace('<main class="content">', main_open + crumb_line, 1)
+    # Earlier refreshes left the root's empty breadcrumb as a whitespace-only line.
+    page = page.replace(f"{main_open}\n    \n", f"{main_open}\n", 1)
+    for old_href, new_href in _HREF_CORRECTIONS.items():
+        page = page.replace(f'href="{old_href}"', f'href="{new_href}"')
+    return finalize_hub_page(_LEGACY_SCROLL_RE.sub(r"\1", page))
+
+
+def _evidence_kept(old: str, new: str) -> bool:
+    """Cheap guard: no destination, table cell or code block went missing.
+
+    A destination listed in ``_HREF_CORRECTIONS`` counts as kept when its
+    replacement is present.
+    """
+    old_hrefs = {_HREF_CORRECTIONS.get(href, href) for href in _HREF_RE.findall(old)}
+    return (
+        old_hrefs <= set(_HREF_RE.findall(new))
+        and old.count("<td") == new.count("<td")
+        and old.count("<pre") == new.count("<pre")
+    )
+
+
+def refresh_presentation(site_dir: Path) -> int:
+    """Re-skin every hub-owned ``index.html`` under ``site_dir`` in place.
+
+    ``site_dir`` is a copy of the published ``docs/self-improving`` tree. Nothing
+    else is read: no listing, ledger, state or runtime file. Inspect bundles
+    and pages without the hub shell stay byte-identical, a page that fails the
+    evidence guard is left untouched and reported, and the current shared
+    ``hub.css`` / ``hub.js`` are copied into ``assets/``.
+    """
+    if not site_dir.is_dir():
+        LOG.error("--refresh-presentation needs an existing directory: %s", site_dir)
+        return 2
+    refreshed = unchanged = skipped = 0
+    failed: list[str] = []
+    for path in sorted(site_dir.rglob("index.html")):
+        rel = path.relative_to(site_dir)
+        if any(rel.parts[: len(prefix)] == prefix for prefix in _VENDORED_PREFIXES):
+            continue
+        old = path.read_text(encoding="utf-8")
+        try:
+            new = refresh_page_presentation(old, rel.parts[:-1])
+        except ValueError:
+            skipped += 1
+            continue
+        if not _evidence_kept(old, new):
+            failed.append(rel.as_posix())
+        elif new == old:
+            unchanged += 1
+        else:
+            path.write_text(new, encoding="utf-8")
+            refreshed += 1
+    assets = site_dir / "assets"
+    assets.mkdir(exist_ok=True)
+    for name in ("hub.css", "hub.js"):
+        if (_HUB_ASSETS_DIR / name).resolve() != (assets / name).resolve():
+            shutil.copyfile(_HUB_ASSETS_DIR / name, assets / name)
+    LOG.info(
+        "presentation refresh: %d rewritten, %d already current, %d not hub pages, %d refused",
+        refreshed,
+        unchanged,
+        skipped,
+        len(failed),
+    )
+    for rel_path in failed:
+        LOG.error("evidence guard refused (left untouched): %s", rel_path)
+    return 1 if failed else 0
 
 
 def _render_seedgen_subpage(
@@ -2128,17 +2533,14 @@ def _render_seedgen_subpage(
     body: str,
     common: dict[str, str],
 ) -> str:
-    """Common shell for a seedgen sub-page (agents / timeline / tournament).
+    """Common shell for a seedgen sub-page (agents / timeline / tournament / ...).
 
-    Renders the standard hub layout (sidebar + content) so every
-    sub-page is sidebar-consistent with cycle-root pages. ``active_link``
-    is retained on the public signature for caller back-compat but no
-    longer drives sidebar markup — sub-page navigation now lives in the
-    in-content sub-views grid (see ``run.html.template``) rather than
-    sidebar bullets.
+    Same chrome as the template pages. ``active_link`` is the sub-view's URL
+    segment under the run (``agents`` / ``lineage`` / ...; ``active`` for the
+    cross-run page); with the run id in ``title`` ("<page> — <run_id>") it
+    yields the breadcrumb and the nav's current-section mark.
     """
-    _ = active_link  # callers still pass it; reserved for future per-section highlighting
-    sidebar_html = _render_hub_sidebar(common, active_section="seedgen")
+    chrome = _hub_chrome(common, *_seedgen_trail(title, active_link))
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -2146,13 +2548,16 @@ def _render_seedgen_subpage(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html_escape(title)} — GEODE Self-Improving Hub</title>
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
+<script src="/geode/self-improving/assets/hub.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <div class="shell">
-  {sidebar_html}
+  {chrome["hub_nav"]}
 
-  <main class="content">
+  <main class="content" id="main">
+    {chrome["hub_crumbs"]}
     <h1 class="page-title">{html_escape(title)}</h1>
     {body}
     <div class="build-info">
@@ -2213,17 +2618,15 @@ def _render_agents_index_body(run_id: str, subagents: list[dict[str, Any]]) -> s
     return f"""<section class="page-sub">
   <p class="muted">{len(subagents)} sub-agent{"s" if len(subagents) != 1 else ""} —
   every conversation turn captured. Click a row for full dialogue.</p>
-  <div class="heatmap-scroll">
-    <table class="records seedgen-agents">
-      <thead><tr>
-        <th>task_id</th><th>phase</th><th>model</th>
-        <th class="num">turns</th><th class="num">tokens</th><th class="num">duration</th>
-      </tr></thead>
-      <tbody>
+  <table class="records seedgen-agents">
+    <thead><tr>
+      <th>task_id</th><th>phase</th><th>model</th>
+      <th class="num">turns</th><th class="num">tokens</th><th class="num">duration</th>
+    </tr></thead>
+    <tbody>
 {rows_html}
-      </tbody>
-    </table>
-  </div>
+    </tbody>
+  </table>
 </section>
 """
 
@@ -2648,6 +3051,7 @@ def render_seedgen_active(
     autoresearch_status_label: str,
     geode_version: str,
     build_date: str,
+    crucible_count_label: str = "ledger",
 ) -> Path:
     """Render the cross-run ``/seed-generation/active/`` live dashboard.
 
@@ -2668,6 +3072,7 @@ def render_seedgen_active(
         "petri_count": str(petri_count),
         "seedgen_count_label": seedgen_count_label,
         "autoresearch_status_label": autoresearch_status_label,
+        "crucible_count_label": crucible_count_label,
         "run_id": "",  # no per-run context on this cross-run page
     }
     rows_html: list[str] = []
@@ -2751,7 +3156,7 @@ def render_seedgen_active(
     )
     out_path = out_dir / "active" / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(full_html, encoding="utf-8")
+    write_hub_page(out_path, full_html)
     return out_path
 
 
@@ -3688,6 +4093,7 @@ def emit_seedgen_lineage_pages(
     autoresearch_status_label: str,
     geode_version: str,
     build_date: str,
+    crucible_count_label: str = "ledger",
 ) -> None:
     """Emit lineage/index.html + lineage/<cand_id>/index.html for a run."""
     common = {
@@ -3699,6 +4105,7 @@ def emit_seedgen_lineage_pages(
         "petri_count": str(petri_count),
         "seedgen_count_label": seedgen_count_label,
         "autoresearch_status_label": autoresearch_status_label,
+        "crucible_count_label": crucible_count_label,
         "run_id": html_escape(run_id),
     }
     # Index
@@ -3710,7 +4117,7 @@ def emit_seedgen_lineage_pages(
         common=common,
     )
     (out_dir / "lineage").mkdir(parents=True, exist_ok=True)
-    (out_dir / "lineage" / "index.html").write_text(idx_html, encoding="utf-8")
+    write_hub_page(out_dir / "lineage" / "index.html", idx_html)
 
     # Per-candidate — same cid union as the /candidates/ viewer loop so a
     # viewer's "5-station lineage" flow link always resolves (link-emit /
@@ -3725,7 +4132,7 @@ def emit_seedgen_lineage_pages(
         )
         cand_dir = out_dir / "lineage" / cid
         cand_dir.mkdir(parents=True, exist_ok=True)
-        (cand_dir / "index.html").write_text(detail_html, encoding="utf-8")
+        write_hub_page(cand_dir / "index.html", detail_html)
 
     # PR-HUB-VIS-CYCLE1 (2026-05-28) — emit side-by-side diff page for
     # every parent_id ↔ evolved_id pair. Skipped silently when either MD
@@ -3761,7 +4168,7 @@ def emit_seedgen_lineage_pages(
         )
         diff_dir = out_dir / "lineage" / parent_id / "diff"
         diff_dir.mkdir(parents=True, exist_ok=True)
-        (diff_dir / "index.html").write_text(diff_html, encoding="utf-8")
+        write_hub_page(diff_dir / "index.html", diff_html)
 
 
 # --------------------------------------------------------------------------- #
@@ -6622,19 +7029,30 @@ class _AutoresearchRenderCtx:
     autoresearch_status_label: str
     geode_version: str
     build_date: str
+    crucible_count_label: str = "ledger"
 
 
-def _autoresearch_base_mapping(ctx: _AutoresearchRenderCtx) -> dict[str, str]:
-    return {
+def _autoresearch_base_mapping(
+    ctx: _AutoresearchRenderCtx, *pages: tuple[str, str]
+) -> dict[str, str]:
+    """Shared markers for an autoresearch page.
+
+    ``pages`` is the (label, path below ``autoresearch/``) trail from the
+    section down to the page; empty for the autoresearch landing itself.
+    """
+    mapping = {
         "petri_count": str(ctx.petri_count),
         "sidebar_petri_recent": ctx.sidebar_petri_recent,
         "seedgen_count_label": ctx.seedgen_count_label,
         "sidebar_seedgen_runs": ctx.sidebar_seedgen_runs,
         "autoresearch_status_label": ctx.autoresearch_status_label,
+        "crucible_count_label": ctx.crucible_count_label,
         "geode_version": ctx.geode_version,
         "design_schema_version": str(DESIGN_SCHEMA_VERSION),
         "build_date": ctx.build_date,
     }
+    mapping.update(_hub_chrome(mapping, *_autoresearch_trail(*pages)))
+    return mapping
 
 
 def render_autoresearch_landing(
@@ -6691,7 +7109,7 @@ def render_autoresearch_landing(
     if leftover:
         raise RuntimeError(f"autoresearch landing unresolved markers: {sorted(set(leftover))}")
     out_path = out_dir / "index.html"
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -6720,7 +7138,7 @@ def render_autoresearch_baseline(
         for ns in AUTORESEARCH_BASELINE_NAMESPACES:
             ns_data = _baseline_namespace_data(baseline, ns)
             namespace_blocks.append(_render_baseline_namespace(ns, ns_data, stale=stale))
-    mapping = _autoresearch_base_mapping(ctx)
+    mapping = _autoresearch_base_mapping(ctx, ("Baseline", "baseline/"))
     mapping.update(
         {
             "stale_baseline_warning": _render_warning_banner(baseline_path, stale),
@@ -6736,7 +7154,7 @@ def render_autoresearch_baseline(
         raise RuntimeError(f"autoresearch baseline unresolved markers: {sorted(set(leftover))}")
     out_path = out_dir / "baseline" / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -6749,7 +7167,7 @@ def render_autoresearch_mutations(
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     joined = _join_mutation_records(mutations)
-    mapping = _autoresearch_base_mapping(ctx)
+    mapping = _autoresearch_base_mapping(ctx, ("Mutations", "mutations/"))
     mapping.update(
         {
             "mutations_section_label": (
@@ -6770,7 +7188,7 @@ def render_autoresearch_mutations(
         raise RuntimeError(f"autoresearch mutations unresolved markers: {sorted(set(leftover))}")
     out_path = out_dir / "mutations" / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -6806,7 +7224,7 @@ def render_autoresearch_results(
         sparkline = "—"
         sparkline_legend = "no iterations recorded"
         sparkline_aria = "no fitness data"
-    mapping = _autoresearch_base_mapping(ctx)
+    mapping = _autoresearch_base_mapping(ctx, ("Results", "results/"))
     mapping.update(
         {
             "results_section_label": (
@@ -6825,7 +7243,7 @@ def render_autoresearch_results(
         raise RuntimeError(f"autoresearch results unresolved markers: {sorted(set(leftover))}")
     out_path = out_dir / "results" / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -6838,7 +7256,7 @@ def render_autoresearch_policies(
     ctx: _AutoresearchRenderCtx,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    mapping = _autoresearch_base_mapping(ctx)
+    mapping = _autoresearch_base_mapping(ctx, ("Policies", "policies/"))
     mapping.update(
         {
             "policies_section_label": (
@@ -6853,7 +7271,7 @@ def render_autoresearch_policies(
         raise RuntimeError(f"autoresearch policies unresolved markers: {sorted(set(leftover))}")
     out_path = out_dir / "policies" / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -6881,7 +7299,7 @@ def render_autoresearch_evidence(
     not run — no crash, no fabricated number.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    mapping = _autoresearch_base_mapping(ctx)
+    mapping = _autoresearch_base_mapping(ctx, ("Evidence", "evidence/"))
     mapping.update(
         {
             "methods_grid": _render_evidence_methods(),
@@ -6901,7 +7319,7 @@ def render_autoresearch_evidence(
         raise RuntimeError(f"autoresearch evidence unresolved markers: {sorted(set(leftover))}")
     out_path = out_dir / "evidence" / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -6978,8 +7396,8 @@ def render_autoresearch_runs_index(
     if not items:
         runs_list = '<p class="page-sub">No run reports yet.</p>'
     else:
-        runs_list = '    <ul class="nav-list run-report-list">\n' + "\n".join(items) + "\n    </ul>"
-    mapping = _autoresearch_base_mapping(ctx)
+        runs_list = '    <ul class="run-report-list">\n' + "\n".join(items) + "\n    </ul>"
+    mapping = _autoresearch_base_mapping(ctx, ("Runs", "runs/"))
     mapping.update(
         {
             "runs_section_label": (f"{len(items)} report" + ("s" if len(items) != 1 else "")),
@@ -6992,7 +7410,7 @@ def render_autoresearch_runs_index(
         raise RuntimeError(f"autoresearch runs index unresolved markers: {sorted(set(leftover))}")
     out_path = out_dir / "runs" / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -7038,7 +7456,7 @@ def render_autoresearch_run_report(
     # ``{{ ... }}`` token would otherwise be misread as an unresolved template
     # marker and fail the build. The body is substituted last, so the only
     # ``{{ }}`` the validator sees come from the template, never the content.
-    mapping = _autoresearch_base_mapping(ctx)
+    mapping = _autoresearch_base_mapping(ctx, ("Runs", "runs/"), (title, f"runs/{slug}/"))
     mapping.update(
         {
             "run_title": html_escape(title),
@@ -7054,7 +7472,7 @@ def render_autoresearch_run_report(
     rendered = substitute(chrome, {"run_body_html": render_markdown_to_html(md_body)})
     out_path = out_dir / "runs" / slug / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(rendered, encoding="utf-8")
+    write_hub_page(out_path, rendered)
     return out_path
 
 
@@ -7170,7 +7588,20 @@ def main(argv: list[str] | None = None) -> int:
             "Each becomes an autoresearch/runs/<slug>/ page."
         ),
     )
+    parser.add_argument(
+        "--refresh-presentation",
+        type=Path,
+        metavar="DIR",
+        help=(
+            "Presentation only: re-skin the published hub pages in DIR (a copy of "
+            "docs/self-improving) in place with the current shell, hub.css and hub.js. "
+            "Reads nothing else; data, build stamps and Inspect bundles are kept. "
+            "Ignores every other option."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.refresh_presentation is not None:
+        return refresh_presentation(args.refresh_presentation)
 
     # Resolve the canonical TRACKED state dir from the two accepted spellings.
     # ``--state-dir`` wins; ``--autoresearch-root`` is the legacy
@@ -7204,10 +7635,12 @@ def main(argv: list[str] | None = None) -> int:
 
     petri_section_label = f"{len(petri_rows)} archive" + ("s" if len(petri_rows) != 1 else "")
     seedgen_section_label = f"{len(seedgen_rows)} run" + ("s" if len(seedgen_rows) != 1 else "")
+    # Chrome label only (nav + landing). A published page is a recorded snapshot
+    # of the baseline at build time, never a live feed; stale/absent keep their meaning.
     autoresearch_status_label = (
         "stale"
         if autoresearch.baseline_stale
-        else ("live" if autoresearch.baseline_path is not None else "absent")
+        else ("snapshot" if autoresearch.baseline_path is not None else "absent")
     )
 
     crucible_attempts = load_crucible_attempts()
@@ -7236,11 +7669,14 @@ def main(argv: list[str] | None = None) -> int:
         "autoresearch_rows": render_autoresearch_rows(autoresearch),
         "crucible_count_label": crucible_count_label,
         "crucible_rows": render_crucible_rows(crucible_attempts),
+        "crucible_kernel_source_url": _CRUCIBLE_KERNEL_SOURCE_URL,
+        "crucible_docs_url": _CRUCIBLE_DOCS_URL,
         "stale_baseline_warning": render_stale_banner(autoresearch),
         "geode_version": version,
         "design_schema_version": str(DESIGN_SCHEMA_VERSION),
         "build_date": build_date,
     }
+    mapping.update(_hub_chrome(mapping, _HUB_URL))
 
     rendered = substitute(template, mapping)
 
@@ -7251,7 +7687,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(rendered, encoding="utf-8")
+    write_hub_page(args.out, rendered)
     LOG.info("wrote %s (%d bytes)", args.out, args.out.stat().st_size)
 
     # ----------------------------------------------------------------- #
@@ -7285,6 +7721,7 @@ def main(argv: list[str] | None = None) -> int:
         sidebar_seedgen_runs=sidebar_seedgen_runs_html,
         geode_version=version,
         build_date=build_date,
+        crucible_count_label=crucible_count_label,
     )
     LOG.info("wrote seedgen index %s (%d bytes)", index_path, index_path.stat().st_size)
 
@@ -7306,6 +7743,7 @@ def main(argv: list[str] | None = None) -> int:
             geode_version=version,
             build_date=build_date,
             run_bundle_dir=seeds_dir / run.run_id,
+            crucible_count_label=crucible_count_label,
         )
         LOG.info("wrote seedgen run %s (%d bytes)", run_path, run_path.stat().st_size)
 
@@ -7320,6 +7758,7 @@ def main(argv: list[str] | None = None) -> int:
         autoresearch_status_label=autoresearch_status_label,
         geode_version=version,
         build_date=build_date,
+        crucible_count_label=crucible_count_label,
     )
     LOG.info("wrote seedgen active %s (%d bytes)", active_path, active_path.stat().st_size)
 
@@ -7367,6 +7806,7 @@ def main(argv: list[str] | None = None) -> int:
         autoresearch_status_label=autoresearch_status_label,
         geode_version=version,
         build_date=build_date,
+        crucible_count_label=crucible_count_label,
     )
 
     # E6 (2026-05-30) — held-out point count drives the landing sub-view row's
