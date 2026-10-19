@@ -68,8 +68,9 @@ class TestCalculateCost:
         assert abs(cost - expected) < 1e-10
 
     def test_known_model_haiku(self):
+        # Budget default is Haiku 5.5 (2026-10-14), short-prompt tier.
         cost = calculate_cost(ANTHROPIC_BUDGET, 10_000, 2_000)
-        expected = 10_000 * (1.0 / 1_000_000) + 2_000 * (5.0 / 1_000_000)
+        expected = 10_000 * (0.10 / 1_000_000) + 2_000 * (0.50 / 1_000_000)
         assert abs(cost - expected) < 1e-10
 
     def test_unknown_model_returns_zero(self):

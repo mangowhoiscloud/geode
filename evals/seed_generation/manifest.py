@@ -85,6 +85,27 @@ class SeedRoleSpec(BaseModel):
     num_turns: int = 0
     max_papers: int = 0
     queries_per_run: int = 3
+    current_models: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _append_current_models(cls, data: Any) -> Any:
+        """Current Anthropic/OpenAI offerings come from the shared catalog.
+
+        Opt-in per role (``current_models = true``, as the bundled manifest
+        does); a custom manifest's ``allowed_models`` keeps its exact meaning.
+        """
+        if isinstance(data, dict) and data.get("current_models") is True:
+            from core.llm.model_catalog import offered_model_ids
+
+            listed = list(data.get("allowed_models", []))
+            data = {
+                **data,
+                "allowed_models": list(
+                    dict.fromkeys([*listed, *offered_model_ids("anthropic", "openai")])
+                ),
+            }
+        return data
 
     @model_validator(mode="after")
     def _default_in_allowed(self) -> SeedRoleSpec:
@@ -157,17 +178,18 @@ class VoterSpec(BaseModel):
         enum at manifest load time so an operator typo (e.g. ``"loww"``)
         fails fast instead of surfacing as a 400 from the server at
         ranker dispatch. Empty string is the sentinel meaning "use the
-        caller default" (ranker / mutation_eval pin ``"none"``).
-        Per-model availability (e.g. gpt-5.4 only ``low/medium/high``)
-        is enforced separately by the adapter at request time.
+        caller default" (the ranker resolves it from the model contract).
+        Per-model availability is enforced separately by the adapter at
+        request time.
         (Codex MCP catch — Sprint G/H follow-up, 2026-05-26.)
         """
-        valid = {"", "none", "minimal", "low", "medium", "high", "xhigh"}
-        if self.effort not in valid:
+        from core.llm.model_catalog import EFFORT_LEVELS
+
+        if self.effort and self.effort not in EFFORT_LEVELS:
             raise ValueError(
                 f"voter ({self.model}, {self.provider}) effort={self.effort!r} "
-                f"is not a recognised OpenAI Responses API reasoning_effort "
-                f"value; expected one of {sorted(valid - {''})} or empty."
+                f"is not a recognised reasoning_effort value; expected one of "
+                f"{list(EFFORT_LEVELS)} or empty."
             )
         return self
 

@@ -276,8 +276,16 @@ def test_terminal_refresh_does_not_reapply_saved_preferences(loop, monkeypatch):
     assert loop._effort == "low"
 
 
-@pytest.mark.parametrize(("source", "effort"), [("payg", "low"), ("subscription", "none")])
-def test_admitted_tuple_reaches_actual_primary_request(loop, monkeypatch, source, effort):
+@pytest.mark.parametrize(
+    ("model", "source", "effort"),
+    [
+        ("gpt-6-sol", "payg", "low"),
+        ("gpt-6-sol", "subscription", "none"),
+        ("gpt-6.1-sol", "payg", "medium"),
+        ("gpt-6.1-sol", "subscription", "medium"),
+    ],
+)
+def test_admitted_tuple_reaches_actual_primary_request(loop, monkeypatch, model, source, effort):
     import json
 
     import httpx
@@ -301,7 +309,7 @@ def test_admitted_tuple_reaches_actual_primary_request(loop, monkeypatch, source
             "object": "response",
             "created_at": 0,
             "status": "completed",
-            "model": "gpt-6-sol",
+            "model": model,
             "output": [item],
             "usage": {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3},
         }
@@ -332,7 +340,7 @@ def test_admitted_tuple_reaches_actual_primary_request(loop, monkeypatch, source
                     "type": "command",
                     "cmd": "/model",
                     "args": "",
-                    "model_config": {"source": source, "effort": effort},
+                    "model_config": {"model": model, "source": source, "effort": effort},
                 }
             )
         )
@@ -363,7 +371,7 @@ def test_admitted_tuple_reaches_actual_primary_request(loop, monkeypatch, source
 
     asyncio.run(run())
     assert len(bodies) == 1
-    assert bodies[0]["model"] == "gpt-6-sol"
+    assert bodies[0]["model"] == model
     assert bodies[0]["reasoning"]["effort"] == effort
     assert ("max_output_tokens" in bodies[0]) is (source == "payg")
     assert "Static policy" in bodies[0]["instructions"]

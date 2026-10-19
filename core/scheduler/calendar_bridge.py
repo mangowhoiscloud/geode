@@ -12,6 +12,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from core.mcp.calendar_port import CalendarReadError
 from core.scheduler.models import Schedule, ScheduledJob, ScheduleKind
 
 log = logging.getLogger(__name__)
@@ -66,17 +67,17 @@ class CalendarSchedulerBridge:
         except Exception as exc:
             return 0, [f"Failed to list scheduler jobs: {exc}"]
 
-        # Get existing GEODE events to avoid duplicates
-        existing_titles: set[str] = set()
+        # Get existing GEODE events to avoid duplicates. Without a complete
+        # read the duplicate check is blind, so push nothing.
         try:
             events = await self._calendar.alist_events(
                 start=datetime.now(UTC),
                 end=datetime.now(UTC) + timedelta(days=30),
                 max_results=100,
             )
-            existing_titles = {e.title for e in events if e.is_geode}
         except Exception as exc:
-            log.debug("Failed to fetch existing events: %s", exc)
+            return 0, [f"Skipped push: existing calendar events could not be read ({exc})"]
+        existing_titles = {e.title for e in events if e.is_geode}
 
         for job in jobs:
             if not job.enabled:
@@ -122,6 +123,11 @@ class CalendarSchedulerBridge:
                 end=datetime.now(UTC) + timedelta(days=30),
                 max_results=100,
             )
+        except CalendarReadError as exc:
+            if not exc.partial:
+                return 0, [f"Failed to list calendar events: {exc}"]
+            events = exc.events
+            errors.extend(f"Calendar source failed: {failure}" for failure in exc.failures)
         except Exception as exc:
             return 0, [f"Failed to list calendar events: {exc}"]
 

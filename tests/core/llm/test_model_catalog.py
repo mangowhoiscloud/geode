@@ -43,7 +43,10 @@ def test_adapter_model_spec_uses_catalogue_values() -> None:
     assert spec.supports_tools is True
 
 
-@pytest.mark.parametrize("model", ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"])
+@pytest.mark.parametrize(
+    "model",
+    ["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-5.3-codex"],
+)
 def test_retirement_is_subscription_specific(model: str) -> None:
     reason = model_source_unavailable_reason(model, provider="openai", source="subscription")
     assert reason is not None and model in reason
@@ -55,7 +58,17 @@ def test_retirement_is_subscription_specific(model: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "model", ["gpt-5.5", "gpt-6-astra", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
+    "model",
+    [
+        "gpt-6.1-sol",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-6-astra",
+        "gpt-5.6",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    ],
 )
 def test_current_subscription_models_not_retired_early(model: str) -> None:
     assert (
@@ -110,6 +123,8 @@ def test_anthropic_endpoint_authority_is_exact_and_actual_url_wins(
 @pytest.mark.parametrize(
     "model",
     [
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
         "claude-fable-5",
         "claude-opus-4-8",
         "claude-opus-4-7",
@@ -144,6 +159,20 @@ def test_source_context_metadata_does_not_claim_codex_server_limits(model: str) 
     sub = get_model_catalog_spec(model, "openai", source="subscription")
     assert api.context_window == 1_050_000 and api.max_input_tokens == 922_000
     assert sub.context_window == 272_000 and sub.max_context_window == 872_000
+    assert sub.max_input_tokens is None and sub.max_output_tokens is None
+    assert sub.context_origin == "client_default"
+
+
+def test_gpt61_sol_codex_client_default_differs_from_platform_capacity() -> None:
+    api = get_model_catalog_spec("gpt-6.1-sol", "openai", source="payg")
+    sub = get_model_catalog_spec("gpt-6.1-sol", "openai-codex", source="subscription")
+    assert (api.context_window, api.max_input_tokens, api.max_output_tokens) == (
+        1_050_000,
+        922_000,
+        128_000,
+    )
+    # Codex 0.162.0 local catalogue: 500K default, 872K configurable ceiling.
+    assert (sub.context_window, sub.max_context_window) == (500_000, 872_000)
     assert sub.max_input_tokens is None and sub.max_output_tokens is None
     assert sub.context_origin == "client_default"
 

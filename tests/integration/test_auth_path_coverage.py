@@ -91,7 +91,8 @@ def test_seed_generation_routes_to_cell(cell: AuthCell) -> None:
     from evals.seed_generation.picker import pick_bindings
 
     # Pick a model whose provider matches the cell.
-    model = "claude-sonnet-4-6" if cell.path.provider == "anthropic" else "gpt-5.5"
+    # GPT-5.5 left the subscription route on 2026-10-14; use a model on both.
+    model = "claude-sonnet-4-6" if cell.path.provider == "anthropic" else "gpt-5.6-sol"
     role_name = "generator"
     manifest = SeedGenerationManifest(
         enabled_roles=[role_name],

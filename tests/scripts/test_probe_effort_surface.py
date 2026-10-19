@@ -30,12 +30,20 @@ def test_visible_effort_surface_matches_picker(
         for profile in get_model_profiles(openai_source=source)
         for effort in supported_efforts(profile.id, profile.provider)
     )
-    retired_subscription_ids = {"gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"}
+    retired_subscription_ids = {"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"}
     surface_models = {model for model, _, _ in surface}
     if source == "subscription":
         assert retired_subscription_ids.isdisjoint(surface_models)
     else:
         assert retired_subscription_ids <= surface_models
+    # GPT-6.1 Sol exposes only its documented levels; never none or Codex Ultra.
+    assert [effort for model, _, effort in surface if model == "gpt-6.1-sol"] == [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    ]
     assert ("gpt-6-astra", "openai", "low") in surface
     assert ("gpt-6-astra", "openai", "max") in surface
     assert ("gpt-5.6-sol", "openai", "max") in surface

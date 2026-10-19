@@ -28,6 +28,13 @@ _VALID_CREDENTIAL_SOURCES: tuple[str, ...] = (
 )
 _VALID_CREDENTIAL_PROVIDERS: tuple[str, ...] = ("anthropic", "openai")
 
+_API_KEY_PROVIDERS = {
+    "anthropic": "Anthropic",
+    "openai": "OpenAI",
+    "openrouter": "OpenRouter",
+    "glm": "GLM (z.ai PAYG)",
+}
+
 
 _PROVIDER_ALIASES: dict[str, str] = {
     "openai": "openai",
@@ -54,7 +61,7 @@ def cmd_login(args: str, *, client: IPCClient | None = None) -> bool:
     Subcommands::
 
         /login                — show plans, profiles, routing, declared quotas
-        /login add            — interactive wizard (kind → provider → key/OAuth)
+        /login add            — choose a subscription or provider, then sign in
         /login set-key <plan> [key]
         /login use <plan>     — pin a plan as the active one for its provider
         /login remove <plan>
@@ -510,16 +517,8 @@ def _login_show_status() -> None:
 
 
 def _login_add_interactive(_args: str) -> None:
-    """Interactive wizard — Plan kind → Provider → endpoint/key/OAuth.
-
-    Mirrors OpenClaw setup wizard (`prompter.select` levels) collapsed
-    into a single CLI command so existing users can run it any time.
-    """
-    import getpass
+    """Choose a credential route once, then collect its credential."""
     import sys
-
-    from core.auth.auth_toml import save_api_key
-    from core.cli import commands as _pkg
 
     if not sys.stdin.isatty():
         raise ValueError(
@@ -528,58 +527,60 @@ def _login_add_interactive(_args: str) -> None:
             "for non-interactive setup."
         )
 
-    kinds = [
-        (
-            "subscription",
-            "ChatGPT subscription (Codex sign-in)",
-        ),
-        ("payg", "Pay-as-you-go API key (Anthropic, OpenAI, OpenRouter, GLM PAYG)"),
+    routes = [
+        ("subscription", "ChatGPT subscription (Codex sign-in)"),
+        *((provider, f"{label} API key") for provider, label in _API_KEY_PROVIDERS.items()),
     ]
     menu = TerminalMenu(
-        [label for _, label in kinds],
-        title="\n  Plan kind?  (↑↓ select, Enter confirm, q cancel)\n",
+        [label for _, label in routes],
+        title="\n  Sign in with?  (↑↓ select, Enter confirm, q cancel)\n",
         menu_cursor="  > ",
         menu_cursor_style=("fg_cyan", "bold"),
     )
     idx = menu.show()
     if idx is None:
         raise ValueError("Credential entry cancelled")
-    kind_id = kinds[idx][0]
-
-    if kind_id == "subscription":
+    provider = routes[idx][0]
+    if provider == "subscription":
         _login_oauth("openai")
-        return
+    else:
+        prompt_api_key(provider)
 
-    if kind_id == "payg":
-        providers = [
-            ("anthropic", "Anthropic"),
-            ("openai", "OpenAI"),
-            ("openrouter", "OpenRouter"),
-            ("glm", "GLM (z.ai PAYG)"),
-        ]
-        pmenu = TerminalMenu(
-            [label for _, label in providers],
+
+def prompt_api_key(provider: str = "") -> None:
+    """Collect one hidden key for setup and login, using the shared auth owner."""
+    import getpass
+    import sys
+
+    from core.auth.auth_toml import save_api_key
+    from core.cli import commands as _pkg
+
+    if not provider:
+        if not sys.stdin.isatty():
+            raise ValueError("API-key setup requires an interactive terminal.")
+        providers = list(_API_KEY_PROVIDERS)
+        menu = TerminalMenu(
+            list(_API_KEY_PROVIDERS.values()),
             title="\n  Provider?\n",
             menu_cursor="  > ",
         )
-        pidx = pmenu.show()
-        if pidx is None:
+        idx = menu.show()
+        if idx is None:
             raise ValueError("Credential entry cancelled")
-        provider = providers[pidx][0]
-        try:
-            # allow-direct-io: terminal-owned secret input stays hidden.
-            key = getpass.getpass(f"  {providers[pidx][1]} API key (hidden): ").strip()
-        except (KeyboardInterrupt, EOFError) as exc:
-            raise ValueError("Credential entry cancelled") from exc
-        if not key:
-            raise ValueError("No key provided")
-        plan = save_api_key(key, provider=provider)
-        clear_dry_run_opt_in()
-        _pkg.console.print(
-            f"  [success]Registered[/success] {plan.display_name}  "
-            f"[muted](key {_pkg._mask_key(key)})[/muted]\n"
-        )
-        return
+        provider = providers[idx]
+    try:
+        # allow-direct-io: terminal-owned secret input stays hidden.
+        key = getpass.getpass(f"  {_API_KEY_PROVIDERS[provider]} API key (hidden): ").strip()
+    except (KeyboardInterrupt, EOFError) as exc:
+        raise ValueError("Credential entry cancelled") from exc
+    if not key:
+        raise ValueError("No key provided")
+    plan = save_api_key(key, provider=provider)
+    clear_dry_run_opt_in()
+    _pkg.console.print(
+        f"  [success]Registered[/success] {plan.display_name}  "
+        f"[muted](key {_pkg._mask_key(key)})[/muted]\n"
+    )
 
 
 def _login_oauth(target: str) -> None:
@@ -624,7 +625,7 @@ def _login_oauth(target: str) -> None:
         return
 
     if target == "anthropic":
-        _login_anthropic_api_key()
+        prompt_api_key("anthropic")
         return
 
     raise ValueError(
@@ -789,25 +790,6 @@ def _login_source(args: str, *, client: IPCClient | None = None) -> None:
     if client is None:
         _pkg.console.print("  Defaults saved for new sessions; running sessions are unchanged.")
     _pkg.console.print()
-
-
-def _login_anthropic_api_key() -> None:
-    """Prompt in the terminal; persist with the same owner as /login add."""
-    import getpass
-
-    from core.auth.auth_toml import save_api_key
-    from core.cli import commands as _pkg
-
-    try:
-        # allow-direct-io: terminal-owned secret input stays hidden.
-        api_key = getpass.getpass("  Anthropic API key (hidden): ").strip()
-    except (EOFError, KeyboardInterrupt) as exc:
-        raise ValueError("Credential entry cancelled") from exc
-    if not api_key:
-        raise ValueError("No key provided")
-    save_api_key(api_key, provider="anthropic")
-    clear_dry_run_opt_in()
-    _pkg.console.print("  [success]Anthropic API key saved to auth.toml.[/success]\n")
 
 
 def _login_set_key(rest: str) -> None:
@@ -1089,12 +1071,11 @@ _HEALTH_SUGGESTIONS: dict[str, str] = {
     "ok": "Ready to dispatch.",
     "missing_key": "Key/token is empty. Run `/login add` (interactive) or "
     "`/login set-key <plan> [key]` to populate.",
-    "expired": "OAuth token past expires_at. Re-run `codex login` and then "
-    "`/login refresh` so GEODE "
-    "picks the new token up.",
+    "expired": "OAuth token past expires_at. Sign in again with `/login openai`.",
     "cooling_down": "Backoff after consecutive failures. The verdict line "
-    "shows the cooldown deadline — wait it out or "
-    "`/login use <other-plan>` to switch providers in the meantime.",
+    "shows the cooldown deadline — wait it out, `/login use <plan>` to prefer "
+    "another plan of the same provider, or `/model <model>` to switch this "
+    "session to another provider.",
     "disabled": "Manually disabled (`/login remove <plan>` to delete, or "
     "edit `~/.geode/auth.toml` to flip `disabled=false`).",
 }
@@ -1136,6 +1117,12 @@ def _login_health(rest: str) -> None:
         if p["reason_detail"]:
             _pkg.console.print(f"    [muted]{p['reason_detail']}[/muted]")
         suggestion = _HEALTH_SUGGESTIONS.get(code, "")
+        if code == "expired" and p["managed_by"] == "codex-cli":
+            # Imported credential: GEODE only reads ~/.codex/auth.json.
+            suggestion = (
+                "Imported Codex CLI token past expires_at. Run `codex login` in the "
+                "Codex CLI, then `/login refresh` so GEODE rereads it."
+            )
         if suggestion:
             _pkg.console.print(f"    → {suggestion}")
     _pkg.console.print()

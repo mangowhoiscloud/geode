@@ -632,13 +632,11 @@ def run_audit(
     # an upstream inspect-petri PR; legacy mode (single mega-judge call)
     # remains the runtime default. Cost estimate already reflects split
     # when callers ask, so dry-run preview matches the eventual live cost.
+    if judge_mode not in ("legacy", "split"):
+        raise ValueError(f"unknown judge_mode={judge_mode!r}; expected 'legacy' or 'split'")
     if assumptions is None:
-        if judge_mode == "split":
-            assumptions = SPLIT_TOKEN_ASSUMPTIONS
-        elif judge_mode == "legacy":
-            assumptions = DEFAULT_TOKEN_ASSUMPTIONS
-        else:
-            raise ValueError(f"unknown judge_mode={judge_mode!r}; expected 'legacy' or 'split'")
+        split = judge_mode == "split"
+        assumptions = SPLIT_TOKEN_ASSUMPTIONS if split else DEFAULT_TOKEN_ASSUMPTIONS
     # SoT alignment (2026-05-22) — None argv values defer to
     # ``[self_improving_loop.petri.<role>].model`` via the binding
     # registry (which consults operator config first, then the legacy
@@ -741,11 +739,33 @@ def run_audit(
 
     if dry_run:
         notes.append("dry-run: subprocess not executed")
+        if judge_mode == "split":
+            notes.append(
+                "judge_mode=split is a cost preview only: the command shown is the "
+                "legacy single-judge audit"
+            )
         return AuditReport(
             command=cmd,
             estimated_usd=estimated_usd,
             estimated_krw=estimated_krw,
             dry_run=True,
+            notes=notes,
+            same_provider_bias_chip=bias_chip,
+        )
+
+    if judge_mode == "split":
+        # The 5-group judge orchestration does not exist; running the command
+        # would silently execute (and bill) the legacy judge under a split label.
+        notes.append(
+            "judge_mode=split is not implemented for live audits (cost preview only); "
+            "live run refused before dispatch — use --judge-mode legacy"
+        )
+        return AuditReport(
+            command=cmd,
+            estimated_usd=estimated_usd,
+            estimated_krw=estimated_krw,
+            dry_run=False,
+            aborted=True,
             notes=notes,
             same_provider_bias_chip=bias_chip,
         )

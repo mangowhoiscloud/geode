@@ -27,7 +27,7 @@ export default function Page() {
 2. geode about                # EFFECTIVE 모델, 경로, 소켓, 마스킹 경고
 3. geode config explain model # 레이어별 후보와 WINNER
 4. pkill -f "geode serve"     # 오래된 데몬 정리 후 재진입
-5. geode setup -r             # ~/.geode/.env 삭제 후 설정 마법사 재실행`}</pre>
+5. geode setup -r             # 기존 자격 파일을 지우지 않고 자격 설정 재실행`}</pre>
             <p>
               <code>geode config explain</code>은 한 설정 키의 레이어별 후보를
               표로 보여주고 어느 레이어가 이기는지 표시합니다
@@ -138,7 +138,7 @@ export default function Page() {
 2. geode about                # EFFECTIVE model, paths, socket, mask warning
 3. geode config explain model # per-layer candidates and the WINNER
 4. pkill -f "geode serve"     # clear stale daemons, then re-enter
-5. geode setup -r             # delete ~/.geode/.env, rerun setup`}</pre>
+5. geode setup -r             # rerun credential setup; keeps credential files`}</pre>
             <p>
               <code>geode config explain</code> prints, for one settings key,
               the candidate from each layer and marks exactly one WINNER

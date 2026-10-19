@@ -117,3 +117,32 @@ def test_alt_provider_skips_attempted_provider(monkeypatch) -> None:
     # Even if the GLM profile in the store is "eligible", we exclude the
     # exhausted provider from the suggestion list.
     assert "cross-provider:" not in out
+
+
+def test_cross_provider_advice_routes_through_model_switch(monkeypatch) -> None:
+    """`manage_login use` cannot change the session model, so the
+    cross-provider line must name the real switch route and keep it
+    user-authorized."""
+    from core.auth.profiles import ProfileStore
+    from core.wiring import container as _infra
+
+    store = ProfileStore()
+    store.add(
+        AuthProfile(
+            name="anthropic:payg",
+            provider="anthropic",
+            credential_type=CredentialType.API_KEY,
+            key="synthetic-key",
+        )
+    )
+    monkeypatch.setattr(_infra, "_profile_store", store)
+
+    out = format(
+        [_verdict("glm:default", ProfileRejectReason.COOLING_DOWN)],
+        attempted_provider="glm",
+    )
+    cross = next(line for line in out.splitlines() if "cross-provider:" in line)
+    assert "/model" in cross
+    assert "switch_model(" in cross
+    assert "user asks" in cross
+    assert "switch with manage_login" not in cross

@@ -136,30 +136,55 @@ class TestEnvSetupWizard:
         )
 
     def test_wizard_skips_on_enter_after_choosing_path_b(self, tmp_path):
-        """User picks Path B then presses Enter for every key → no keys set."""
+        """An empty key for the selected provider does not complete setup."""
         with (
             patch("core.cli.onboarding.console") as mock_console,
             patch("core.config.settings") as mock_settings,
+            patch("sys.stdin.isatty", return_value=True),
+            patch("core.cli.commands.login.TerminalMenu") as menu,
         ):
+            menu.return_value.show.return_value = 0
             _no_keys_mock(mock_settings)
             mock_console.input.return_value = "2"
             with patch("getpass.getpass", return_value=""):
                 result = env_setup_wizard()
         assert result is False
 
-    def test_wizard_sets_key_via_path_b(self, tmp_path):
-        """User picks Path B and enters an Anthropic key."""
+    @pytest.mark.parametrize(
+        "index,provider", [(0, "anthropic"), (1, "openai"), (2, "openrouter"), (3, "glm")]
+    )
+    def test_wizard_sets_key_via_path_b(self, tmp_path, index, provider):
+        """Setup asks only for the selected provider, including OpenRouter."""
         with (
             patch("core.cli.onboarding.console") as mock_console,
             patch("core.auth.auth_toml.save_api_key") as save,
             patch("core.config.settings") as mock_settings,
+            patch("sys.stdin.isatty", return_value=True),
+            patch("core.cli.commands.login.TerminalMenu") as menu,
         ):
+            menu.return_value.show.return_value = index
             _no_keys_mock(mock_settings)
             mock_console.input.return_value = "2"
-            with patch("getpass.getpass", side_effect=["sk-ant-test-key-12345678", "", ""]):
+            with patch("getpass.getpass", return_value="synthetic-provider-key") as hidden:
                 result = env_setup_wizard()
-        save.assert_called_once_with("sk-ant-test-key-12345678", provider="anthropic")
+        menu.assert_called_once()
+        hidden.assert_called_once()
+        save.assert_called_once_with("synthetic-provider-key", provider=provider)
         assert result is True
+
+    def test_wizard_provider_cancel_does_not_prompt_or_save_key(self):
+        with (
+            patch("core.cli.onboarding.console") as console,
+            patch("sys.stdin.isatty", return_value=True),
+            patch("core.cli.commands.login.TerminalMenu") as menu,
+            patch("getpass.getpass") as hidden,
+            patch("core.auth.auth_toml.save_api_key") as save,
+        ):
+            console.input.return_value = "2"
+            menu.return_value.show.return_value = None
+            assert env_setup_wizard() is False
+        hidden.assert_not_called()
+        save.assert_not_called()
 
     def test_wizard_handles_ctrl_c(self, tmp_path):
         """Ctrl+C at the menu prompt gracefully stops."""
@@ -695,3 +720,106 @@ def test_credential_check_works_before_a_runtime_registers_adapters(
     monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-" + "x" * 40)
     registry._reset_for_test()
     assert has_available_llm_credential("anthropic")
+
+
+class TestSetupReset:
+    """`geode setup --reset` reconfigures credentials without deleting state."""
+
+    @pytest.fixture
+    def stored_state(self, monkeypatch, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_bytes(b"OPENAI_API_KEY=sk-old\nSLACK_BOT_TOKEN=xoxb-keep\n")
+        auth_file = tmp_path / "auth.toml"
+        auth_file.write_bytes(b'[profiles."openai-payg"]\nprovider = "openai"\n')
+        marker = tmp_path / ".dry-run-opt-in"
+        monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", env_file)
+        monkeypatch.setattr("core.paths.GLOBAL_DRY_RUN_MARKER", marker)
+        monkeypatch.setenv("GEODE_AUTH_TOML", str(auth_file))
+        snapshot = {path: path.read_bytes() for path in (env_file, auth_file)}
+        return snapshot
+
+    @staticmethod
+    def _run_setup(*, reset: bool, has_credential: bool = True):
+        from core.cli.typer_commands import setup
+
+        with (
+            patch("core.wiring.startup._has_any_llm_key", return_value=has_credential),
+            patch("core.cli.onboarding.configure_bash_sandbox"),
+            patch("core.cli.onboarding.configure_computer_use_helper"),
+            patch("core.cli.typer_commands.console"),
+        ):
+            setup(reset=reset)
+
+    def test_reset_opens_wizard_with_usable_credential_and_keeps_files(self, stored_state):
+        with patch("core.cli.onboarding.env_setup_wizard", return_value=True) as wizard:
+            self._run_setup(reset=True)
+        wizard.assert_called_once()
+        for path, data in stored_state.items():
+            assert path.read_bytes() == data
+
+    def test_setup_without_reset_skips_wizard_when_usable(self, stored_state):
+        with patch("core.cli.onboarding.env_setup_wizard") as wizard:
+            self._run_setup(reset=False)
+        wizard.assert_not_called()
+
+    def test_reset_cancellation_preserves_credentials(self, stored_state):
+        with (
+            patch("core.cli.onboarding.console") as console,
+            patch("core.auth.auth_toml.save_api_key") as save,
+        ):
+            console.input.side_effect = KeyboardInterrupt
+            self._run_setup(reset=True)
+        save.assert_not_called()
+        for path, data in stored_state.items():
+            assert path.read_bytes() == data
+
+    def test_reset_cancellation_keeps_existing_dry_run_marker(self, stored_state):
+        """Reset no longer clears the skip marker before entry; cancelling
+        leaves it byte-identical (only a successful credential clears it)."""
+        from core.paths import GLOBAL_DRY_RUN_MARKER
+
+        GLOBAL_DRY_RUN_MARKER.write_bytes(b"dry-run")
+        with patch("core.cli.onboarding.console") as console:
+            console.input.side_effect = KeyboardInterrupt
+            self._run_setup(reset=True)
+        assert GLOBAL_DRY_RUN_MARKER.read_bytes() == b"dry-run"
+
+    def test_reset_selected_key_goes_through_auth_owner_only(self, stored_state):
+        with (
+            patch("core.cli.onboarding.console") as console,
+            patch("core.auth.auth_toml.save_api_key") as save,
+            patch("sys.stdin.isatty", return_value=True),
+            patch("core.cli.commands.login.TerminalMenu") as menu,
+            patch("getpass.getpass", return_value="synthetic-new-key"),
+        ):
+            console.input.return_value = "2"
+            menu.return_value.show.return_value = 1
+            self._run_setup(reset=True)
+        save.assert_called_once_with("synthetic-new-key", provider="openai")
+        for path, data in stored_state.items():
+            assert path.read_bytes() == data
+
+
+@pytest.mark.parametrize("answers", [["", KeyboardInterrupt], ["x", "4", KeyboardInterrupt]])
+def test_wizard_invalid_choice_never_requests_or_saves_key(answers, monkeypatch, tmp_path):
+    monkeypatch.setattr("core.paths.GLOBAL_DRY_RUN_MARKER", tmp_path / ".dry-run-opt-in")
+    with (
+        patch("core.cli.onboarding.console") as console,
+        patch("core.cli.commands.login.TerminalMenu") as menu,
+        patch("getpass.getpass") as hidden,
+        patch("core.auth.auth_toml.save_api_key") as save,
+    ):
+        console.input.side_effect = answers
+        assert env_setup_wizard() is False
+    assert console.input.call_count == len(answers)
+    menu.assert_not_called()
+    hidden.assert_not_called()
+    save.assert_not_called()
+
+
+def test_wizard_reprompts_after_invalid_choice(monkeypatch, tmp_path):
+    monkeypatch.setattr("core.paths.GLOBAL_DRY_RUN_MARKER", tmp_path / ".dry-run-opt-in")
+    with patch("core.cli.onboarding.console") as console:
+        console.input.side_effect = ["two", "3"]
+        assert env_setup_wizard() is True
+    assert dry_run_opted_in() is True

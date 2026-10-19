@@ -1622,6 +1622,16 @@ def test_should_promote_accepts_significant_improvement() -> None:
     assert "fitness" in reason
 
 
+def _measured(means: dict[str, float]) -> dict[str, float]:
+    """Complete coverage for margin tests: the other weighted dims at mean 0.
+
+    A dim absent from ``dim_means`` already scored as mean 0, so filling it with
+    an explicit 0 leaves every fitness value and gain identical; the gate now
+    requires that coverage to be measured rather than implied.
+    """
+    return {**dict.fromkeys(DIM_WEIGHTS, 0.0), **means}
+
+
 def test_should_promote_floor_protects_against_zero_stderr() -> None:
     """``fitness_margin_floor`` (the zero-noise epsilon) kicks in when there
     is no measurable fitness noise (empty stderr → MC σ = 0).
@@ -1629,10 +1639,10 @@ def test_should_promote_floor_protects_against_zero_stderr() -> None:
     PR-MARGIN-FITNESS-SCALE (2026-05-30) — the floor is now a FITNESS-scale
     epsilon (0.005), the zero-noise guard beneath the bootstrap gain-stderr
     margin. This test pins that the floor surfaces in the reason string."""
-    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_means = _measured(dict.fromkeys(CRITICAL_DIMS, 3.0))
     baseline_stderr: dict[str, float] = {}  # empty → gain stderr = 0
     # Tiny gain (~0.0005) that would pass with margin=0 but fails the 0.005 floor.
-    current_means = dict.fromkeys(CRITICAL_DIMS, 2.99)
+    current_means = _measured(dict.fromkeys(CRITICAL_DIMS, 2.99))
     ok, reason = _should_promote(
         current_means,
         {},
@@ -1657,11 +1667,11 @@ def test_should_promote_widens_margin_when_critical_dim_n1() -> None:
     under-sampled baseline. With the new gate, the same Δ falls below
     the 0.20 N=1 floor and stays rejected.
     """
-    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_means = _measured(dict.fromkeys(CRITICAL_DIMS, 3.0))
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)  # N=1 → stderr 0
     # ~0.015 fitness gain: above the 0.005 default floor (would promote at
     # N>=2) but below the 0.05 N=1 widening floor → rejected only by widening.
-    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)
+    current_means = _measured(dict.fromkeys(CRITICAL_DIMS, 2.7))
     ok, reason = _should_promote(
         current_means,
         dict.fromkeys(CRITICAL_DIMS, 0.0),
@@ -1678,10 +1688,10 @@ def test_should_promote_keeps_default_margin_when_critical_dim_n_ge_2() -> None:
     """Mirror image — when all critical dims have N>=2 samples, the
     legacy 0.05 floor stays in effect. Otherwise PR-3 would over-tighten
     the gate for well-sampled baselines."""
-    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_means = _measured(dict.fromkeys(CRITICAL_DIMS, 3.0))
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
     # Same ~0.015 gain the N=1 path rejects above — here it clears the 0.005 floor.
-    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)
+    current_means = _measured(dict.fromkeys(CRITICAL_DIMS, 2.7))
     ok, _reason = _should_promote(
         current_means,
         dict.fromkeys(CRITICAL_DIMS, 0.0),
@@ -1697,9 +1707,9 @@ def test_should_promote_n1_gate_dormant_for_v1_baselines() -> None:
     """v1 baselines emit no sample_count — the new N=1 gate must stay
     dormant (legacy behaviour preserved). Without baseline_sample_count
     kwarg the function falls through to the 0.05 floor."""
-    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_means = _measured(dict.fromkeys(CRITICAL_DIMS, 3.0))
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    current_means = _measured(dict.fromkeys(CRITICAL_DIMS, 1.5))
     ok, _reason = _should_promote(
         current_means,
         dict.fromkeys(CRITICAL_DIMS, 0.0),
@@ -1715,9 +1725,9 @@ def test_should_promote_n1_gate_boundary_n2_exact_keeps_legacy_floor() -> None:
     """Boundary pin — exact N=2 on all critical dims must keep the
     legacy 0.05 floor. A future ``<= 2`` typo would silently widen the
     gate at N=2 and break this assertion."""
-    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_means = _measured(dict.fromkeys(CRITICAL_DIMS, 3.0))
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    current_means = _measured(dict.fromkeys(CRITICAL_DIMS, 1.5))
     ok, _reason = _should_promote(
         current_means,
         dict.fromkeys(CRITICAL_DIMS, 0.0),
@@ -1734,9 +1744,9 @@ def test_should_promote_n1_gate_fires_when_single_critical_dim_n1() -> None:
     widen the gate. The detector uses ``any(...)``; a future ``all(...)``
     rewrite would break this assertion. Mirrors the production case
     where one slow-to-converge dim drags the whole margin wider."""
-    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_means = _measured(dict.fromkeys(CRITICAL_DIMS, 3.0))
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)  # ~0.015 gain (< 0.05 N=1 floor)
+    current_means = _measured(dict.fromkeys(CRITICAL_DIMS, 2.7))  # ~0.015 gain (< 0.05 N=1 floor)
     sample_count = dict.fromkeys(CRITICAL_DIMS, 5)
     # Single critical dim at N=1.
     first_critical = next(iter(CRITICAL_DIMS))
@@ -1757,9 +1767,9 @@ def test_should_promote_n1_gate_uses_critical_tier_only() -> None:
     or info dim being N=1 must NOT widen the margin. The conservative
     gate fires on safety-relevant axes; auxiliaries already have their
     own squared-penalty path inside ``compute_fitness``."""
-    baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
+    baseline_means = _measured(dict.fromkeys(CRITICAL_DIMS, 3.0))
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    current_means = _measured(dict.fromkeys(CRITICAL_DIMS, 1.5))
     # An auxiliary dim is N=1; all critical dims are N>=5.
     sample_count = dict.fromkeys(CRITICAL_DIMS, 5)
     sample_count["input_hallucination"] = 1  # auxiliary

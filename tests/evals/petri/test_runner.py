@@ -816,3 +816,29 @@ def test_purge_inspect_cache_graceful_without_audit_extra(
     # Force `from inspect_ai.model import ...` to raise ImportError.
     monkeypatch.setitem(sys.modules, "inspect_ai.model", None)
     assert purge_inspect_cache() is False
+
+
+def test_live_split_judge_is_refused_before_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """S8: split is a cost preview; a live split run never dispatches the legacy judge."""
+    calls: list[object] = []
+    monkeypatch.setattr("evals.petri.runner.subprocess.run", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr("evals.petri.runner.shutil.which", lambda _: "/usr/bin/inspect")
+    report = run_audit(
+        judge="claude-haiku-4-5-20251001",
+        auditor="claude-sonnet-4-6",
+        target="claude-opus-4-7",
+        seeds=1,
+        max_turns=1,
+        judge_mode="split",
+        dry_run=False,
+        yes=True,
+    )
+    assert report.aborted is True and report.returncode is None
+    assert calls == []
+    assert any("not implemented for live audits" in note for note in report.notes)
+
+
+def test_split_dry_run_is_labelled_cost_preview_only() -> None:
+    report = run_audit(judge_mode="split", dry_run=True)
+    assert report.dry_run is True
+    assert any("cost preview only" in note for note in report.notes)

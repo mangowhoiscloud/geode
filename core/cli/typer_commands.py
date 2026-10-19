@@ -106,14 +106,20 @@ def setup(
         False,
         "--reset",
         "-r",
-        help="Wipe ~/.geode/.env and re-run from scratch",
+        help="Re-run credential setup even when a credential already works "
+        "(does not delete .env, auth.toml or the dry-run marker first)",
     ),
 ) -> None:
     """Re-run the first-time setup wizard.
 
-    Detects ChatGPT subscription OAuth (`~/.codex/auth.json`) before
-    prompting for API keys. Use ``--reset`` to clear existing
-    credentials and start over.
+    Without ``--reset`` the credential step is skipped when a usable route
+    already exists. ``--reset`` forces the wizard to run again so a provider
+    credential can be reconfigured. It does not delete ``~/.geode/.env``,
+    ``auth.toml`` or the dry-run marker before entry: a successful entry
+    replaces only the selected provider's key through the auth owner (and
+    clears the dry-run marker, as any successful setup does); cancelling or
+    failing leaves those files as they were. The sandbox and Computer Use
+    steps that follow are unchanged.
     """
     from core.cli.onboarding import (
         clear_dry_run_opt_in,
@@ -123,26 +129,18 @@ def setup(
     )
     from core.wiring.startup import _has_any_llm_key
 
-    if reset:
-        from core.paths import GLOBAL_ENV_FILE  # PR-CLEANUP-D2 anchor
-
-        env_path = GLOBAL_ENV_FILE
-        clear_dry_run_opt_in()
-        if env_path.exists():
-            env_path.unlink()
-            console.print(f"  [muted]Removed {env_path}[/muted]")
-
-    # Credential setup (skipped when already satisfied) — then the command
-    # sandbox step runs unconditionally so it is reachable on every machine,
-    # including ones with credentials already configured and no Docker.
-    if _has_any_llm_key() and not reset:
+    # Credential setup (skipped when already satisfied unless --reset) — then
+    # the command sandbox step runs unconditionally so it is reachable on
+    # every machine, including ones with credentials configured and no Docker.
+    if reset or not _has_any_llm_key():
+        env_setup_wizard()
+    else:
         clear_dry_run_opt_in()
         console.print(
             "  [success]A usable credential route is already configured.[/success]\n"
-            "  [muted]Use [cyan]/login[/cyan] to manage accounts.[/muted]"
+            "  [muted]Use [cyan]/login[/cyan] to manage accounts, or "
+            "[cyan]geode setup --reset[/cyan] to reconfigure.[/muted]"
         )
-    else:
-        env_setup_wizard()
 
     configure_bash_sandbox()
     configure_computer_use_helper()

@@ -260,8 +260,6 @@ def test_orchestrator_prepends_rubric_block(
             SLOT_RUBRIC_EXCERPTS: InContextSlot(
                 name=SLOT_RUBRIC_EXCERPTS,
                 max_entries=3,
-                rank_by="regression_severity",
-                injection_point="system_prompt",
             )
         },
     )
@@ -288,8 +286,6 @@ def test_orchestrator_no_op_when_baseline_missing(
             SLOT_RUBRIC_EXCERPTS: InContextSlot(
                 name=SLOT_RUBRIC_EXCERPTS,
                 max_entries=3,
-                rank_by="regression_severity",
-                injection_point="system_prompt",
             )
         },
     )

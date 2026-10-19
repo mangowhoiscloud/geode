@@ -53,12 +53,75 @@ functional change.
   stroke per scene inside artwork, with direction and momentum guards. Keep
   native scrolling, zoom, nested controls, and mobile touch navigation; widen
   the existing desktop pager targets and add the existing neutral focus fill.
-
+- **GPT-6.1 Sol.** Select `gpt-6.1-sol` on the Platform API and the Codex
+  subscription. Requests accept only `low`..`max` effort (no `none`, `minimal`
+  or Codex `ultra`), budget context per route (1.05M/922K input on the API,
+  the Codex client's 500K default and 872K ceiling on the subscription) and
+  price API usage at the published rates, including the full-request tier
+  above 272K input tokens.
+- **Claude Sonnet 5.5 and Haiku 5.5.** Add both with their own request
+  contracts: adaptive thinking with signed-block binding, the
+  `computer_toolset_20260801` computer toolset, local rejection of forced tool
+  choice on Sonnet 5.5 (Haiku 5.5 keeps it), and Haiku 5.5's 5x tariff when a
+  prompt, counting cache reads and writes, exceeds 100,000 tokens. Account-bound
+  thinking drops are now reported by reason and count.
 - **Research reader touch navigation.** Swipe artwork left or right to move
   between GEODE, Jev, and JEVDB scenes. Preserve scene URLs, language, browser
   history, vertical scrolling, pinch zoom, and taps on full-size image links.
 
 ### Fixed
+
+- **Eco² links.** The about page and RSI roadmap link to the moved Eco²
+  case page at `mangowhois.ai/eco2/`; the retired GitHub Pages address
+  returned 404.
+
+- **Guarded roadmap closure merges.** `scripts/merge_pr.py` now admits the
+  roadmap §0.3 tracking-only topic → `main` PR instead of rejecting every
+  non-promotion main target. Admission additionally requires the current-main
+  diff to modify only `docs/architecture/extensibility-roadmap.md`, reads both
+  exact-commit blobs from GitHub and verifies their git blob ids, proves from
+  the commits' Git trees that the file stays a regular `100644` blob, then runs the
+  existing roadmap checker and requires at least one `IN_DEVELOP` → `DONE`
+  closure. Every existing protection, check, ancestry, double-snapshot and
+  merge-parent requirement is unchanged. Receipts name the `flow` and, for
+  closures, the blob ids and closed GAPs.
+- **Current models in evaluations.** Petri and seed-generation roles now admit
+  current catalog offerings (opt-in `current_models = true`; pinned defaults
+  and custom `allowed_models` unchanged), so explicit GPT-6/6.1 and Claude 5.5
+  selections are no longer rejected or silently replaced. Petri API-key judges
+  and auditors use GEODE-owned `openai-platform/` and `anthropic-platform/`
+  inspect_ai providers. GPT-6 requests use the Responses API with their
+  effort, and Claude requests keep explicit `tool_choice`. Unsupported effort,
+  thinking-off or forced-tool combinations are rejected before any request.
+  Raw `openai/` and `anthropic/` ids remain the stock escape hatch. Seed
+  voters without an explicit effort no longer send `none` to models that
+  reject it, `max` is a valid voter effort, and bare-id subscription mapping
+  follows the catalog instead of a `gpt-5` name prefix.
+- **Startup import cost.** Importing the runtime, hook types, adapter registry
+  or extension policy no longer loads `core.config`, its routing manifest or
+  pydantic; the policy source is imported when a policy is read, and the key
+  masker when an auth profile key is rendered. Runtime creation still loads
+  configuration as before.
+  Runtime startup no longer imports httpx (and its optional CLI dependencies)
+  to build the Google calendar adapter; Google OAuth and Workspace requests
+  import it when they send. Credentials are still discovered at call time.
+- **CLI channel shutdown.** Stopping the daemon's CLI channel while a client is
+  disconnecting no longer fails with `Event loop is closed` or leaks an
+  unawaited close coroutine: a client whose loop already shut down has had
+  its connection closed by its own handler. Other scheduling failures still
+  propagate.
+- **Approval cancellation.** Release a lock acquired after its awaiting request
+  was cancelled, so later tool approvals continue instead of waiting forever.
+- **Provider setup.** Offer OpenRouter alongside the other API-key providers
+  during initial setup and collect only the selected provider's hidden key.
+- **Setup menu input.** The setup wizard re-asks on an empty or unknown choice
+  instead of treating it as the API-key route; no key is requested or saved.
+- **Auth recovery advice.** `/login health` and the model-facing credential
+  note no longer present plan `use` as a provider switch (it only reorders
+  plans within one provider); provider switches point to `/model` or a
+  user-requested `switch_model`. Expired OAuth advice distinguishes native
+  `/login openai` from an imported Codex CLI token (`codex login`, then
+  `/login refresh`).
 
 - **Research resource routes.** Add a standalone publication collection and
   correct the Jev reader URL to `/research/jev-system1-offloading/`. Preserve
@@ -66,8 +129,121 @@ functional change.
   language and selected pages when navigating browser history.
   Shorten collection selection URLs to the default report, `#jev`, or `#jevdb`,
   preserving historical selection links without duplicate history entries.
+- **Truthful tool outcomes.** `trigger_event` lists and fires the runtime's
+  real `TriggerManager` (unknown, disabled or callback-less triggers are
+  errors). `schedule_job` rejects malformed mutations instead of answering with
+  a listing. `memory_save`, `note_save` and `manage_rule` report the project
+  memory owner's real result (written, already recorded, missing file,
+  invalid, conflict, not found, failed), and `memory_search` searches by query
+  and tier. `generate_report` writes the requested markdown, JSON or HTML,
+  keeps the supplied findings and data, leaves an absent score unknown instead
+  of `0.0`, and returns the saved path, size and digest.
+- **MCP failure envelopes.** Notification and calendar adapters treat
+  `isError` and transport errors as failures: no `sent`/`created`/deleted
+  success, no event without an ID, and a failed calendar read is an error
+  rather than an empty schedule (a partial multi-source read is labelled with
+  its failed sources). Calendar sync skips pushing when existing events
+  cannot be read.
+- **Scheduler store and run lifecycle.** Every job change reloads the store
+  under a cross-process `flock` before writing, so concurrent instances no
+  longer lose additions or resurrect deleted or paused jobs; an unreadable or
+  malformed store is refused and left byte-identical. A run is claimed in the
+  store with a `run_id`, owner process and manual/scheduled provenance after
+  re-checking eligibility; one occurrence fires once, elapsed time never takes
+  over a live run, a manual run does not consume a scheduled occurrence, and a
+  stale outcome cannot settle a newer run. Queued action runs settle only from
+  the turn's real termination after the session state is saved; a failed
+  required write leaves the run claimed and unsettled. A failed run-claim
+  write leaves that occurrence retryable (recurring, cron and session-only
+  jobs alike), and a still-owned stuck run is reported once per run instead
+  of on every tick.
+- **Project memory integrity.** PROJECT.md and rule changes lock a separate
+  inode, reload, validate and write atomically, so concurrent threads and
+  processes do not lose updates and unreadable content is left unchanged.
+  Symlinked or project-escaping memory and rule paths are neither read into
+  context nor written, and nothing is created outside the project.
+- **Collaboration mailbox.** Message admission uses a checkpointed,
+  recipient-scoped receipt instead of searching message text for
+  `mailbox_id=` markers, so quoted text can no longer suppress and
+  acknowledge a real message. A full child inbox rejects new input instead of
+  evicting accepted messages, and a new child is refused while its parent's
+  completions would not fit, so every child result stays deliverable.
+- **Promotion coverage.** Scaffold-search promotion (gate, bootstrap and random
+  control arm) requires every weighted dimension to be measured in both the
+  audit and the baseline; a missing dimension is unknown, not a best-case score.
+  NaN and infinite dimension scores are dropped at extraction and rejected
+  before scoring, so they can no longer pass the bootstrap floor, the margin or
+  the random arm; a non-finite stderr on any dimension is rejected too. With
+  anchor confidence enabled, an anchor dimension missing from the audit blocks
+  promotion (gate, bootstrap and random arm) instead of scoring as best case,
+  and a baseline with only some anchors requires a rebaseline. A
+  non-finite bench field is unmeasured rather than clamped to 1.0, and an
+  unreadable baseline sample count applies the conservative N=1 margin.
+  Weights, margins and thresholds are unchanged.
+- **Petri split judge.** A live `--judge-mode split` audit is refused before
+  dispatch; split remains a cost preview.
+
+### Removed
+
+- **CLI memory action module.** `core/cli/memory_handler.py` and the module
+  hook globals it alone used are deleted; `manage_rule` uses the injected
+  project memory owner directly.
+- **Duplicate sync approval gates.** The unused synchronous
+  `ApprovalWorkflow.apply_safety_gates` / `confirm_write` / `confirm_cost` /
+  `confirm_sensitive` / `confirm_mcp` / `request_bash_approval` twins are
+  deleted; the async gates are the single policy implementation. The blocking
+  terminal prompt (`prompt_with_always`) stays as the prompt owner.
 
 ### Changed
+
+- **Rule mutations require approval.** `manage_rule` is a write tool (cached
+  approval) rather than an auto-approved safe tool, because rules persist
+  into later system prompts.
+- **Scheduler dispatch callback.** `on_job_fired` receives a fifth `run_id`
+  argument and reports outcomes through `record_run_outcome`; a legacy
+  four-argument callback still works and its runs settle as `dispatched`
+  (outcome unknown). `SchedulerLock` is a non-reentrant `flock` and its
+  `session_id` argument is ignored.
+- **Public documentation destination.** Publish the moved landing and docs
+  routes as redirects to `mangowhois.ai`, preserving language and fragments.
+  Retain research readers, replay, experiment archives and PDFs on GitHub
+  Pages, and save the complete static export before applying redirects.
+  Relocate that complete export to `/products/geode/` by changing owned URL
+  prefixes only, preserving the original design, Next.js interactions,
+  language queries, route spellings and binary assets with a hash manifest.
+  Keep explicit Korean landing requests as `?lang=ko` in the redirect map
+  and unknown-path fallback, since the preserved landing defaults to English.
+
+- **Model lifecycle (2026-10-14).** GPT-5.5 (retired 2026-10-14) and
+  GPT-5.3-Codex-Spark (retired 2026-09-14) are rejected on the Codex
+  subscription before credential or network access, with the documented
+  replacement named; their Platform API routes and historical prices remain.
+  Saved selections are never remapped. Deprecated Sonnet 4.5, GPT-5.3 Codex and
+  GPT-5.4 Nano stay selectable, labelled with their retirement date. Claude
+  secondary and budget defaults move to `claude-sonnet-5-5` and
+  `claude-haiku-5-5`; retired Sonnet families name `claude-sonnet-5-5`.
+
+- **One-time approvals stay one-time.** Three `y` answers no longer promote a
+  tool to session-wide always-allow; only an explicit `a` grants a standing
+  allow. Consecutive-denial auto-deny, per-invocation personal-data consent,
+  HITL levels and skip-permissions are unchanged.
+- **`geode setup --reset` keeps credential files.** It reopens the credential
+  wizard even when a credential already works, instead of unlinking
+  `~/.geode/.env` and clearing the dry-run marker first. A successful entry
+  replaces only the selected provider's key (and clears the dry-run marker, as
+  any successful setup does); cancelling or failing leaves `.env`, `auth.toml`
+  and the marker as they were. The later sandbox and Computer Use steps are
+  unchanged.
+- **In-context slot policy schema.** `InContextSlot` exposes only the consumed
+  `max_entries`; ranking and placement stay fixed. Saved policies whose retired
+  `rank_by` / `injection_point` values were valid still load with identical
+  output (keys ignored; delete them to migrate). Previously invalid legacy
+  values keep their old rejection: a non-string value rejects the file, and an
+  unknown `injection_point` drops only that slot.
+
+- **Credential entry.** `/login add` selects ChatGPT sign-in or a provider API
+  key in one menu. Setup and direct Anthropic login share the same key-input
+  flow and existing credential persistence, validation and client invalidation.
 
 - **Restore light research readers.** GEODE, Jev Decision Offloading and JEVDB
   use their previous light reading workspaces, preserving source artifacts,
@@ -110,6 +286,8 @@ functional change.
 
 ### Security
 
+- Lock `mcp` at 1.30.0 to address CVE-2026-59951 reported by the runtime
+  dependency audit; the declared `mcp>=1.28,<2` range is unchanged.
 - Lock the site's optional sharp dependency at 0.35.5 and its prebuilt libvips
   packages at 1.3.4 to address GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889),
   restoring the dependency audit without changing Next.js or the ESLint patch.

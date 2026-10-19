@@ -8,10 +8,8 @@ import threading
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
-
-import httpx
 
 from core.auth.google_oauth import (
     GOOGLE_TOKEN_URL,
@@ -21,6 +19,11 @@ from core.auth.google_oauth import (
     GoogleSecret,
     google_utc_iso,
 )
+
+if TYPE_CHECKING:
+    # Runtime startup builds the calendar adapter eagerly; httpx loads only
+    # when a Google API request is sent.
+    import httpx
 
 log = logging.getLogger(__name__)
 
@@ -150,6 +153,8 @@ class GoogleWorkspaceClient:
         }
         if secret.client_secret:
             form["client_secret"] = secret.client_secret
+        import httpx
+
         client = self._http_client or httpx.AsyncClient(timeout=30.0)
         owns_client = self._http_client is None
         try:
@@ -241,6 +246,8 @@ class GoogleWorkspaceClient:
         token = await self._access_token(account)
         merged_headers = dict(headers or {})
         merged_headers["Authorization"] = f"Bearer {token}"
+
+        import httpx
 
         client = self._http_client or httpx.AsyncClient(timeout=30.0)
         owns_client = self._http_client is None

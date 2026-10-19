@@ -226,6 +226,7 @@ normal review and CI; implementations start only after the claim merges.
 
 | Closure package | GAP IDs | Owner/session | Implementation branch | Claim evidence | Claimed at (UTC) |
 |---|---|---|---|---|---|
+| R6.9 | COLLAB-004, COLLAB-005 | `session=01a13937-b027-7001-9d62-189cf46a3dfa task=session-fork-20261015` | `feature/session-fork-20261015` | Scope registered by [#3502](https://github.com/mangowhoiscloud/geode/pull/3502) and readied by [#3503](https://github.com/mangowhoiscloud/geode/pull/3503) (readiness/scope evidence supporting this claim); current `develop` re-audit confirms R6.9 is the earliest `READY` package, all external dependencies COLLAB-003/STORE-002/CAP-002/TRUST-003/LOOP-002/CODE-001 are `DONE`, and no competing active claim exists | 2026-10-15T12:05:08Z |
 
 ## 1. Program objective
 
@@ -287,22 +288,22 @@ machine-readable artifact is
 
 | Measure | Current tree |
 |---|---:|
-| Production Python files (`core/` + `evals/` + `evolve/`) | 600 |
-| Test Python files | 768 |
-| `core/` Python LOC | 129,775 |
-| `evals/` Python LOC | 45,455 |
-| `evolve/` Python LOC | 32,002 |
-| Test Python LOC | 239,942 |
+| Production Python files (`core/` + `evals/` + `evolve/`) | 599 |
+| Test Python files | 778 |
+| `core/` Python LOC | 130,603 |
+| `evals/` Python LOC | 45,775 |
+| `evolve/` Python LOC | 32,169 |
+| Test Python LOC | 243,736 |
 | Tool definitions / model executions / valid schemas / policies | 84 / 84 / 84 / 84 (exact) |
 | `RuntimeEvent` members | 57 |
 | Built-in LLM adapters | 6 |
-| Module/class-scoped `ContextVar`-backed bindings in production packages | 25 |
+| Module/class-scoped `ContextVar`-backed bindings in production packages | 26 |
 | `core` → outer import sites | 0 across 0 files |
 | Import-linter contracts / ignored edges | 7 / 0 |
-| `AgenticLoop` file LOC / methods / constructor args | 1,182 / 39 / 12 |
+| `AgenticLoop` file LOC / methods / constructor args | 1,184 / 39 / 12 |
 | `SubAgentManager` file LOC / methods / constructor args | 859 / 17 / 18 |
 | `RuntimeCoreConfig` fields | 6 |
-| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 207 |
+| Global Ruff ratchets | complexity 52; args 23; branches 51; returns 18; statements 206 |
 <!-- generated:architecture-baseline:end -->
 
 `uv run lint-imports` passes all four configured contracts. That is useful
@@ -584,6 +585,8 @@ and closure evidence are appended in §10.
 | EFFECT-003 | `MISFIT` | Middleware architecture prose calls the terminal boundary an `exactly-once executor`, although it proves one accepted in-process terminal invocation rather than exactly-once external effects; only MCP mid-call recovery currently states the read-only/idempotent retry boundary precisely | Runtime docs and executable retry/crash fixtures name single terminal invocation, durable effect admission, duplicate suppression, and uncertain outcome separately; automatic recovery remains limited to read-only or explicitly idempotent operations and no generic sink-level exactly-once claim remains | R12.1 | EFFECT-001, EFFECT-002 | `DONE` |
 | EVAL-003 | `PARTIAL` | The repeated paired Skill suite uses synthetic context and target-scoped registry or Grill tools, but does not exercise native web, file/repository, or delegation work | A prospective native-capability suite freezes those three task families, matched tool and workspace identities, task-specific output contracts, deterministic verifiers, lineage-safe repetitions, and separate quality, activation, cost, and safety results without reusing the synthetic score as promotion authority | R11.2 | EVAL-004 | `DONE` |
 | EVAL-004 | `MISFIT` | Availability-only repetitions produced signed deltas of +4, -3, and -1 over 12 source examples, so repeating the same intervention cannot separate task-skill alignment, routing, and outcome quality from sampling variation | A preregistered design names the causal estimand, intervention, grouping, lineage-safe split, negative controls, uncertainty, and null/promotion rules before execution; it distinguishes availability, selection, activation, and verified outcome without post-hoc verifier tuning or an equal-weight composite | R11.2 | EVAL-001, VER-001 | `DONE` |
+| COLLAB-004 | `ABSENT` | `CollaborationStore.append_message_if_active` and the `send_message`/`followup_task` tools dispatched by `ToolExecutor._aexecute_collaboration` address only a child `task_id` owned by the caller's `parent_session_id`; no tool, slash command, or IPC request can address an existing same-project peer session, unread rows beyond 1,000 per recipient evict the oldest undelivered items, and `admit_collaboration_messages` injects admitted items as role `user` | One backend-owned peer-message operation, shared by the user/CLI/IPC surface and one model tool registration and policy, derives the sender session and principal from the backend-bound operator or root session, admits only an existing same-project operator-owned root session as target, grants the operation only through operator user/CLI/IPC intent or the existing ToolPlan permission boundary for model calls, gives project readability or a guessed session ID no sender or recipient authority, rejects unknown, cross-project, child-sender, child-target, or otherwise unauthorized requests, durably enqueues into the existing `collaboration_mailbox`, reports queued separately from checkpoint-applied acknowledgement without inferring turn or task completion, rejects rather than evicts at the bound, preserves undelivered rows across retry and failure, never auto-wakes an idle target, admits only at the target's serialized session-lane boundary without user-role authority, and leaves R6.5 parent-child scope and role restrictions unchanged | R6.9 | COLLAB-003, STORE-002, CAP-002, TRUST-003, LOOP-002, CODE-001 | `IN_PROGRESS` |
+| COLLAB-005 | `ABSENT` | `SessionState`, `SessionMeta`, and the `sessions` table carry no source-session or checkpoint-cut lineage; `SessionCheckpoint` and `SessionManager` expose no fork or copy operation; `/resume` lists only active or paused sessions and rejects a completed one; a terminal child reopens only as its own next generation through R6.5; and Skill `context: fork` runs an ephemeral isolated subagent rather than a persistent branch | A persistent fork creates a new session identity from a frozen completed-turn checkpoint of a same-project source whose permission derives from backend-bound operator or root-session ownership, where an eligible terminal child is forkable only through its owning parent or the operator and never by a project peer; it records source session, generation, and checkpoint cut, copies only bounded conversation history whose tool calls and results remain balanced groups, starts at a completed turn, never redispatches a historical call on restore or carries a pending effect or approval, leaves source history unchanged, excludes credentials, approvals, tool or process handles, Goal, mailbox, collaboration runs, and active state, grants no authority from historical user messages, rejects busy or incomplete sources unless it takes a serialized stable cutoff, publishes crash-safely or cleans orphans, appears with lineage in session discovery and resume, and loads existing checkpoints unchanged | R6.9 | COLLAB-003, STORE-002, CAP-002, TRUST-003, LOOP-002, CODE-001 | `IN_PROGRESS` |
 
 ## 6. Dependency and merge sequence
 
@@ -643,6 +646,15 @@ future R3 phase/service extraction. The serve daemon reuses the existing
 checkpoint, Lane, Goal projection, and session-event writers. It does not add a
 general thread manager, execute `PlanStep` objects, clone environment state, or
 claim LATS/SPRINT/SWiRL training behavior.
+
+R6.9 adds explicit same-project peer-session messaging and persistent session
+forks as a new package rather than widening R6.5. R6.5 remains the depth-one
+parent-child contract: children still cannot address siblings, create
+descendants, or bypass parent scope. R6.9 reuses the session database,
+`collaboration_mailbox`, `SessionCheckpoint`, `SessionManager`, session Lane,
+and ToolPlan policy owners. It does not add a general thread manager,
+universal task store, second transcript, automatic target activation, or
+cross-project transport.
 
 ### 6.1 v1.0.23 boundary-release train
 
@@ -1565,6 +1577,99 @@ Acceptance:
 - documentation states that hosted continuation requires `geode serve`, does
   not promise exactly-once external side effects, and is not an automatic
   Plan-and-Execute or trajectory-search engine.
+
+#### R6.9 Peer-session messaging and persistent session forks
+
+GAPs: COLLAB-004, COLLAB-005.
+
+R6.5 delivered depth-one parent-child collaboration and its exclusions stay in
+force. This package adds two explicit operations beside it. A peer message
+travels between existing same-project operator-owned root sessions. A fork
+creates a new, independent session from a frozen completed-turn cut of a
+source the operator or owning root session may fork. Both
+extend the existing owners named by the CODE-001 authority matrix:
+`CollaborationStore` and `collaboration_mailbox` for durable delivery,
+`SessionCheckpoint` and `SessionManager` for checkpoint, transcript, and
+session metadata, the session Lane for turn serialization, and ToolPlan
+registration for model schema and policy. No universal task store, thread
+manager, second transcript, or new database is introduced.
+
+Pinned upstream source is design research, not implementation evidence:
+Prime Agent `5f218f780dabc51e26b039580da5d0686cc5616a` admits input under one
+read-modify-write transaction and checkpoints admission before notifying the
+worker; Hermes Agent `3de62feaecc3d582ebc45a1c5d7c2605a3ff4967` validates
+owner execution and parent session before delegation and refuses live routing
+inheritance for branch children; Codex `4b9c24f98c6d886134fd2fc237355064708ff21f`
+flushes durable history before a fork, inherits history without approvals,
+shares no live handles, and cleans up a provisional child when spawn fails.
+GEODE implements these behaviors independently at its own owners.
+
+Acceptance:
+
+- one backend operation serves the user/CLI/IPC surface and one model tool
+  registration; ToolPlan derives the model schema and policy from that single
+  registration, and no surface accepts a caller-supplied sender session or
+  principal;
+- authority reuses GEODE's existing trusted operator and root-session
+  boundary rather than inventing account authentication: the sender is the
+  backend-bound operator or root session, and the target must be an existing
+  same-project operator-owned root session; operator user/CLI/IPC intent
+  grants the operation, and model calls stay under the existing ToolPlan
+  permission boundary;
+- project readability, a caller-supplied flag, or a guessed session ID confers
+  no sender or recipient authority; unknown, cross-project, and unauthorized
+  targets are rejected before enqueue; a child session can neither send nor
+  receive through the peer operation, so R6.5 child tools keep their
+  parent-only scope, depth-one limit, and sibling or descendant prohibition;
+- enqueue commits in the existing `collaboration_mailbox` before success is
+  returned; the result reports `queued` only, a separate checkpoint-applied
+  acknowledgement follows the target's admission checkpoint, and neither is
+  reported as turn or task completion;
+- a full recipient mailbox rejects new peer input instead of evicting unread
+  rows; failed checkpoint, failed save, or cancellation leaves the row unread,
+  and redelivery after retry or restart does not duplicate model-visible
+  content;
+- enqueue never starts, wakes, reopens, or schedules an idle or terminal
+  target; an active target admits peer input only at its agent-loop boundary
+  under the session Lane, and admitted peer text carries no user-role or
+  system authority;
+- fork permission derives from backend-bound operator or root-session
+  ownership of the source; an eligible terminal child session is forkable
+  only through its owning parent session or the operator, never by another
+  project peer or by the child itself, and project readability or a guessed
+  session ID grants nothing;
+- a fork reads one frozen completed-turn checkpoint of a permitted
+  same-project source; it rejects a source with an in-flight turn or
+  incomplete checkpoint unless a serialized stable cutoff is acquired under
+  the source session Lane, and always rejects a foreign-owner or
+  cross-project source;
+- the fork receives a new session identity and records source session,
+  source generation, and checkpoint cut; source checkpoint, messages, and
+  session events remain byte-identical, and each side appends independent
+  history afterward;
+- bounded fork history truncates only at a completed-turn boundary and keeps
+  every assistant tool call with its matching result as one balanced group;
+  the fork starts at that completed turn, and restoring or resuming it never
+  redispatches a historical call or carries a pending effect admission,
+  pending verification, or approval;
+- the fork copies bounded conversation history and model settings only; it
+  excludes credentials, pending approvals, tool, process, and MCP handles,
+  Goal records, mailbox rows, collaboration runs, leases, and active status,
+  and a historical user message grants no approval or tool authority;
+- fork publication is crash- and rollback-safe: an interrupted fork leaves no
+  visible partial session, or startup removes the orphan without touching the
+  source;
+- session discovery and `/resume` show lineage and branch relationships,
+  existing checkpoints and session rows without lineage load unchanged, and
+  schema changes are additive and idempotent;
+- deterministic tests cover message append racing a fork, duplicate delivery,
+  cancellation during enqueue and fork, failed checkpoint save, cross-project
+  and foreign-owner access, guessed-ID and child-sender or child-target
+  rejection, child fork by a non-owning peer, busy-source rejection, a
+  truncation fixture proving balanced tool-call/result groups and zero
+  redispatched calls or carried pending effects/approvals after fork restore,
+  and R6.5 parent-child compatibility; focused tests, the non-live suite, architecture gates, and
+  documentation checks pass without a live provider call.
 
 ### R7 — Closure, hardening, and release
 

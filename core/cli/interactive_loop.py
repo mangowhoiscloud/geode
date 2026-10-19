@@ -28,6 +28,7 @@ async def _drain_scheduler_queue(
     on_dispatch: Any | None = None,
     on_skip: Any | None = None,
     on_main_run: Any | None = None,
+    on_settle: Any | None = None,
 ) -> int:
     """Drain pending scheduled jobs. Delegates to scheduler_drain module.
 
@@ -48,6 +49,7 @@ async def _drain_scheduler_queue(
         on_dispatch=on_dispatch,
         on_skip=on_skip,
         on_main_run=on_main_run,
+        on_settle=on_settle,
     )
 
 

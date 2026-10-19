@@ -247,7 +247,7 @@ def test_context_var_inventory_has_complete_lifecycle_classification() -> None:
 
     assert inventory["classification_counts"] == {
         "request_identity": 8,
-        "request_local_mutable_state": 9,
+        "request_local_mutable_state": 10,
         "diagnostic_scope": 7,
         "cache": 1,
         "service_locator": 0,
@@ -313,6 +313,62 @@ def test_context_var_inventory_propagates_and_resets(tmp_path: Path) -> None:
             observed, worker_after = await asyncio.to_thread(run_attempt)
             expected = ("probe-run:probe-task:0:1", "probe-task", 0, 1, 0)
             return expected, observed, before, worker_after, True
+        if label == "evals/petri/adapters/http_anthropic.py:_EXPLICIT_TOOL_CHOICE":
+            # Producer: the registered provider's real generate. Only the stock
+            # downstream continuation is replaced, to observe the scope.
+            from unittest.mock import patch
+
+            from evals.petri.adapters import http_anthropic
+            from inspect_ai.model import ChatMessageUser, GenerateConfig, get_model
+            from inspect_ai.model._providers.anthropic import AnthropicAPI
+            from inspect_ai.tool import ToolInfo, ToolParams
+
+            http_anthropic.register()
+            api = get_model(
+                "anthropic-platform/claude-haiku-5-5",
+                api_key="probe-key",
+                base_url="https://api.anthropic.com",
+                memoize=False,
+            ).api
+            seen: list[object] = []
+            outcome: dict[str, str] = {"mode": "ok"}
+            entered = asyncio.Event()
+
+            async def downstream(*_args: object, **_kwargs: object) -> str:
+                seen.append(await asyncio.create_task(read()))
+                entered.set()
+                if outcome["mode"] == "fail":
+                    raise RuntimeError("probe downstream failure")
+                if outcome["mode"] == "cancel":
+                    await asyncio.Event().wait()
+                return "probe-output"
+
+            def call() -> Any:
+                tool = ToolInfo(name="probe", description="probe", parameters=ToolParams())
+                return api.generate(
+                    [ChatMessageUser(content="probe")],
+                    [tool],
+                    "none",
+                    GenerateConfig(reasoning_effort="medium"),
+                )
+
+            with patch.object(AnthropicAPI, "generate", downstream):
+                assert await call() == "probe-output"
+                after_success = _context_value(label, variable, surface)
+                outcome["mode"] = "fail"
+                with pytest.raises(RuntimeError, match="probe downstream failure"):
+                    await call()
+                after_failure = _context_value(label, variable, surface)
+                outcome["mode"] = "cancel"
+                entered.clear()
+                pending = asyncio.ensure_future(call())
+                await entered.wait()
+                pending.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await pending
+            assert seen == ["none", "none", "none"]
+            assert after_success == after_failure == before
+            return "none", seen[0], before, _context_value(label, variable, surface), True
         expected, cleanup, resets = _bind_context_boundary(
             label, variable, surface, marker, tmp_path
         )

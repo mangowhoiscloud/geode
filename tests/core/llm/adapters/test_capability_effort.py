@@ -169,14 +169,15 @@ def test_empty_model_validates_effort_against_actual_route_default(
     client, wire = wire_client
     adapter = adapter_class()
     monkeypatch.setattr(adapter, "_get_client", lambda model="": client)
-    monkeypatch.setattr("core.config.CODEX_PRIMARY", "gpt-5.5")
-    monkeypatch.setattr("core.config.OPENAI_PRIMARY", "gpt-5.5")
+    # GPT-6.1 Sol does not inherit GPT-6 Sol's ``none`` effort on either route.
+    monkeypatch.setattr("core.config.CODEX_PRIMARY", "gpt-6.1-sol")
+    monkeypatch.setattr("core.config.OPENAI_PRIMARY", "gpt-6.1-sol")
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [adapter])
     dispatch = complete_text_via_adapters if capability == "text" else web_search_via_adapters
 
     with pytest.raises(AdapterDispatchError) as caught:
         asyncio.run(
-            dispatch("input", prefer_provider="openai", prefer_source=adapter.source, effort="max")
+            dispatch("input", prefer_provider="openai", prefer_source=adapter.source, effort="none")
         )
 
     assert isinstance(caught.value.__cause__, ValueError)
@@ -186,7 +187,7 @@ def test_empty_model_validates_effort_against_actual_route_default(
 
 @pytest.mark.parametrize("adapter_class", [CodexOAuthAdapter, OpenAIPaygAdapter])
 @pytest.mark.parametrize("capability", ["text", "search"])
-@pytest.mark.parametrize("model, effort", [("gpt-5.5", "max"), ("gpt-5.6-sol", "MAX")])
+@pytest.mark.parametrize("model, effort", [("gpt-6.1-sol", "none"), ("gpt-5.6-sol", "MAX")])
 def test_unsupported_explicit_effort_fails_before_provider_request(
     monkeypatch: pytest.MonkeyPatch,
     adapter_class: Any,
@@ -440,7 +441,7 @@ def test_native_capability_effort_reaches_sdk_wire_and_observation(
     "route,model,effort",
     [
         ("openai", "gpt-5.5", "max"),
-        ("codex", "gpt-5.5", "max"),
+        ("codex", "gpt-6.1-sol", "none"),
         ("anthropic", "claude-sonnet-4-6", "xhigh"),
         ("glm", "glm-5.3", "medium"),
     ],
@@ -487,7 +488,7 @@ def test_unsupported_native_effort_rejects_before_client_access(
     "route,model,effort",
     [
         ("openai", "gpt-5.5", "max"),
-        ("codex", "gpt-5.5", "max"),
+        ("codex", "gpt-6.1-sol", "none"),
         ("anthropic", "claude-sonnet-4-6", "xhigh"),
     ],
 )
