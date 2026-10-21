@@ -12,7 +12,7 @@ from math import ceil
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from core.llm.adapters.base import AdapterCallRequest
+    from core.llm.adapters.base import AdapterCallRequest, UsageSummary
 
 DEFAULT_CONTEXT_WINDOW_TOKENS = 200_000
 
@@ -28,6 +28,12 @@ MIN_TOOL_RESULT_TOKENS = 32
 DEFAULT_TOOLS_OVERHEAD_TOKENS = 10_000
 
 SAFETY_MARGIN_MULTIPLIER = 1.20
+# Provider-reported prompt tokens per heuristic token. Dense text such as hex
+# digests tokenizes at about 2 chars/token, so 4 chars/token plus the static
+# margin can hide half of the real context. A smaller request is too small to
+# calibrate; the cap bounds malformed usage.
+TOKEN_RATIO_MIN_SAMPLE_TOKENS = 8_000
+MAX_OBSERVED_TOKEN_RATIO = 8.0
 DEFAULT_OUTPUT_RESERVE_TOKENS = 20_000
 MIN_PROMPT_BUDGET_TOKENS = 8_000
 
@@ -119,6 +125,13 @@ class ContextBudgetPolicy:
     context_origin: Literal["provider_catalog", "client_default", "fallback", "override"] = (
         "fallback"
     )
+    observed_token_ratio: float = 0.0
+    """Latest provider-reported prompt tokens per heuristic token; 0 is unobserved."""
+
+    @property
+    def estimate_multiplier(self) -> float:
+        """Static safety margin, raised to the observed provider/heuristic ratio."""
+        return max(self.safety_margin, self.observed_token_ratio)
 
     @property
     def effective_prompt_budget_tokens(self) -> int:
@@ -144,7 +157,10 @@ class ContextBudgetPolicy:
 
     @property
     def prune_budget_tokens(self) -> int:
-        return self.warning_tokens
+        # Adaptive prune counts unmargined heuristic message tokens; dividing by
+        # the estimate multiplier lands the pruned history at the warning level
+        # as measured, rather than up to 1.2x (or the observed ratio) above it.
+        return max(1, int(self.warning_tokens / self.estimate_multiplier))
 
     @property
     def tool_summary_threshold_tokens(self) -> int:
@@ -196,7 +212,7 @@ class ContextBudgetPolicy:
         return max(SUMMARY_MIN_TOKENS, min(target, self.max_summary_tokens))
 
     def apply_safety_margin(self, raw_tokens: int) -> int:
-        return ceil(raw_tokens * self.safety_margin)
+        return ceil(raw_tokens * self.estimate_multiplier)
 
     def resolve_keep_recent(self, requested: int) -> int:
         cap = self.tier.keep_recent_cap
@@ -206,6 +222,29 @@ class ContextBudgetPolicy:
 
     def resolve_aggressive_keep_recent(self, requested: int) -> int:
         return max(AGGRESSIVE_KEEP_RECENT_FLOOR, self.resolve_keep_recent(requested) // 2)
+
+
+def observed_prompt_tokens(usage: UsageSummary, *, provider: str) -> int | None:
+    """Return the provider-reported prompt size, or None when it was not reported.
+
+    Anthropic reports cache reads and writes beside ``input_tokens``; OpenAI,
+    Codex and Chat Completions routes already include cached input.
+    """
+    if not usage.input_tokens_present:
+        return None
+    from core.llm.model_catalog import normalize_model_provider
+
+    tokens = usage.input_tokens
+    if normalize_model_provider(provider) == "anthropic":
+        tokens += usage.cached_input_tokens + usage.cache_write_tokens
+    return tokens
+
+
+def calibrate_token_ratio(observed_tokens: int, raw_estimated_tokens: int) -> float | None:
+    """Calibrate the heuristic from one request large enough to measure."""
+    if raw_estimated_tokens < TOKEN_RATIO_MIN_SAMPLE_TOKENS or observed_tokens <= 0:
+        return None
+    return min(observed_tokens / raw_estimated_tokens, MAX_OBSERVED_TOKEN_RATIO)
 
 
 def _resolve_tier(context_window: int) -> ContextBudgetTier:

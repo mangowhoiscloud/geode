@@ -23,6 +23,8 @@ from core.hooks import (
 from core.orchestration.context_budget import (
     ABSOLUTE_TOKEN_CEILING,
     ContextBudgetPolicy,
+    calibrate_token_ratio,
+    observed_prompt_tokens,
     resolve_context_budget_policy,
 )
 
@@ -65,6 +67,35 @@ class ContextWindowManager:
         self._effort_provider = effort_provider
         self._source_provider = source_provider
         self._compacting = False
+        # Provider-reported prompt tokens per heuristic token for this
+        # conversation's latest calibrating request; 0 means unobserved.
+        self._observed_token_ratio = 0.0
+
+    def calibrated(self, policy: ContextBudgetPolicy) -> ContextBudgetPolicy:
+        """Measure pressure in provider tokens, not only the chars/token guess."""
+        if self._observed_token_ratio <= policy.observed_token_ratio:
+            return policy
+        return dataclasses.replace(policy, observed_token_ratio=self._observed_token_ratio)
+
+    def record_prompt_usage(self, result: Any, *, raw_estimated_tokens: int, provider: str) -> None:
+        """Calibrate later estimates from one sent request's reported input size.
+
+        The newest sample replaces older ones, so compaction of dense history
+        lowers the ratio on the next response. Native Anthropic compaction sums
+        its iterations' usage, which is not one request's prompt size.
+        """
+        from core.llm.adapters.base import UsageSummary
+
+        usage = getattr(result, "usage", None)
+        if not isinstance(usage, UsageSummary):
+            return
+        native = getattr(result, "anthropic_content", ()) or ()
+        if any(isinstance(block, dict) and block.get("type") == "compaction" for block in native):
+            return
+        observed = observed_prompt_tokens(usage, provider=provider)
+        ratio = None if observed is None else calibrate_token_ratio(observed, raw_estimated_tokens)
+        if ratio is not None:
+            self._observed_token_ratio = ratio
 
     async def compact(
         self,
@@ -81,10 +112,13 @@ class ContextWindowManager:
         """Run explicit summary or lossful pruning through the same runtime owner."""
         from core.config import settings
 
-        policy = policy or resolve_context_budget_policy(
-            model,
-            provider=provider,
-            source=self._source_provider() if self._source_provider else None,
+        policy = self.calibrated(
+            policy
+            or resolve_context_budget_policy(
+                model,
+                provider=provider,
+                source=self._source_provider() if self._source_provider else None,
+            )
         )
         return await self._apply_overflow_strategy(
             {
@@ -137,10 +171,13 @@ class ContextWindowManager:
                 from core.agent.loop import _ContextExhaustedError
 
                 raise _ContextExhaustedError("Context compaction is already in progress")
-            policy = policy or resolve_context_budget_policy(
-                model,
-                provider=provider,
-                source=self._source_provider() if self._source_provider else None,
+            policy = self.calibrated(
+                policy
+                or resolve_context_budget_policy(
+                    model,
+                    provider=provider,
+                    source=self._source_provider() if self._source_provider else None,
+                )
             )
 
             def measure() -> ContextMetrics:
@@ -477,10 +514,13 @@ class ContextWindowManager:
         original_count = len(messages)
         if self._compacting:
             return ContextOperationResult("compact", "deferred", original_count, original_count)
-        policy = policy or resolve_context_budget_policy(
-            model,
-            provider=provider,
-            source=self._source_provider() if self._source_provider else None,
+        policy = self.calibrated(
+            policy
+            or resolve_context_budget_policy(
+                model,
+                provider=provider,
+                source=self._source_provider() if self._source_provider else None,
+            )
         )
 
         def measure() -> ContextMetrics:
