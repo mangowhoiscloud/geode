@@ -172,6 +172,68 @@ class TestServeToolExecution:
         assert "error" not in exported
         assert exported["result"]["exported"] is True
 
+    def test_definite_effect_failure_does_not_quarantine_later_effects(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A serve session's failed memory_save must not block a later report.
+
+        Live regression: in an uninitialized project memory_save reports a
+        recoverable ``not_found``; it was masked as an uncertain effect whose
+        prepared receipt then refused every later effect in the session.
+        """
+        import core.paths as cp
+        from core.agent.tool_executor import ToolExecutor
+        from core.memory.effect_receipts import EffectReceiptStore, effect_operation_id
+        from core.tools.base import ToolContext
+        from core.tools.composition import compose_tool_plan
+
+        project = tmp_path / "project"
+        project.mkdir()
+        monkeypatch.chdir(project)
+        cp.get_project_root.cache_clear()
+        bound, transient = compose_tool_plan()
+        receipts = EffectReceiptStore(tmp_path / "sessions.db")
+        executor = ToolExecutor(
+            bound_tool_plan=bound,
+            transient_handlers=transient,
+            hitl_level=0,
+            effect_receipts=receipts,
+        )
+
+        def step(index: int) -> ToolContext:
+            return ToolContext(
+                session_id="s-serve",
+                step_id=f"step-{index}",
+                tool_call_id=f"call-{index}",
+                operation_id=effect_operation_id(),
+            )
+
+        saved = asyncio.run(
+            executor.aexecute(
+                "memory_save",
+                {"key": "fact", "content": "a durable fact worth remembering"},
+                context=step(1),
+            )
+        )
+        report = asyncio.run(
+            executor.aexecute(
+                "generate_report",
+                {
+                    "subject": "demo-subject",
+                    "format": "markdown",
+                    "analysis_data": {"summary": "ok"},
+                },
+                context=step(2),
+            )
+        )
+
+        assert saved["error_type"] == "not_found"
+        assert "geode init" in saved["error"]
+        assert "outcome_uncertain" not in saved
+        assert "error" not in report
+        assert Path(report["result"]["artifact"]["path"]).is_file()
+        assert receipts.list_uncertain(session_id="s-serve") == []
+
     def test_exposed_agentic_tools_are_executable(self) -> None:
         """The native runtime advertises exactly its executable bound plan."""
         from core.tools.composition import compose_tool_plan

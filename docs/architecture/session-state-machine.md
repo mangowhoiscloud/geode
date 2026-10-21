@@ -198,13 +198,19 @@ dispatch; a SQLite message-SoT failure stops the batch. The provider call ID
 only pairs a tool use with its result and is never the restart recovery key. A
 committed duplicate replays its PostToolUse-final bounded result without another
 sink call; a conflicting request is rejected; an unfinished receipt returns
-`effect_outcome_uncertain` and is never automatically replayed. Restart closes
+`effect_outcome_uncertain` and is never automatically replayed. A handler that
+returns a pre-effect refusal (`validation`, `not_found`, `permission`,
+`authorization`, `dependency`, or a clarification request) commits that
+recoverable error as the operation's outcome. A timeout, abandoned worker,
+raised exception, or other returned error leaves the receipt prepared and
+returns `effect_outcome_uncertain` with a bounded, redacted cause. Restart closes
 the anchored assistant call with the committed, uncertain, or interrupted
 result before another model request. The balanced call/result history is then
 strictly checkpointed before auxiliary reflection or the next main request.
 
 Prepared receipts from an older sampling step block new effects in that session
-while allowing siblings from the already admitted step. Operators inspect only
+while allowing siblings from the already admitted step; the refusal names the
+blocking operation and tool. Operators inspect only
 redacted metadata with `geode session effects` and, after checking the external
 sink, run `geode session resolve-effect OPERATION_ID --outcome applied` or
 `--outcome not-applied`; both outcomes remain durable terminal evidence.
