@@ -182,6 +182,9 @@ class AgenticLoop:
         self.executor = tool_executor
         self._parent_session_key = parent_session_key
         self._parent_session_id = parent_session_id
+        # Runtime-bound parent (worker); a resume falls back to it, never to
+        # the previous conversation's parent (restore_loop_state).
+        self._bound_parent_session_id = parent_session_id
         self._system_suffix = system_suffix
         # When set, replaces the default role/instruction body (skill
         # context + agentic suffix still appended). Drives AgentDefinition

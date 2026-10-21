@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from core.memory.atomic_write import atomic_write_json
+from core.orchestration.context_budget import MIN_TOOL_RESULT_TOKENS
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +41,8 @@ class ToolResultOffloadStore:
         from core.paths import PROJECT_TOOL_OFFLOAD
 
         self.session_id = session_id
-        self.threshold = threshold
+        # A positive threshold below the supported floor is raised to it.
+        self.threshold = max(threshold, MIN_TOOL_RESULT_TOKENS) if threshold > 0 else threshold
         self._ttl_s = ttl_hours * 3600
         # P2 (v0.95.x) — was literal `Path(".geode/tool-offload")`
         self._base_dir = base_dir or PROJECT_TOOL_OFFLOAD

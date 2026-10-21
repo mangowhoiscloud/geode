@@ -278,3 +278,190 @@ def test_definitions_json_has_session_search_entry() -> None:
         runtime_schema["properties"].keys()
     )
     assert entry.get("cost_tier") == "free"
+
+
+# Gateway visibility -------------------------------------------------
+# The gateway checkpoints every channel/sender/thread conversation into this
+# same sessions.db as ``s-gw-*`` rows (and its workers as children of that
+# row), so recall must never cross gateway principals.
+
+
+def _seed_gateway_threads(db_path: Path) -> tuple[str, str]:
+    from contextlib import closing
+
+    from core.memory.session_key import (
+        build_gateway_checkpoint_session_id,
+        build_gateway_session_key,
+    )
+    from core.memory.session_manager import SessionManager
+
+    alice = build_gateway_checkpoint_session_id(
+        build_gateway_session_key("slack", "C_PRIVATE_A", "U_ALICE")
+    )
+    bob = build_gateway_checkpoint_session_id(
+        build_gateway_session_key("slack", "C_TEAM_B", "U_BOB")
+    )
+    with closing(SessionManager()) as mgr:
+        mgr.upsert_context_artifact(
+            session_id=alice, kind="compaction_summary", content="quarterly alice summary"
+        )
+        mgr.upsert_context_artifact(
+            session_id="s-operator", kind="compaction_summary", content="quarterly op summary"
+        )
+    for session_id, text in (
+        (alice, "quarterly alice payroll"),
+        ("task-alice-1", "quarterly alice worker draft"),
+        (bob, "quarterly bob own note"),
+        ("s-operator", "quarterly operator analysis"),
+    ):
+        _seed_messages(db_path, session_id, [{"role": "user", "content": text}])
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "UPDATE sessions SET parent_session_id = ? WHERE session_id = ?",
+            (alice, "task-alice-1"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return alice, bob
+
+
+def _search_as(context: Any, **kwargs: Any) -> dict[str, Any]:
+    from core.tools.session_search import SessionSearchTool
+
+    return SessionSearchTool()._execute_sync(_tool_context=context, **kwargs)
+
+
+def _sessions(result: dict[str, Any]) -> set[str]:
+    return {h["session_id"] for h in result["hits"]} | {
+        a["session_id"] for a in result.get("artifacts", [])
+    }
+
+
+def test_search_cannot_read_another_gateway_thread(
+    patched_session_manager: Path, tmp_path: Path
+) -> None:
+    from core.cli.tool_handlers.memory import _build_memory_handlers
+    from core.memory.project import ProjectMemory
+    from core.tools.base import ToolContext
+    from core.tools.memory_tools import MemoryToolServices
+
+    alice, bob = _seed_gateway_threads(patched_session_manager)
+    bob_ctx = ToolContext(session_id=bob)
+
+    everything = _search_as(bob_ctx, query="quarterly", include_artifacts=True)
+    assert _sessions(everything) == {bob, "s-operator"}
+    assert "alice" not in json.dumps(everything, ensure_ascii=False)
+
+    for target in (alice, "task-alice-1"):
+        named = _search_as(bob_ctx, query="quarterly", session_id=target, include_artifacts=True)
+        assert named["matched"] is False and not named["hits"] and not named["artifacts"]
+    assert _sessions(_search_as(bob_ctx, query="quarterly", session_id=bob)) == {bob}
+
+    # The model-facing handler forwards the trusted tool context unchanged.
+    handlers = dict(
+        _build_memory_handlers(MemoryToolServices(project_memory=ProjectMemory(tmp_path)))
+    )
+    via_handler = handlers["session_search"](_tool_context=bob_ctx, query="quarterly")
+    assert _sessions(via_handler) == {bob, "s-operator"}
+
+
+def test_search_gateway_scope_for_owner_worker_and_operator(
+    patched_session_manager: Path,
+) -> None:
+    from types import SimpleNamespace
+
+    from core.tools.base import ToolContext
+
+    alice, bob = _seed_gateway_threads(patched_session_manager)
+    owner = _search_as(ToolContext(session_id=alice), query="quarterly", include_artifacts=True)
+    assert _sessions(owner) == {alice, "task-alice-1", "s-operator"}
+
+    worker_ctx = ToolContext(
+        session_id="task-alice-2",
+        is_subagent=True,
+        agent_loop=SimpleNamespace(_parent_session_id=alice),
+    )
+    worker = _search_as(worker_ctx, query="quarterly")
+    assert _sessions(worker) == {alice, "task-alice-1", "s-operator"}
+    assert "bob own note" not in json.dumps(worker, ensure_ascii=False)
+
+    operator = _search_as(None, query="quarterly", include_artifacts=True)
+    assert _sessions(operator) == {"s-operator"}
+
+
+def test_search_hit_and_artifact_snippets_are_bounded(patched_session_manager: Path) -> None:
+    from contextlib import closing
+
+    from core.memory.session_manager import SessionManager
+    from core.tools.session_search import SessionSearchTool
+
+    long_token = "z" * 12_000
+    with closing(SessionManager()) as mgr:
+        mgr.upsert_context_artifact(
+            session_id="s1", kind="dream", content=f"boundedneedle {long_token}"
+        )
+    _seed_messages(
+        patched_session_manager,
+        "s1",
+        [{"role": "user", "content": f"boundedneedle {long_token}"}],
+    )
+    result = SessionSearchTool()._execute_sync(query="boundedneedle", include_artifacts=True)
+    items = [*result["hits"], *result["artifacts"]]
+    assert len(items) == 2, result
+    for item in items:
+        assert len(json.dumps(item, ensure_ascii=False, default=str)) <= 4_000
+        assert item["truncated"] is True
+        assert "…[truncated " in item["snippet"]
+        assert item["snippet"].count("z") >= 500  # a real excerpt, not an empty marker
+
+
+def test_search_session_without_ownership_record_is_private(
+    patched_session_manager: Path,
+) -> None:
+    """Messages commit before session metadata (and that write may fail), so a
+    session with no ``sessions`` row is visible only to itself, and a worker
+    known only from ``collaboration_runs`` stays with its gateway thread."""
+    from core.tools.base import ToolContext
+
+    alice, bob = _seed_gateway_threads(patched_session_manager)
+    conn = sqlite3.connect(str(patched_session_manager))
+    try:
+        for session_id, text in (
+            ("task-alice-3", "quarterly alice unsynced worker"),
+            ("task-alice-4", "quarterly alice run-only worker"),
+            ("s-orphan", "quarterly orphan transcript"),
+        ):
+            conn.execute(
+                "INSERT INTO messages (session_id, seq, role, content, timestamp) "
+                "VALUES (?, 0, 'user', ?, 1.0)",
+                (session_id, json.dumps(text)),
+            )
+        conn.execute(  # the durable R6.5 run record, written before the worker starts
+            "INSERT INTO collaboration_runs (task_id, parent_session_id, status, "
+            "owner_id, created_at, updated_at) VALUES ('task-alice-4', ?, 'running', 'o', 1, 1)",
+            (alice,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    bob_view = _search_as(ToolContext(session_id=bob), query="quarterly")
+    assert _sessions(bob_view) == {bob, "s-operator"}
+    assert "unsynced" not in json.dumps(bob_view, ensure_ascii=False)
+    assert _sessions(_search_as(None, query="quarterly")) == {"s-operator"}
+    assert _sessions(_search_as(ToolContext(session_id=alice), query="quarterly")) == {
+        alice,
+        "task-alice-1",
+        "task-alice-4",
+        "s-operator",
+    }
+    assert _sessions(_search_as(ToolContext(session_id="task-alice-3"), query="quarterly")) == {
+        "task-alice-3",
+        "s-operator",
+    }
+    assert (
+        _sessions(_search_as(ToolContext(session_id=bob), query="quarterly", session_id="s-orphan"))
+        == set()
+    )

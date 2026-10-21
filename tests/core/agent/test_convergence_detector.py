@@ -71,6 +71,67 @@ class TestConvergenceDetector:
         assert det.last_success_tool == "check_status"
         assert det.check_repeated_success_no_progress() is True
 
+    @staticmethod
+    def _offloaded_rounds(outputs: list[str]) -> ConvergenceDetector:
+        """Feed offloaded results of identical calls through the real processor."""
+        import asyncio
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import MagicMock
+
+        from core.agent.tool_executor.processor import ToolCallProcessor
+        from core.config import settings
+        from core.orchestration.tool_offload import ToolResultOffloadStore
+
+        det = ConvergenceDetector()
+        with tempfile.TemporaryDirectory() as tmp:
+            executor = MagicMock()
+            executor._contains_restricted_data.return_value = False
+            processor = ToolCallProcessor(
+                executor=executor,
+                op_logger=MagicMock(),
+                error_recovery=MagicMock(),
+                offload_store=ToolResultOffloadStore(
+                    session_id="s-conv", threshold=32, base_dir=Path(tmp)
+                ),
+            )
+            for i, output in enumerate(outputs):
+                call_id = f"toolu_{i:024d}"  # provider-sized call id
+                block = asyncio.run(
+                    processor._serialize_tool_result({"output": output}, call_id, "read_file")
+                )
+                content = json.loads(block["content"])
+                assert content["_offloaded"] is True
+                limit = 4 * max(32, settings.max_tool_result_tokens)
+                assert len(block["content"]) <= limit
+                det.update_tool_error_tracking(
+                    [block],
+                    [{"tool": "read_file", "input": {"path": "a"}, "tool_use_id": call_id}],
+                )
+        return det
+
+    def test_repeated_identical_offloaded_success_is_no_progress(self) -> None:
+        det = self._offloaded_rounds(["same " * 200] * 5)
+        assert det.check_repeated_success_no_progress() is True
+
+    def test_different_offloaded_results_are_progress(self) -> None:
+        # Same length and summary prefix, different content: never the same observation.
+        det = self._offloaded_rounds([("same " * 200) + str(i) for i in range(5)])
+        assert det.repeated_success_streak == 1
+        assert det.check_repeated_success_no_progress() is False
+
+    @pytest.mark.parametrize("guard_tokens", [128, 64, 32])
+    def test_guard_truncated_offload_references_keep_their_digest(
+        self, monkeypatch: pytest.MonkeyPatch, guard_tokens: int
+    ) -> None:
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "max_tool_result_tokens", guard_tokens)
+        same = self._offloaded_rounds(["same " * 200] * 6)
+        assert same.check_repeated_success_no_progress() is True
+        different = self._offloaded_rounds([("same " * 200) + str(i) for i in range(6)])
+        assert different.repeated_success_streak == 1
+
     def test_repeated_success_resets_when_input_changes(self) -> None:
         det = ConvergenceDetector()
         for i in range(4):

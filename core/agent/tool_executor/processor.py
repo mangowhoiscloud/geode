@@ -43,6 +43,7 @@ from .result_token_guard import (
     _compute_model_tool_limit,
     _guard_tool_result,
     _project_mcp_result,
+    offload_reference,
 )
 
 log = logging.getLogger(__name__)
@@ -451,14 +452,14 @@ class ToolCallProcessor:
             from core.orchestration.tool_offload import extract_result_summary
 
             ref_id = offload_store.offload(block_id, model_result)
-            summary = extract_result_summary(model_result, max_chars=400)
-            model_result = {
-                "_offloaded": True,
-                "_ref_id": ref_id,
-                "_original_tokens": estimated_tokens,
-                "summary": summary,
-                "hint": "Use recall_tool_result(ref_id) to retrieve the full output.",
-            }
+            model_result = offload_reference(
+                model_result,
+                ref_id=ref_id,
+                original_tokens=estimated_tokens,
+                summary=extract_result_summary(model_result, max_chars=400),
+                hint="Use recall_tool_result(ref_id) to retrieve the full output.",
+                max_chars=offload_store.threshold * TOKEN_ESTIMATE_CHARS_PER_TOKEN,
+            )
             # Fire hook for observability
             if self._hooks:
                 from core.hooks import HookEvent

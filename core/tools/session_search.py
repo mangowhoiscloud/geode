@@ -24,6 +24,17 @@ search itself.
   The index is rebuild-from-source — run ``geode reindex`` after a
   session-state change to refresh it.
 
+**Visibility**: the gateway checkpoints every channel/sender/thread
+conversation into the same ``sessions.db``. Both scopes return a gateway
+thread's rows (and its workers') only to that thread or its workers, and a
+session whose ownership is not recorded only to itself, judged from the
+executing loop's session ids (``caller_session_ids``), never from
+``session_id`` or any other tool argument. Other rows are unaffected. A
+global index rebuilt before rows carried their owner is not served.
+
+**Bounded**: ``limit`` is clamped to 100, and one snippet longer than
+``SNIPPET_CHAR_CAP`` serialized characters becomes a marked prefix.
+
 **Graceful**: project-scope with no active ``SessionManager`` →
 returns a structured ``tool_error`` with ``error_type="dependency"``.
 Cross-project scope with no ``global.db`` yet (operator never ran
@@ -34,10 +45,13 @@ Cross-project scope with no ``global.db`` yet (operator never ran
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from collections.abc import Collection
 from typing import Any
 
 from core.tools.base import tool_error
+from core.tools.memory_tools import caller_session_ids
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +61,36 @@ __all__ = ["SessionSearchTool"]
 SCOPE_PROJECT = "project"
 SCOPE_ALL = "all"
 _VALID_SCOPES: frozenset[str] = frozenset({SCOPE_PROJECT, SCOPE_ALL})
+
+# One snippet, in serialized characters as the tool processor measures them.
+# FTS5 windows 16 tokens, but one unicode61 token (a base64 blob, a long
+# identifier) has no length limit.
+SNIPPET_CHAR_CAP = 1_000
+
+
+def _json_len(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _bounded_snippet(snippet: Any) -> dict[str, Any]:
+    """``{"snippet": ...}``, or its longest marked prefix within ``SNIPPET_CHAR_CAP``."""
+    if _json_len(snippet) <= SNIPPET_CHAR_CAP:
+        return {"snippet": snippet}
+    text = str(snippet)
+
+    def marked(keep: int) -> str:
+        return f"{text[:keep]}…[truncated {len(text) - keep} chars]"
+
+    fitted = marked(0)
+    low, high = 1, min(len(text), SNIPPET_CHAR_CAP)
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = marked(middle)
+        if _json_len(candidate) <= SNIPPET_CHAR_CAP:
+            fitted, low = candidate, middle + 1
+        else:
+            high = middle - 1
+    return {"snippet": fitted, "truncated": True}
 
 
 class SessionSearchTool:
@@ -179,12 +223,16 @@ class SessionSearchTool:
         except (TypeError, ValueError):
             limit = 20
 
+        # Gateway threads share the session stores; visibility follows the
+        # executing loop, never the model's ``session_id`` argument.
+        visible_to = caller_session_ids(kwargs.get("_tool_context"))
         if scope == SCOPE_ALL:
             return self._search_global(
                 query=query,
                 project_id=project_id if isinstance(project_id, str) else None,
                 session_id=session_id if isinstance(session_id, str) else None,
                 limit=limit,
+                visible_to=visible_to,
             )
         return self._search_project(
             query=query,
@@ -193,6 +241,7 @@ class SessionSearchTool:
             prefer_trigram=prefer_trigram,
             include_artifacts=include_artifacts,
             artifact_kinds=artifact_kinds,
+            visible_to=visible_to,
         )
 
     def _search_project(
@@ -204,6 +253,7 @@ class SessionSearchTool:
         prefer_trigram: bool,
         include_artifacts: bool = False,
         artifact_kinds: list[str] | None = None,
+        visible_to: Collection[str] = frozenset(),
     ) -> dict[str, Any]:
         try:
             from core.memory.session_manager import SessionManager
@@ -229,6 +279,7 @@ class SessionSearchTool:
                 session_id=session_id,
                 limit=limit,
                 prefer_trigram=prefer_trigram,
+                visible_to=visible_to,
             )
             artifact_hits = (
                 mgr.search_context_artifacts(
@@ -236,6 +287,7 @@ class SessionSearchTool:
                     session_id=session_id,
                     kinds=artifact_kinds,
                     limit=limit,
+                    visible_to=visible_to,
                 )
                 if include_artifacts
                 else []
@@ -255,7 +307,7 @@ class SessionSearchTool:
                     "seq": h["seq"],
                     "role": h["role"],
                     "timestamp": h["timestamp"],
-                    "snippet": h["snippet"],
+                    **_bounded_snippet(h["snippet"]),
                     "score": h["score"],
                 }
                 for h in hits
@@ -267,7 +319,7 @@ class SessionSearchTool:
                     "kind": h["kind"],
                     "source_start_seq": h["source_start_seq"],
                     "source_end_seq": h["source_end_seq"],
-                    "snippet": h["snippet"],
+                    **_bounded_snippet(h["snippet"]),
                     "score": h["score"],
                     "updated_at": h["updated_at"],
                 }
@@ -282,6 +334,7 @@ class SessionSearchTool:
         project_id: str | None,
         session_id: str | None,
         limit: int,
+        visible_to: Collection[str] = frozenset(),
     ) -> dict[str, Any]:
         from core.paths import GLOBAL_SEARCH_DB
 
@@ -307,11 +360,24 @@ class SessionSearchTool:
 
         try:
             with SearchIndex() as index:
+                if not index.has_ownership():
+                    # Built by an older ``geode reindex``: row owners unknown.
+                    return {
+                        "matched": False,
+                        "count": 0,
+                        "scope": SCOPE_ALL,
+                        "hits": [],
+                        "reason": (
+                            "global_index_outdated — run 'geode reindex' to rebuild "
+                            "it with session ownership"
+                        ),
+                    }
                 hits = index.search(
                     query,
                     project_id=project_id,
                     session_id=session_id,
                     limit=limit,
+                    visible_to=visible_to,
                 )
         except Exception as exc:
             log.debug("session_search: global search failed: %s", exc)
@@ -333,7 +399,7 @@ class SessionSearchTool:
                     "seq": h.seq,
                     "role": h.role,
                     "timestamp": h.timestamp,
-                    "snippet": h.snippet,
+                    **_bounded_snippet(h.snippet),
                     "score": h.score,
                 }
                 for h in hits

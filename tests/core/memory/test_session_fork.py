@@ -674,3 +674,206 @@ def test_startup_sweep_removes_a_crashed_fork_once(project: Path) -> None:
     assert SessionManager(project / "sessions.db").get_messages("s-orphan0001") == []
     assert SessionCheckpoint(project).load("s-src") is not None
     assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0  # once per process
+
+
+# Context-safety review follow-ups (child marker on resume, orphan retry).
+
+
+def _resume_loop(bound_parent: str = "") -> SimpleNamespace:
+    """The attributes ``restore_loop_state`` touches on a reused IPC/worker loop."""
+    from core.agent.convergence import ConvergenceDetector
+
+    return SimpleNamespace(
+        _session_id="",
+        _parent_session_id=bound_parent,
+        _bound_parent_session_id=bound_parent,
+        _convergence=ConvergenceDetector(),
+        _reflection_requires_redaction=False,
+        cognitive_state=None,
+    )
+
+
+def test_resumed_child_keeps_its_durable_parent_marker(project: Path) -> None:
+    """A child resumed into a root loop stays a child after its next save."""
+    from core.agent.loop import _lifecycle
+    from core.memory.session_peers import session_kind
+
+    _save(project, "s-parent", _turn(1))
+    _save(project, "s-other", _turn(1))
+    _terminal_child(project, "agent-resumed", "s-parent", SessionStatus.COMPLETED)
+    checkpoint = SessionCheckpoint(project)
+    store = CollaborationStore(project / "sessions.db")
+    assert store.child_run("agent-resumed") is None  # run row already pruned
+
+    loop = _resume_loop()  # the IPC poller's root loop
+    _lifecycle.restore_loop_state(loop, checkpoint.load("agent-resumed"))
+    assert loop._parent_session_id == "s-parent"
+
+    # A writer that lost the marker (a legacy loop) cannot clear it either.
+    checkpoint.reopen("agent-resumed")
+    _save(project, "agent-resumed", _turn(2))
+    assert checkpoint.read_header("agent-resumed")["parent_session_id"] == "s-parent"
+    assert session_kind("agent-resumed", checkpoint=checkpoint, store=store) == "child"
+    checkpoint.mark_completed("agent-resumed")
+    assert fork_session(SessionPrincipal(session_id="s-parent"), "agent-resumed").session_id
+    with pytest.raises(SessionForkError, match="owning parent"):
+        fork_session(SessionPrincipal(session_id="s-other"), "agent-resumed")
+
+    # The reused loop takes no stale parent into the next (root) session...
+    _lifecycle.restore_loop_state(loop, checkpoint.load("s-parent"))
+    assert loop._parent_session_id == ""
+    # ...and a worker keeps its runtime-bound parent over a legacy checkpoint.
+    worker = _resume_loop("s-parent")
+    _lifecycle.restore_loop_state(worker, SessionState(session_id="agent-legacy"))
+    assert worker._parent_session_id == "s-parent"
+
+
+def _locked(*_args: Any, **_kwargs: Any) -> Any:
+    raise sqlite3.OperationalError("database is locked")
+
+
+def test_failed_orphan_row_cleanup_keeps_the_marker_for_retry(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pending marker outlives its rows: a DB failure is retried, never orphaned."""
+    _save(project, "s-src", _turn(1))
+    orphan = project / "s-orphan0002"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src", encoding="utf-8")
+    SessionManager(project / "sessions.db").upsert_messages("s-orphan0002", _turn(9))
+    session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
+
+    with monkeypatch.context() as patch:
+        patch.setattr(SessionManager, "upsert_messages", _locked)
+        assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
+    assert (orphan / ".fork-pending").is_file()
+    assert SessionManager(project / "sessions.db").get_messages("s-orphan0002") != []
+
+    # The failed sweep was not recorded as done, so the next startup retries.
+    assert SessionCheckpoint(project).sweep_orphan_forks_once() == 1
+    assert not orphan.exists()
+    assert SessionManager(project / "sessions.db").get_messages("s-orphan0002") == []
+
+
+def test_failed_publication_with_failed_row_cleanup_stays_recoverable(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _save(project, "s-src", _turn(1, tools=1))
+    original_write = session_checkpoint.atomic_write_json
+    original_upsert = SessionManager.upsert_messages
+
+    def failing_write(path: Path, data: Any, **kwargs: Any) -> None:
+        if path.name == "state.json" and path.parent.name != "s-src":
+            raise OSError("disk full")
+        original_write(path, data, **kwargs)
+
+    def locked_cleanup(self: Any, session_id: str, messages: list[Any], *a: Any, **kw: Any) -> int:
+        if not messages:
+            _locked()
+        return original_upsert(self, session_id, messages, *a, **kw)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(session_checkpoint, "atomic_write_json", failing_write)
+        patch.setattr(SessionManager, "upsert_messages", locked_cleanup)
+        with pytest.raises(OSError, match="disk full"):
+            fork_session(OPERATOR, "s-src")
+    pending = [p for p in project.iterdir() if (p / ".fork-pending").is_file()]
+    assert len(pending) == 1 and not (pending[0] / "state.json").exists()
+
+    assert SessionCheckpoint(project).cleanup(max_age_hours=10_000) == 1
+    assert [p.name for p in project.iterdir() if p.is_dir()] == ["s-src"]
+    with sqlite3.connect(project / "sessions.db") as conn:
+        assert conn.execute("SELECT DISTINCT session_id FROM messages").fetchall() == [("s-src",)]
+
+
+def test_swept_directory_set_stays_bounded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(session_checkpoint, "_ORPHAN_SWEPT_DIRS", set())
+    for index in range(session_checkpoint._ORPHAN_SWEPT_MAX_DIRS + 5):
+        sessions = tmp_path / f"p{index}"
+        sessions.mkdir()
+        SessionCheckpoint(sessions).sweep_orphan_forks_once()
+    assert len(session_checkpoint._ORPHAN_SWEPT_DIRS) <= session_checkpoint._ORPHAN_SWEPT_MAX_DIRS
+
+
+def test_partially_removed_orphan_directory_is_retried(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file that cannot be removed keeps the marker on disk, even on a full disk."""
+    import errno
+    import os
+
+    _save(project, "s-src", _turn(1))
+    orphan = project / "s-orphan0003"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src", encoding="utf-8")
+    (orphan / "messages.json").write_text("[]", encoding="utf-8")
+    SessionManager(project / "sessions.db").upsert_messages("s-orphan0003", _turn(9))
+    session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
+    original_unlink = os.unlink
+
+    def failing_unlink(path: Any, *args: Any, **kwargs: Any) -> None:
+        if os.path.basename(os.fsdecode(path)) == "messages.json":
+            raise OSError(errno.EACCES, "Permission denied")
+        original_unlink(path, *args, **kwargs)
+
+    def full_disk(*_args: Any, **_kwargs: Any) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "unlink", failing_unlink)
+        patch.setattr(Path, "touch", full_disk)
+        patch.setattr(Path, "write_text", full_disk)
+        assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
+    assert (orphan / ".fork-pending").is_file() and (orphan / "messages.json").exists()
+    assert str(project.resolve()) not in session_checkpoint._ORPHAN_SWEPT_DIRS
+
+    # A restarted process finds the same marker and finishes the discard.
+    session_checkpoint._ORPHAN_SWEPT_DIRS.clear()
+    assert SessionCheckpoint(project).sweep_orphan_forks_once() == 1
+    assert not orphan.exists()
+
+
+def test_a_failed_discard_keeps_the_directory_out_of_the_swept_set(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sweep trusts the discard result, not only the marker it may have lost."""
+    orphan = project / "s-orphan0004"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src", encoding="utf-8")
+    session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
+
+    def lost_marker_discard(self: SessionCheckpoint, fork_id: str) -> bool:
+        (self.session_dir / fork_id / ".fork-pending").unlink()
+        return False
+
+    with monkeypatch.context() as patch:
+        patch.setattr(SessionCheckpoint, "_discard_fork_locked", lost_marker_discard)
+        assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
+    assert str(project.resolve()) not in session_checkpoint._ORPHAN_SWEPT_DIRS
+
+
+def test_failed_final_rmdir_restores_the_marker(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The marker goes last but one: if the empty directory stays, so does the marker."""
+    import errno
+
+    orphan = project / "s-orphan0005"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src", encoding="utf-8")
+    session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
+    original_rmdir = Path.rmdir
+
+    def busy_rmdir(self: Path) -> None:
+        if self == orphan:
+            raise OSError(errno.EBUSY, "Device or resource busy")
+        original_rmdir(self)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "rmdir", busy_rmdir)
+        assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
+    assert (orphan / ".fork-pending").is_file()
+    assert str(project.resolve()) not in session_checkpoint._ORPHAN_SWEPT_DIRS
+    session_checkpoint._ORPHAN_SWEPT_DIRS.clear()  # a restarted process
+    assert SessionCheckpoint(project).sweep_orphan_forks_once() == 1
+    assert not orphan.exists()

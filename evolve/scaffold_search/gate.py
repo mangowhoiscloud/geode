@@ -398,9 +398,9 @@ def _anchor_gap(
 ) -> str | None:
     """Reason an anchor-mode comparison lacks an anchor dim, or None.
 
-    The anchor multiplier reads an absent anchor as its best case (1.0), and
-    the extractor drops non-finite scores, so in anchor mode an unmeasured
-    anchor must block promotion rather than maximise fitness. A baseline with
+    The anchor multiplier reads an absent anchor as its best case (1.0), so in
+    anchor mode an unmeasured anchor must block promotion rather than maximise
+    fitness (a non-finite anchor arrives as NaN and fails ``_nonfinite_dims``). A baseline with
     no anchors keeps its conservative 1.0 multiplier; a partial set would lower
     the prior fitness instead and needs a rebaseline.
     """

@@ -173,6 +173,22 @@ ToolErrorType = Literal[
 ]
 
 
+# Result field an effectful handler sets to ``False`` only on a failure path
+# that returns before any write, send, or external call. The effect-receipt
+# rail commits such a result as the operation's definite outcome; every other
+# effect error stays quarantined as possibly applied.
+EFFECT_APPLIED_FIELD = "effect_applied"
+
+
+def refused_before_effect(result: dict[str, Any]) -> dict[str, Any]:
+    """Return *result* declaring that its handler applied no side effect.
+
+    Use only where the failure provably precedes all I/O of the effect, such
+    as argument validation. Never mark a path reached after a write began.
+    """
+    return {**result, EFFECT_APPLIED_FIELD: False}
+
+
 def tool_error(
     message: str,
     *,

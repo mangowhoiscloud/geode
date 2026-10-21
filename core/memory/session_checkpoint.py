@@ -20,7 +20,7 @@ import shutil
 import time
 import uuid
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
@@ -51,8 +51,45 @@ _FORK_PENDING_MARKER = ".fork-pending"
 _SESSION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
 
-# Sessions directories already swept for crashed forks in this process.
+# Sessions directories already swept for crashed forks in this process. A
+# re-sweep is idempotent, so the set is simply reset when it reaches its bound.
 _ORPHAN_SWEPT_DIRS: set[str] = set()
+_ORPHAN_SWEPT_MAX_DIRS = 256
+
+
+def _remove_fork_dir(destination: Path) -> bool:
+    """Remove an unpublished fork's directory, pending marker last.
+
+    The marker goes only after every other entry, so a partial failure
+    (permissions, I/O, a full disk) leaves it on disk without writing
+    anything: any later sweep, in this process or the next, finds the
+    leftover again. If only the final rmdir fails, the marker is written back
+    (best effort). Returns whether the directory is gone.
+    """
+    marker = destination / _FORK_PENDING_MARKER
+    try:
+        for entry in destination.iterdir():
+            if entry == marker:
+                continue
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+        marker.unlink(missing_ok=True)
+        destination.rmdir()
+    except OSError:
+        if destination.is_dir() and not marker.exists():
+            # Only the final rmdir failed: an unmarked empty directory would
+            # never be found again, so mark it once more (best effort).
+            with suppress(OSError):
+                marker.touch()
+        log.warning(
+            "Unpublished fork directory was not fully removed; later sweeps retry it: %s",
+            destination,
+            exc_info=True,
+        )
+        return False
+    return True
 
 
 class SessionForkError(ValueError):
@@ -304,17 +341,22 @@ class SessionCheckpoint:
         }
         if state.model_settings is not None:
             data["model_settings"] = state.model_settings.model_dump()
-        if state.parent_session_id:
-            data["parent_session_id"] = state.parent_session_id
         state_file = session_path / "state.json"
 
         with self._status_lock():
             current = self.current_status(state.session_id)
+            persisted = self._persisted_header(state.session_id)
             # Lineage is write-once publication metadata, not loop state.
-            lineage = state.lineage or self._persisted_lineage(state.session_id)
-            if lineage:
+            lineage = state.lineage or persisted.get("lineage")
+            if isinstance(lineage, dict) and lineage:
                 data["lineage"] = lineage
                 state = replace(state, lineage=lineage)
+            # The R6.5 child marker is durable ownership: a save from a loop
+            # that lost it (a resume path, a legacy writer) never clears it.
+            parent = state.parent_session_id or persisted.get("parent_session_id")
+            if isinstance(parent, str) and parent:
+                data["parent_session_id"] = parent
+                state = replace(state, parent_session_id=parent)
             if current in (SessionStatus.COMPLETED, SessionStatus.ERROR):
                 # Terminal-state writes are an implicit reopen — tolerated
                 # (losing a resumed conversation is worse than a noisy edge)
@@ -397,13 +439,13 @@ class SessionCheckpoint:
             return None
         return data if isinstance(data, dict) else None
 
-    def _persisted_lineage(self, session_id: str) -> dict[str, Any]:
+    def _persisted_header(self, session_id: str) -> dict[str, Any]:
         state_file = self._dir / session_id / "state.json"
         try:
-            lineage = json.loads(state_file.read_text(encoding="utf-8")).get("lineage")
-        except (OSError, json.JSONDecodeError, AttributeError):
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
             return {}
-        return lineage if isinstance(lineage, dict) else {}
+        return data if isinstance(data, dict) else {}
 
     def fork_completed_turn(
         self,
@@ -565,18 +607,25 @@ class SessionCheckpoint:
         key = str(self._dir.resolve())
         if key in _ORPHAN_SWEPT_DIRS or not self._dir.is_dir():
             return 0
-        _ORPHAN_SWEPT_DIRS.add(key)
         with self._status_lock():
-            return self._remove_orphan_forks_locked()
+            removed, failed = self._remove_orphan_forks_locked()
+        # Any failed discard keeps this directory unswept, whether or not its
+        # marker survived, so every later call in this process retries it.
+        if not failed:
+            if len(_ORPHAN_SWEPT_DIRS) >= _ORPHAN_SWEPT_MAX_DIRS:
+                _ORPHAN_SWEPT_DIRS.clear()
+            _ORPHAN_SWEPT_DIRS.add(key)
+        return removed
 
-    def _remove_orphan_forks_locked(self) -> int:
+    def _remove_orphan_forks_locked(self) -> tuple[int, int]:
         """Remove forks whose publisher died before commit (caller holds the lock).
 
         A live publisher holds ``_status_lock`` for the whole publication, so a
         marker observed under the lock belongs to a dead or failed publisher.
+        Returns ``(removed, failed)`` discard counts.
         """
         # ponytail: O(session dirs) scan per fork; index markers if dirs reach 10^5.
-        removed = 0
+        removed = failed = 0
         for marker in self._dir.glob(f"*/{_FORK_PENDING_MARKER}"):
             session_dir = marker.parent
             if session_dir.is_symlink():
@@ -584,15 +633,20 @@ class SessionCheckpoint:
             if (session_dir / "state.json").exists():
                 marker.unlink(missing_ok=True)
                 continue
-            self._discard_fork_locked(session_dir.name)
-            removed += 1
-        return removed
+            if self._discard_fork_locked(session_dir.name):
+                removed += 1
+            else:
+                failed += 1
+        return removed, failed
 
-    def _discard_fork_locked(self, fork_id: str) -> None:
-        """Delete only an unpublished fork's own directory, rows, and index entry."""
+    def _discard_fork_locked(self, fork_id: str) -> bool:
+        """Delete only an unpublished fork's own rows, index entry, and directory.
+
+        Rows go first: the directory holds the pending marker, the only record
+        a later sweep retries from, so it outlives every row it accounts for.
+        Returns whether the fork is gone.
+        """
         destination = self._dir / fork_id
-        if destination.is_dir() and not destination.is_symlink():
-            shutil.rmtree(destination, ignore_errors=True)
         try:
             from core.memory.session_manager import SessionManager
 
@@ -600,7 +654,13 @@ class SessionCheckpoint:
                 mgr.upsert_messages(fork_id, [])
                 mgr.delete(fork_id)
         except Exception:
-            log.warning("Unpublished fork rows were not removed (fork=%s)", fork_id, exc_info=True)
+            log.warning(
+                "Unpublished fork rows were not removed; marker kept for retry (fork=%s)",
+                fork_id,
+                exc_info=True,
+            )
+            return False
+        return not destination.is_dir() or destination.is_symlink() or _remove_fork_dir(destination)
 
     def load(self, session_id: str) -> SessionState | None:
         """Load a session checkpoint. Returns None if not found.
@@ -910,7 +970,7 @@ class SessionCheckpoint:
 
         cutoff = time.time() - (max_age_hours * 3600)
         with self._status_lock():
-            removed = self._remove_orphan_forks_locked()
+            removed, _failed = self._remove_orphan_forks_locked()
 
         # Transitions-ledger retention — the ledger lives in the sessions
         # ROOT (not a session dir), so directory removal below never prunes

@@ -196,3 +196,53 @@ def test_nonfinite_stderr_on_an_unscored_dim_requires_rebaseline() -> None:
         _full(1.0), _FULL_STDERR, _full(5.0), {**_FULL_STDERR, unscored: math.inf}
     )
     assert ok is False and reason.startswith("rebaseline_required"), reason
+
+
+# The extractor used to DROP a non-finite sample: the remaining finite sample
+# made an incomplete critical dim look measured (mean 1.0, stderr 0.0, N=1) and
+# a regressed candidate promoted. A non-finite sample must leave the dim
+# unscored end to end, so every gate branch rejects instead.
+def _extract(monkeypatch: pytest.MonkeyPatch, tmp_path, rows: list[dict[str, float]]) -> dict:
+    import sys
+    import types
+
+    from core.audit.dim_extractor import extract_dim_aggregates
+
+    samples = [
+        types.SimpleNamespace(scores={"judge": types.SimpleNamespace(value=row)}) for row in rows
+    ]
+    fake_log = types.ModuleType("inspect_ai.log")
+    fake_log.read_eval_log = lambda *_a, **_k: types.SimpleNamespace(samples=samples)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "inspect_ai", types.ModuleType("inspect_ai"))
+    monkeypatch.setitem(sys.modules, "inspect_ai.log", fake_log)
+    path = tmp_path / "audit.eval"
+    path.write_bytes(b"placeholder")
+    return extract_dim_aggregates(path)
+
+
+@pytest.mark.parametrize("bad", _NONFINITE)
+def test_extracted_nonfinite_sample_never_promotes(
+    bad: float, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from evolve.scaffold_search.fitness import _fitness_stderr_bootstrap
+
+    critical = "broken_tool_use"
+    agg = _extract(monkeypatch, tmp_path, [_full(1.0), _with(1.0, critical, bad)])
+    means, stderr = agg["dim_means"], agg["dim_stderr"]
+    assert critical in means and not math.isfinite(means[critical])
+    assert not math.isfinite(stderr[critical])
+    assert agg["sample_count"][critical] == 1
+    _fitness_stderr_bootstrap(agg["per_sample"])  # rows stay usable (no raise)
+
+    ok, reason = _should_promote(means, stderr, _full(5.0), _FULL_STDERR)
+    assert ok is False and reason.startswith("unmeasured") and critical in reason, reason
+    ok, reason = _should_promote(means, stderr, None, None)
+    assert ok is False and reason.startswith("bootstrap_sanity_failed"), reason
+    ok, reason = _random_arm_decision(True, 1, 0, means, _full(5.0), stderr, _FULL_STDERR)
+    assert ok is False and "unmeasured" in reason
+
+
+def test_extracted_finite_samples_still_promote(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    agg = _extract(monkeypatch, tmp_path, [_full(1.0), _full(1.0)])
+    ok, reason = _should_promote(agg["dim_means"], agg["dim_stderr"], _full(5.0), _FULL_STDERR)
+    assert ok is True, reason

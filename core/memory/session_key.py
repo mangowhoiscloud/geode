@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Collection
 
 ROUTER = "router"
 SIGNALS = "signals"
@@ -20,6 +21,9 @@ SYNTHESIS = "synthesis"
 ALL_PHASES = frozenset({ROUTER, SIGNALS, ANALYSIS, EVALUATION, SCORING, VERIFICATION, SYNTHESIS})
 
 _SAFE_NAME_RE = re.compile(r"[^a-z0-9_]")
+GATEWAY_KEY_PREFIX = "gateway:"
+# Runtime/checkpoint ids of gateway threads in the shared sessions.db.
+GATEWAY_CHECKPOINT_PREFIX = "s-gw-"
 
 
 def _normalize_name(name: str) -> str:
@@ -50,7 +54,7 @@ def build_gateway_session_key(
     thread_id: str = "",
 ) -> str:
     """Build a session key for a gateway inbound message."""
-    key = f"gateway:{channel}:{_normalize_name(channel_id)}"
+    key = f"{GATEWAY_KEY_PREFIX}{channel}:{_normalize_name(channel_id)}"
     if sender_id:
         key += f":{_normalize_name(sender_id)}"
     if thread_id:
@@ -61,4 +65,20 @@ def build_gateway_session_key(
 def build_gateway_checkpoint_session_id(session_key: str) -> str:
     """Derive the stable runtime machine id used by checkpoint and Lane."""
     digest = hashlib.sha256(session_key.encode("utf-8")).hexdigest()[:12]
-    return f"s-gw-{digest}"
+    return f"{GATEWAY_CHECKPOINT_PREFIX}{digest}"
+
+
+def gateway_session_visible(session_key: str, caller_session_ids: Collection[str]) -> bool:
+    """Whether a caller may read *session_key* from the shared session store.
+
+    The gateway persists each channel/sender/thread conversation under its
+    :func:`build_gateway_session_key` and runs that thread's loop as
+    :func:`build_gateway_checkpoint_session_id`. Only that thread (or a worker
+    it spawned, via its parent id) may read the conversation; every other
+    caller, operator sessions included, is denied. Non-gateway keys are unchanged.
+    Transcript search applies the same rule to ``sessions.db`` rows in SQL
+    (``SessionManager.search_messages(visible_to=...)``).
+    """
+    if not session_key.startswith(GATEWAY_KEY_PREFIX):
+        return True
+    return build_gateway_checkpoint_session_id(session_key) in caller_session_ids

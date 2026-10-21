@@ -62,11 +62,12 @@ import json
 import logging
 import re
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.memory.session_manager import session_owner_sql
 from core.paths import GLOBAL_PROJECTS_DIR, GLOBAL_SEARCH_DB
 
 log = logging.getLogger(__name__)
@@ -91,9 +92,19 @@ CREATE TABLE IF NOT EXISTS indexed_messages (
     tool_name    TEXT,
     tool_calls   TEXT,
     timestamp    REAL NOT NULL,
+    visibility_owner TEXT,
     UNIQUE(project_id, session_id, message_id)
 )
 """
+
+# ``visibility_owner`` is ``session_owner_sql`` evaluated against the source
+# project DB at rebuild: '' for public rows, else the one session that may read
+# them. Rows without it (NULL) are never returned to a caller, and an index whose
+# marker predates the column is not served at all until ``geode reindex``.
+_OWNERSHIP_VERSION = "1"
+_CREATE_INDEX_META_SQL = (
+    "CREATE TABLE IF NOT EXISTS index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+)
 
 _CREATE_INDEXED_MESSAGES_FTS_SQL = """\
 CREATE VIRTUAL TABLE IF NOT EXISTS indexed_messages_fts USING fts5(
@@ -214,11 +225,22 @@ class SearchIndex:
     def _init_schema(self) -> None:
         cur = self._conn.cursor()
         cur.execute(_CREATE_INDEXED_MESSAGES_SQL)
+        columns = {row[1] for row in cur.execute("PRAGMA table_info(indexed_messages)")}
+        if "visibility_owner" not in columns:  # an index built before ownership v1
+            cur.execute("ALTER TABLE indexed_messages ADD COLUMN visibility_owner TEXT")
+        cur.execute(_CREATE_INDEX_META_SQL)
         cur.execute(_CREATE_INDEXED_MESSAGES_FTS_SQL)
         cur.execute(_INDEXED_MESSAGES_INSERT_TRIGGER_SQL)
         cur.execute(_INDEXED_MESSAGES_DELETE_TRIGGER_SQL)
         cur.execute(_INDEXED_MESSAGES_UPDATE_TRIGGER_SQL)
         self._conn.commit()
+
+    def has_ownership(self) -> bool:
+        """Whether the last rebuild recorded every row's owner (ownership v1)."""
+        row = self._conn.execute(
+            "SELECT value FROM index_meta WHERE key = 'ownership_version'"
+        ).fetchone()
+        return row is not None and row[0] == _OWNERSHIP_VERSION
 
     def close(self) -> None:
         with contextlib.suppress(sqlite3.Error):
@@ -274,6 +296,10 @@ class SearchIndex:
                     continue
                 cur.execute(f"RELEASE SAVEPOINT {savepoint}")
                 stats[project_id] = indexed
+            cur.execute(
+                "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('ownership_version', ?)",
+                (_OWNERSHIP_VERSION,),
+            )
             self._conn.commit()
         except Exception:
             self._conn.rollback()
@@ -293,9 +319,19 @@ class SearchIndex:
         src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         src.row_factory = sqlite3.Row
         try:
+            # Record each row's owner from the source's own ownership tables.
+            tables = {
+                row[0] for row in src.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+            }
+            session_columns = {row[1] for row in src.execute("PRAGMA table_info(sessions)")}
+            owner = session_owner_sql(
+                "messages.session_id",
+                sessions="parent_session_id" in session_columns,
+                runs="collaboration_runs" in tables,
+            )
             rows = src.execute(
-                "SELECT id, session_id, seq, role, content, tool_name, "
-                "tool_calls, timestamp FROM messages "
+                "SELECT id, session_id, seq, role, content, tool_name, "  # noqa: S608  # nosec B608
+                f"tool_calls, timestamp, {owner} AS visibility_owner FROM messages "
                 "ORDER BY timestamp ASC"
             ).fetchall()
         finally:
@@ -305,8 +341,8 @@ class SearchIndex:
             cur.execute(
                 "INSERT OR REPLACE INTO indexed_messages "
                 "(project_id, project_slug, session_id, message_id, seq, "
-                "role, content, tool_name, tool_calls, timestamp) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "role, content, tool_name, tool_calls, timestamp, visibility_owner) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     project_id,
                     project_slug,
@@ -318,6 +354,7 @@ class SearchIndex:
                     row["tool_name"],
                     row["tool_calls"],
                     float(row["timestamp"]),
+                    row["visibility_owner"],
                 ),
             )
             indexed += 1
@@ -332,8 +369,14 @@ class SearchIndex:
         project_id: str | None = None,
         session_id: str | None = None,
         limit: int = 20,
+        visible_to: Collection[str] | None = None,
     ) -> list[SearchIndexHit]:
         """Cross-project FTS5 search.
+
+        ``visible_to`` (the caller's own session ids, never tool arguments)
+        returns only rows whose recorded ``visibility_owner`` is public or one
+        of them; rows with no recorded owner never match. ``None`` applies no
+        filter. Callers check :meth:`has_ownership` first.
 
         Both ``project_id`` and ``session_id`` (Codex MCP catch on
         PR-Hermes-1d.2: pre-fix the tool applied session_id AFTER
@@ -373,6 +416,10 @@ class SearchIndex:
         if session_id is not None:
             sql += " AND m.session_id = ?"
             params.append(session_id)
+        if visible_to is not None:
+            ids = sorted(set(visible_to))
+            sql += f" AND m.visibility_owner IN (''{''.join(', ?' for _ in ids)})"
+            params.extend(ids)
         sql += " ORDER BY m.timestamp DESC LIMIT ?"
         params.append(limit)
         try:

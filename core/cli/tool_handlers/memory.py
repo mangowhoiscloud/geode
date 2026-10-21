@@ -11,6 +11,7 @@ from typing import Any
 
 from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
+from core.tools.base import refused_before_effect
 from core.tools.handlers.clarification import _clarify
 from core.tools.handlers.registration import UniqueEntries
 
@@ -44,7 +45,11 @@ def _build_memory_handlers(
 ) -> UniqueEntries[str, Any]:
     """Build memory-related tool handlers."""
     from core.memory.project import MemoryWrite, ProjectMemory
-    from core.tools.memory_tools import MemorySearchTool, MemoryToolServices
+    from core.tools.memory_tools import (
+        SEARCH_RESPONSE_ENVELOPE,
+        MemorySearchTool,
+        MemoryToolServices,
+    )
 
     services = memory_services or MemoryToolServices()
     memory = services.project_memory or ProjectMemory()
@@ -62,15 +67,19 @@ def _build_memory_handlers(
         if not query:
             return _clarify("memory_search", ["query"], "무엇을 검색할까요?")
         tier = kwargs.get("tier") or "all"
-        result = MemorySearchTool(services=services)._execute_sync(query=query, tier=tier)
-        return {"status": "ok", "action": "memory_search", **result["result"]}
+        result = MemorySearchTool(services=services)._execute_sync(
+            query=query, tier=tier, _tool_context=kwargs.get("_tool_context")
+        )
+        return {**SEARCH_RESPONSE_ENVELOPE, **result["result"]}
 
     def handle_memory_save(**kwargs: Any) -> dict[str, Any]:
         key = str(kwargs.get("key") or "").strip()
         content = str(kwargs.get("content") or "").strip()
         if not key or not content:
             missing = [k for k, v in {"key": key, "content": content}.items() if not v]
-            return _clarify("memory_save", missing, "저장할 키와 내용을 알려주세요.")
+            return refused_before_effect(
+                _clarify("memory_save", missing, "저장할 키와 내용을 알려주세요.")
+            )
         outcome = memory.record_insight(f"{key}: {content}")
         if outcome is MemoryWrite.APPLIED:
             return {"status": "ok", "action": "memory_save", "key": key, "saved": True}
@@ -93,7 +102,11 @@ def _build_memory_handlers(
                 "stub, and memory must resolve inside the project."
             ),
         }.get(outcome, "Project memory could not be read or written; it was left unchanged.")
-        return _memory_error("memory_save", outcome, detail, key=key, saved=False)
+        result = _memory_error("memory_save", outcome, detail, key=key, saved=False)
+        # record_insight returns NOT_FOUND / INVALID before taking any write path.
+        if outcome in (MemoryWrite.NOT_FOUND, MemoryWrite.INVALID):
+            return refused_before_effect(result)
+        return result
 
     def handle_manage_rule(**kwargs: Any) -> dict[str, Any]:
         rule_action = str(kwargs.get("action") or "list")
@@ -101,10 +114,12 @@ def _build_memory_handlers(
         content = str(kwargs.get("content") or "")
         paths = [str(p) for p in kwargs.get("paths") or []]
         if rule_action not in _RULE_ACTIONS:
-            return _memory_error(
-                "manage_rule",
-                MemoryWrite.INVALID,
-                f"Unknown action '{rule_action}'; expected one of {list(_RULE_ACTIONS)}",
+            return refused_before_effect(
+                _memory_error(
+                    "manage_rule",
+                    MemoryWrite.INVALID,
+                    f"Unknown action '{rule_action}'; expected one of {list(_RULE_ACTIONS)}",
+                )
             )
         if rule_action == "list":
             rules = memory.list_rules()
@@ -117,7 +132,9 @@ def _build_memory_handlers(
             }
         required = {"name": name} if rule_action == "delete" else {"name": name, "content": content}
         if missing := [k for k, v in required.items() if not v.strip()]:
-            return _clarify("manage_rule", missing, "규칙 이름과 내용을 알려주세요.")
+            return refused_before_effect(
+                _clarify("manage_rule", missing, "규칙 이름과 내용을 알려주세요.")
+            )
         outcome = memory.change_rule(rule_action, name, paths=paths, content=content)
         if outcome is not MemoryWrite.APPLIED:
             detail = {

@@ -7,12 +7,13 @@ percentage or token ceilings.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from core.llm.adapters.base import AdapterCallRequest
+    from core.llm.adapters.base import AdapterCallRequest, UsageSummary
 
 DEFAULT_CONTEXT_WINDOW_TOKENS = 200_000
 
@@ -20,9 +21,27 @@ DEFAULT_CONTEXT_WINDOW_TOKENS = 200_000
 # Retain the historical name for callers; crossing it never establishes overflow.
 ABSOLUTE_TOKEN_CEILING = 200_000
 TOKEN_ESTIMATE_CHARS_PER_TOKEN = 4
+# Smallest supported positive tool-result limit (guard and offload threshold,
+# in tokens). Lower configured values are raised to it so a short refusal,
+# such as read_session_messages' limit error, reaches the model intact
+# instead of being truncated to ``{}``; 0 still disables either limit.
+MIN_TOOL_RESULT_TOKENS = 32
 DEFAULT_TOOLS_OVERHEAD_TOKENS = 10_000
 
 SAFETY_MARGIN_MULTIPLIER = 1.20
+# Provider-reported prompt tokens per heuristic token. Dense text such as hex
+# digests tokenizes at about 2 chars/token, so 4 chars/token plus the static
+# margin can hide half of the real context. A smaller request is too small to
+# calibrate; the cap bounds malformed usage.
+TOKEN_RATIO_MIN_SAMPLE_TOKENS = 8_000
+MAX_OBSERVED_TOKEN_RATIO = 8.0
+# Text added since the last measured request has no observed density. It is
+# estimated at least at the hex-digest density (4 / 1.85 chars per token),
+# never at the density of whatever happened to be measured before it.
+DENSE_TOKEN_RATIO_FLOOR = 2.2
+# Text strings at least this long are tracked as individual payloads; the
+# rest of a request (system prompt, schemas, framing) shares one ratio.
+CALIBRATED_PAYLOAD_MIN_CHARS = 256
 DEFAULT_OUTPUT_RESERVE_TOKENS = 20_000
 MIN_PROMPT_BUDGET_TOKENS = 8_000
 
@@ -98,6 +117,20 @@ CONTEXT_BUDGET_TIERS: tuple[ContextBudgetTier, ...] = (
 
 
 @dataclass(frozen=True, slots=True)
+class PromptCalibration:
+    """Provider tokens per heuristic token from the latest measured request.
+
+    ``payload_ratios`` pairs each large text payload already sent (keyed by
+    ``hash`` of its text) with its attributed ratio; all other request content
+    shares ``overhead_ratio``. A payload missing from it is unmeasured.
+    """
+
+    request_ratio: float
+    overhead_ratio: float
+    payload_ratios: tuple[tuple[int, float], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ContextBudgetPolicy:
     """Resolved context budget for one model/window."""
 
@@ -114,6 +147,22 @@ class ContextBudgetPolicy:
     context_origin: Literal["provider_catalog", "client_default", "fallback", "override"] = (
         "fallback"
     )
+    calibration: PromptCalibration | None = None
+
+    @property
+    def observed_token_ratio(self) -> float:
+        """Latest whole-request provider/heuristic ratio; 0 is unobserved."""
+        return self.calibration.request_ratio if self.calibration is not None else 0.0
+
+    @property
+    def estimate_multiplier(self) -> float:
+        """Static safety margin, raised to the observed provider/heuristic ratio."""
+        return max(self.safety_margin, self.observed_token_ratio)
+
+    @property
+    def unmeasured_multiplier(self) -> float:
+        """Multiplier for text the provider has not measured since calibration."""
+        return max(self.estimate_multiplier, DENSE_TOKEN_RATIO_FLOOR)
 
     @property
     def effective_prompt_budget_tokens(self) -> int:
@@ -139,7 +188,10 @@ class ContextBudgetPolicy:
 
     @property
     def prune_budget_tokens(self) -> int:
-        return self.warning_tokens
+        # Adaptive prune counts unmargined heuristic message tokens; dividing by
+        # the estimate multiplier lands the pruned history at the warning level
+        # as measured, rather than up to 1.2x (or the observed ratio) above it.
+        return max(1, int(self.warning_tokens / self.estimate_multiplier))
 
     @property
     def tool_summary_threshold_tokens(self) -> int:
@@ -191,7 +243,29 @@ class ContextBudgetPolicy:
         return max(SUMMARY_MIN_TOKENS, min(target, self.max_summary_tokens))
 
     def apply_safety_margin(self, raw_tokens: int) -> int:
-        return ceil(raw_tokens * self.safety_margin)
+        return ceil(raw_tokens * self.estimate_multiplier)
+
+    def estimate_prompt_tokens(self, raw_tokens: int, payloads: Iterable[tuple[int, int]]) -> int:
+        """Estimate ``raw_tokens`` of heuristic tokens in provider tokens.
+
+        ``payloads`` lists ``(key, chars)`` for the large text strings inside
+        ``raw_tokens``. Before any calibration the static margin covers all.
+        """
+        calibration = self.calibration
+        if calibration is None:
+            return self.apply_safety_margin(raw_tokens)
+        ratios = dict(calibration.payload_ratios)
+        total = 0.0
+        payload_tokens = 0.0
+        for key, chars in payloads:
+            tokens = chars / TOKEN_ESTIMATE_CHARS_PER_TOKEN
+            payload_tokens += tokens
+            ratio = ratios.get(key)
+            total += tokens * (
+                self.unmeasured_multiplier if ratio is None else max(self.safety_margin, ratio)
+            )
+        overhead = max(raw_tokens - payload_tokens, 0.0)
+        return ceil(total + overhead * max(self.safety_margin, calibration.overhead_ratio))
 
     def resolve_keep_recent(self, requested: int) -> int:
         cap = self.tier.keep_recent_cap
@@ -201,6 +275,85 @@ class ContextBudgetPolicy:
 
     def resolve_aggressive_keep_recent(self, requested: int) -> int:
         return max(AGGRESSIVE_KEEP_RECENT_FLOOR, self.resolve_keep_recent(requested) // 2)
+
+
+def observed_prompt_tokens(usage: UsageSummary, *, provider: str) -> int | None:
+    """Return the provider-reported prompt size, or None when it was not reported.
+
+    Anthropic reports cache reads and writes beside ``input_tokens``; OpenAI,
+    Codex and Chat Completions routes already include cached input.
+    """
+    if not usage.input_tokens_present:
+        return None
+    from core.llm.model_catalog import normalize_model_provider
+
+    tokens = usage.input_tokens
+    if normalize_model_provider(provider) == "anthropic":
+        tokens += usage.cached_input_tokens + usage.cache_write_tokens
+    return tokens
+
+
+def _clamp_ratio(value: float) -> float:
+    return min(max(value, 0.0), MAX_OBSERVED_TOKEN_RATIO)
+
+
+def next_prompt_calibration(
+    previous: PromptCalibration | None,
+    *,
+    observed_tokens: int,
+    raw_tokens: int,
+    payloads: Iterable[tuple[int, int]],
+    other_keys: Iterable[int] = (),
+) -> PromptCalibration | None:
+    """Attribute one measured request's reported size to its payloads.
+
+    A first measurement gives every payload the whole-request ratio, which
+    under-prices dense text that shared the request with prose. Every later
+    measurement re-checks that provisional attribution: text sent for the
+    first time is priced at the dense floor, and when the reported total
+    exceeds the attributed sum, the payloads measured before are scaled up
+    until it matches. Ratios therefore only rise for retained payloads, and
+    pruning the prose later cannot leave dense text at the mixed average.
+    Otherwise the new text takes the residual. ``other_keys`` are the same
+    history sent in another shape (for example tool inputs) and take the
+    whole-request ratio.
+    """
+    if raw_tokens < TOKEN_RATIO_MIN_SAMPLE_TOKENS or observed_tokens <= 0:
+        return previous
+    request_ratio = _clamp_ratio(observed_tokens / raw_tokens)
+    tokens_by_key: dict[int, float] = {}
+    for key, chars in payloads:
+        tokens_by_key[key] = tokens_by_key.get(key, 0.0) + chars / TOKEN_ESTIMATE_CHARS_PER_TOKEN
+    overhead_tokens = max(raw_tokens - sum(tokens_by_key.values()), 0.0)
+    if previous is None:
+        ratios = dict.fromkeys(tokens_by_key, request_ratio)
+        overhead_ratio = request_ratio
+    else:
+        known = dict(previous.payload_ratios)
+        priced = sum(tokens * known[key] for key, tokens in tokens_by_key.items() if key in known)
+        new_tokens = sum(tokens for key, tokens in tokens_by_key.items() if key not in known)
+        overhead_ratio = previous.overhead_ratio
+        payload_share = observed_tokens - overhead_tokens * overhead_ratio
+        floor_priced = new_tokens * DENSE_TOKEN_RATIO_FLOOR
+        scale, new_ratio = 1.0, DENSE_TOKEN_RATIO_FLOOR
+        if payload_share > priced + floor_priced:
+            if priced > 0:
+                scale = (payload_share - floor_priced) / priced
+            elif new_tokens > 0:
+                new_ratio = payload_share / new_tokens
+            elif overhead_tokens > 0:
+                overhead_ratio = _clamp_ratio(observed_tokens / overhead_tokens)
+        elif new_tokens > 0:
+            new_ratio = max(payload_share - priced, 0.0) / new_tokens
+        elif overhead_tokens > 0:
+            overhead_ratio = _clamp_ratio((observed_tokens - priced) / overhead_tokens)
+        ratios = {
+            key: _clamp_ratio(known[key] * scale if key in known else new_ratio)
+            for key in tokens_by_key
+        }
+    for key in other_keys:
+        ratios.setdefault(key, request_ratio)
+    return PromptCalibration(request_ratio, overhead_ratio, tuple(ratios.items()))
 
 
 def _resolve_tier(context_window: int) -> ContextBudgetTier:

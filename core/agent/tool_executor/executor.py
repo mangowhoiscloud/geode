@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from core.agent.approval_fsm import ApprovalRecord
     from core.agent.sub_agent import SubAgentManager
     from core.hooks import HookRegistry, HookSystem, MiddlewareRegistry
-    from core.memory.effect_receipts import EffectReceiptStore
+    from core.memory.effect_receipts import EffectAdmission, EffectReceiptStore
     from core.tools.base import ToolContext
     from core.tools.plan import BoundToolPlan, ToolRegistration
 
@@ -40,6 +40,7 @@ from core.hooks.public import (
     HookName,
     HookRegistry,
 )
+from core.tools.base import EFFECT_APPLIED_FIELD
 from core.tools.bash_tool import BashTool
 from core.tools.personal_data import (
     PERSONAL_DATA_ERROR_OMITTED,
@@ -198,6 +199,81 @@ def _tool_spinner(label: str) -> Any:
     from core.agent import tool_executor as _pkg
 
     return _pkg._tool_spinner(label)
+
+
+_EFFECT_UNCERTAIN_ERROR = "Effect outcome is uncertain; reconcile it before retrying."
+_EFFECT_CAUSE_MAX_CHARS = 500
+
+
+def _effect_failure_is_definite(result: dict[str, Any]) -> bool:
+    """Whether a handler-returned effect error explicitly declares no effect.
+
+    Error categories are not evidence: an ``authorization`` failure can follow
+    a partially applied write. Only the handler's explicit opt-in counts.
+    """
+    if result.get("timeout") or result.get("outcome_uncertain"):
+        return False
+    return result.get(EFFECT_APPLIED_FIELD) is False
+
+
+def _uncertain_effect_result(cause: dict[str, Any], *, personal_data: bool) -> dict[str, Any]:
+    """Quarantine an effect while keeping its bounded, redacted cause visible."""
+    from core.observability.redaction import redact_and_bound_text
+
+    cause_type = redact_and_bound_text(
+        cause.get("error_type") or ("timeout" if cause.get("timeout") else "unknown"), 64
+    )
+    detail = (
+        PERSONAL_DATA_ERROR_OMITTED
+        if personal_data
+        else redact_and_bound_text(cause.get("error") or "none reported", _EFFECT_CAUSE_MAX_CHARS)
+    )
+    return {
+        "error": f"{_EFFECT_UNCERTAIN_ERROR} Cause ({cause_type}): {detail}",
+        "error_type": "effect_outcome_uncertain",
+        "outcome_uncertain": True,
+        "recoverable": False,
+        "cause_error_type": cause_type,
+    }
+
+
+def _uncertain_admission_result(admission: EffectAdmission) -> dict[str, Any]:
+    """Refuse an effect whose operation, or an older step's, is unresolved."""
+    result: dict[str, Any] = {
+        "error": _EFFECT_UNCERTAIN_ERROR,
+        "error_type": "effect_outcome_uncertain",
+        "outcome_uncertain": True,
+        "recoverable": False,
+    }
+    operation_id = admission.blocking_operation_id
+    if operation_id:
+        result["error"] = (
+            f"Effect was not dispatched: earlier operation {operation_id} "
+            f"({admission.blocking_tool_name}) in this session has an uncertain outcome. "
+            "After checking the external system, run `geode session resolve-effect "
+            f"{operation_id} --outcome applied` or `--outcome not-applied`."
+        )
+        result["blocking_operation_id"] = operation_id
+        result["blocking_tool_name"] = admission.blocking_tool_name
+    return result
+
+
+def _durable_effect_result(
+    tool_name: str,
+    result: dict[str, Any],
+    *,
+    personal_data: bool,
+    failed: bool,
+) -> dict[str, Any]:
+    """Return the receipt payload; personal data keeps only the failure marker."""
+    if not personal_data:
+        return result
+    durable = personal_data_omitted(tool_name)
+    if failed:
+        durable["error"] = PERSONAL_DATA_ERROR_OMITTED
+        durable["error_type"] = str(result.get("error_type") or "validation")
+        durable[EFFECT_APPLIED_FIELD] = False
+    return durable
 
 
 # Everything else is STANDARD — executes without special gates
@@ -986,10 +1062,11 @@ class ToolExecutor:
         receipt_store: Any | None = None
         receipt_operation_id = ""
         receipt_needs_commit = False
+        receipt_failed = False
         receipt_replay_result: dict[str, Any] | None = None
 
         async def dispatch(current: ToolCallRequest) -> dict[str, Any]:
-            nonlocal receipt_needs_commit, receipt_operation_id
+            nonlocal receipt_needs_commit, receipt_operation_id, receipt_failed
             nonlocal receipt_replay_result, receipt_store
             nonlocal terminal_started
             if current.tool_name != tool_name or dict(current.arguments) != tool_input:
@@ -1023,6 +1100,7 @@ class ToolExecutor:
                     resource_keys = resolved_mcp_keys
             leases = await self._resource_lock_pool.acquire(resource_keys)
             release_deferred = False
+            handler_raised = False
             operation_id = context.operation_id if context is not None else ""
             safety = self._safety_minimum_for(tool_name, bound_tool_plan=bound_tool_plan)
             durable_effect = bool(
@@ -1042,6 +1120,10 @@ class ToolExecutor:
                     self._resource_lock_pool.release(leases)
 
                 future.add_done_callback(release_when_done)
+
+            def note_handler_exception() -> None:
+                nonlocal handler_raised
+                handler_raised = True
 
             from core.hooks.dispatch import fire_hook_async
             from core.hooks.system import RuntimeEvent
@@ -1095,12 +1177,7 @@ class ToolExecutor:
                             "recoverable": False,
                         }
                     if admission.kind is EffectAdmissionKind.UNCERTAIN:
-                        return {
-                            "error": "Effect outcome is uncertain; reconcile it before retrying.",
-                            "error_type": "effect_outcome_uncertain",
-                            "outcome_uncertain": True,
-                            "recoverable": False,
-                        }
+                        return _uncertain_admission_result(admission)
                 terminal_started = True
                 if on_execution_started is not None:
                     try:
@@ -1122,16 +1199,21 @@ class ToolExecutor:
                     context=context,
                     approved_via_hitl=approved_via_hitl,
                     on_sync_abandoned=defer_release,
+                    on_handler_exception=note_handler_exception,
                     bound_tool_plan=bound_tool_plan,
                 )
                 if receipt_store is not None:
-                    if release_deferred or result.get("error"):
-                        return {
-                            "error": "Effect outcome is uncertain; reconcile it before retrying.",
-                            "error_type": "effect_outcome_uncertain",
-                            "outcome_uncertain": True,
-                            "recoverable": False,
-                        }
+                    # Only a returned, explicitly no-effect refusal is a definite
+                    # failure; an abandoned, raised, or otherwise failed effect may
+                    # have applied, so its receipt stays prepared for reconciliation.
+                    receipt_failed = bool(result.get("error"))
+                    if release_deferred or (
+                        receipt_failed
+                        and (handler_raised or not _effect_failure_is_definite(result))
+                    ):
+                        return _uncertain_effect_result(
+                            result, personal_data=contains_personal_data
+                        )
                     receipt_operation_id = operation_id
                     receipt_needs_commit = True
                 return result
@@ -1286,7 +1368,12 @@ class ToolExecutor:
                 "recoverable": False,
             }
         if receipt_needs_commit and receipt_store is not None:
-            durable_result = personal_data_omitted(tool_name) if contains_personal_data else result
+            durable_result = _durable_effect_result(
+                tool_name,
+                result,
+                personal_data=contains_personal_data,
+                failed=receipt_failed,
+            )
             try:
                 receipt_store.commit(receipt_operation_id, durable_result)
             except Exception:
@@ -1403,6 +1490,7 @@ class ToolExecutor:
         context: ToolContext | None = None,
         approved_via_hitl: bool = False,
         on_sync_abandoned: Callable[[asyncio.Future[Any]], None] | None = None,
+        on_handler_exception: Callable[[], None] | None = None,
         bound_tool_plan: BoundToolPlan | None = None,
     ) -> dict[str, Any]:
         """Uniform post-gate dispatch — 'how does it run?', gate-free.
@@ -1538,6 +1626,8 @@ class ToolExecutor:
                 "timeout": True,
             }
         except Exception as exc:
+            if on_handler_exception is not None:
+                on_handler_exception()
             return self._classify_execution_exception(
                 tool_name,
                 exc,

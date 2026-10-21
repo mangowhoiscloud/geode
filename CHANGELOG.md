@@ -105,6 +105,77 @@ functional change.
 
 ### Fixed
 
+- **Context pressure is measured in provider tokens.** The in-turn check
+  estimated 4 characters per token plus a 1.2x margin, but dense text such as
+  hex digests costs about 2 characters per token. A live `codex-oauth`
+  `gpt-6-sol` turn reading eighteen 57 KB files sent 259,201 input tokens on a
+  272K route, past its 176K warning and 227K critical levels, before any
+  maintenance ran. Each action request now records its provider-reported
+  input and attributes it to the text it sent: strings already measured keep
+  their own ratio, raised whenever a later measurement shows they were
+  under-priced (a first request mixing prose and dense text prices both at
+  its average), and text added since the last response (a new tool batch)
+  is estimated at no less than the hex density (2.2x the 4 chars/token
+  guess). The pressure check, the pre-send budget guard and recovery use these
+  estimates, so compaction starts at the warning level and pruning at
+  critical on every route. When a tool batch that compaction and pruning must
+  keep still exceeds the budget, or the provider rejects the request, the
+  largest tool results are bounded through the result guard, keeping their
+  failure fields, instead of sending the request or ending the turn.
+  Adaptive prune targets the warning level as measured instead of up to 1.2x
+  above it. Requests below 8,000 estimated tokens, planner and judge prompts,
+  and Anthropic responses that compacted on the server do not recalibrate.
+- **Effect failures no longer freeze a session.** When a write tool such as
+  `memory_save` refused a request before acting (for example, project memory
+  not initialized), its error was replaced by a generic "Effect outcome is
+  uncertain" and every later write in the session, such as `generate_report`,
+  was refused until an operator reconciled it. A tool can now declare that it
+  refused before doing anything (`effect_applied: false`; set for
+  `memory_save`'s missing-argument, missing-memory, and invalid-insight paths
+  and the argument checks of `manage_rule` and `generate_report`), and that
+  error reaches the model as a
+  recoverable result recorded as the operation's outcome. Every other effect
+  error, even one labelled `validation` or `authorization`, may have partly
+  applied and stays quarantined, but now states its bounded, redacted cause, and
+  a blocked later call names the unresolved operation and its
+  `geode session resolve-effect` command.
+
+- **Gateway conversation isolation in search tools.** `memory_search` and
+  `session_search` (both its default and `scope="all"` modes, including indexes
+  built before this change) return a gateway conversation only to that thread
+  or its workers, resolved from the tool context rather than arguments, so one
+  channel or sender can no longer read another's messages. Rows whose owner
+  cannot be established are visible only to their own session, and
+  `geode reindex` records each row's owner; a global index built without that
+  ownership data is not searched until it is rebuilt. `memory_search` responses
+  are capped at 4,000 serialized characters in total (1,000 per match) and
+  `session_search` snippets at 1,000, with explicit truncation markers.
+- **Peer reads within the tool-result limit.** `read_session_messages` bounds
+  the whole serialized result by min(8,000, the live tool-result limit), so a
+  read is never offloaded or truncated into a redelivery loop; an oversized
+  message is delivered once as a marked prefix, and a limit too small for any
+  message returns a short final error naming the setting to raise instead of
+  an empty batch. Positive tool-result guard and offload limits below 32
+  tokens are raised to 32 so that error always fits, and a truncated tool
+  result of any tool keeps its `error`, `error_type`, `recoverable`, and effect
+  flags even after hooks add context. Concurrent reads no longer
+  return the same message twice, and notified ids stay within the unread
+  backlog.
+- **Session ownership and fork recovery.** Resuming a child session keeps its
+  durable parent marker. Fork cleanup removes database rows before the
+  directory and `.fork-pending` marker, keeps or restores the marker when row
+  cleanup or directory removal fails so a later sweep retries, and bounds the
+  swept-directory set.
+- **Scheduler claims under write failures.** A failing dispatch callback no
+  longer releases a running turn's claim; claim and settlement writes that fail
+  restore the job, its pending command, and its run id, so one-shot jobs are not
+  lost and `_ACTIVE_RUNS` does not leak.
+- **Non-finite audit samples.** A dimension with any NaN or infinite sample is
+  unscored (NaN mean and stderr), so the promotion gate rejects instead of
+  promoting on the remaining samples.
+- **Self-improving hub post-processing.** Table wrapping is idempotent for any
+  label length, and the row filter's border meets 3:1 contrast.
+
 - **Eco² links.** The about page and RSI roadmap link to the moved Eco²
   case page at `mangowhois.ai/eco2/`; the retired GitHub Pages address
   returned 404.
@@ -350,6 +421,9 @@ functional change.
 
 ### Security
 
+- Lock `certifi` at 2026.10.19 to address PYSEC-2026-4320 reported by the
+  runtime dependency audit; it is a transitive dependency, no declared range
+  changes.
 - Lock `mcp` at 1.30.0 to address CVE-2026-59951 reported by the runtime
   dependency audit; the declared `mcp>=1.28,<2` range is unchanged.
 - Lock the site's optional sharp dependency at 0.35.5 and its prebuilt libvips

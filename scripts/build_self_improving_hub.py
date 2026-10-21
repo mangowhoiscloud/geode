@@ -2235,16 +2235,18 @@ def _autoresearch_trail(*pages: tuple[str, str]) -> tuple[str, _Trail]:
     return current, trail
 
 
-# Scanned in document order: headings name the tables that follow them.
+# Scanned in document order: headings name the tables that follow them, and a
+# scroll region's start tag is consumed whole (quoted attribute values may hold
+# any length of label text, ``>`` included) so the table after it is recognised.
 _TABLE_SCAN_RE = re.compile(
     r"<script\b.*?</script>|<!--.*?-->"
     r'|<details class="section-fold"[^>]*>\s*<summary>(?P<fold>.*?)</summary>'
     r"|<h(?P<level>[1-4])\b[^>]*>(?P<heading>.*?)</h(?P=level)>"
+    r'|(?P<region><div class="table-scroll"(?:\s+[^\s"\'<>/=]+(?:="[^"]*")?)*\s*>)'
     r"|(?P<open><table\b)|(?P<close></table>)",
     re.DOTALL,
 )
 _SECTION_HEAD_RE = re.compile(r'<h2 class="section"(?P<attrs>[^>]*)>(?P<body>.*?)</h2>', re.DOTALL)
-_SCROLL_OPEN_TAIL_RE = re.compile(r'<div class="table-scroll"[^>]*>\s*$')
 # Pages that already carry a section map (run page, hub landing, a refreshed page).
 _OWN_MAP_MARKS = ('class="run-map"', "data-page-map", 'class="page-map"')
 _ID_ATTR_RE = re.compile(r'\bid="([^"]+)"')
@@ -2261,19 +2263,23 @@ def _wrap_tables(page: str) -> str:
     Wide evidence tables scroll inside their own region instead of widening
     the page (WCAG 1.4.10 allows local scrolling for 2-D data). No column is
     hidden; the region is named after the nearest preceding heading. A table
-    already inside a region is left alone, so the pass is idempotent.
+    whose start tag follows a region's start tag with only whitespace between
+    them is already wrapped and left alone, however long the region's label,
+    so the pass is idempotent.
     """
     label = "Data table"
     out: list[str] = []
     pos = 0
+    region_end: int | None = None  # end of the last region start tag scanned
     opened: list[bool] = []  # per open <table>: did this pass add its region?
     for match in _TABLE_SCAN_RE.finditer(page):
         heading = match.group("fold") or match.group("heading")
-        if heading:
+        if match.group("region"):
+            region_end = match.end()
+        elif heading:
             label = _plain_text(heading).replace('"', "&quot;") or label
         elif match.group("open"):
-            lookback = max(0, match.start() - 600)
-            fresh = _SCROLL_OPEN_TAIL_RE.search(page, lookback, match.start()) is None
+            fresh = region_end is None or page[region_end : match.start()].strip() != ""
             opened.append(fresh)
             if fresh:
                 out += [

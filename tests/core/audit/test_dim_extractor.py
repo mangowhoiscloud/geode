@@ -7,6 +7,7 @@ so the tests stay cheap and never build a real ``.eval`` zip.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -204,6 +205,30 @@ class TestEdgeCases:
         assert "dim_b" not in result["dim_means"]
         assert "dim_c" not in result["dim_means"]
         assert "dim_d" not in result["dim_means"]
+
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+    def test_nonfinite_sample_leaves_dim_unscored(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, bad: float
+    ) -> None:
+        """A NaN/±inf sample is unmeasured: the dim's mean AND stderr are NaN
+        (even when it is the only sample), never an aggregate of the rest."""
+        path = tmp_path / "fake.eval"
+        path.write_bytes(b"placeholder")
+        fake_log = FakeEvalLog(
+            samples=[
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": 2.0, "dim_b": bad})}),
+                FakeSample(scores={"judge": FakeScore(value={"dim_a": bad, "dim_b": 3.0})}),
+                FakeSample(scores={"judge": FakeScore(value={"dim_c": bad})}),
+            ]
+        )
+        _patch_read(monkeypatch, fake_log)
+
+        result = extract_dim_aggregates(path)
+        for dim in ("dim_a", "dim_b", "dim_c"):
+            assert math.isnan(result["dim_means"][dim]), dim
+            assert math.isnan(result["dim_stderr"][dim]), dim
+        assert result["sample_count"] == {"dim_a": 1, "dim_b": 1, "dim_c": 0}
+        assert result["per_sample"] == [{"dim_a": 2.0}, {"dim_b": 3.0}, {}]
 
 
 # ---------------------------------------------------------------------------
