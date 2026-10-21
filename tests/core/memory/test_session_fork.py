@@ -798,7 +798,10 @@ def test_swept_directory_set_stays_bounded(tmp_path: Path, monkeypatch: pytest.M
 def test_partially_removed_orphan_directory_is_retried(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A discard counts only once the directory is gone; the marker is kept for retry."""
+    """A file that cannot be removed keeps the marker on disk, even on a full disk."""
+    import errno
+    import os
+
     _save(project, "s-src", _turn(1))
     orphan = project / "s-orphan0003"
     orphan.mkdir()
@@ -806,19 +809,44 @@ def test_partially_removed_orphan_directory_is_retried(
     (orphan / "messages.json").write_text("[]", encoding="utf-8")
     SessionManager(project / "sessions.db").upsert_messages("s-orphan0003", _turn(9))
     session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
-    original = session_checkpoint.shutil.rmtree
+    original_unlink = os.unlink
 
-    def partial_rmtree(path: Any, *args: Any, **kwargs: Any) -> None:
-        if Path(path) != orphan:
-            return original(path, *args, **kwargs)
-        (orphan / ".fork-pending").unlink()  # removed before the entry that fails
-        return None
+    def failing_unlink(path: Any, *args: Any, **kwargs: Any) -> None:
+        if os.path.basename(os.fsdecode(path)) == "messages.json":
+            raise OSError(errno.EACCES, "Permission denied")
+        original_unlink(path, *args, **kwargs)
+
+    def full_disk(*_args: Any, **_kwargs: Any) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
 
     with monkeypatch.context() as patch:
-        patch.setattr(session_checkpoint.shutil, "rmtree", partial_rmtree)
+        patch.setattr(os, "unlink", failing_unlink)
+        patch.setattr(Path, "touch", full_disk)
+        patch.setattr(Path, "write_text", full_disk)
         assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
     assert (orphan / ".fork-pending").is_file() and (orphan / "messages.json").exists()
     assert str(project.resolve()) not in session_checkpoint._ORPHAN_SWEPT_DIRS
 
+    # A restarted process finds the same marker and finishes the discard.
+    session_checkpoint._ORPHAN_SWEPT_DIRS.clear()
     assert SessionCheckpoint(project).sweep_orphan_forks_once() == 1
     assert not orphan.exists()
+
+
+def test_a_failed_discard_keeps_the_directory_out_of_the_swept_set(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sweep trusts the discard result, not only the marker it may have lost."""
+    orphan = project / "s-orphan0004"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src", encoding="utf-8")
+    session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
+
+    def lost_marker_discard(self: SessionCheckpoint, fork_id: str) -> bool:
+        (self.session_dir / fork_id / ".fork-pending").unlink()
+        return False
+
+    with monkeypatch.context() as patch:
+        patch.setattr(SessionCheckpoint, "_discard_fork_locked", lost_marker_discard)
+        assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
+    assert str(project.resolve()) not in session_checkpoint._ORPHAN_SWEPT_DIRS
