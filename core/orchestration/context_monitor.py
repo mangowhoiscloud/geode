@@ -639,7 +639,7 @@ def adaptive_prune(
     1. Always keep the first message (initial context)
     2. Keep the last 2 messages and their complete causal tool batch
     3. Add middle messages from newest to oldest until budget is reached
-    4. Budget is the resolved policy's warning-token budget.
+    4. Budget is the policy's prune budget: the warning level as measured.
     """
     if len(messages) <= 3 or _anthropic_compaction_boundary(messages) is not None:
         return list(messages)

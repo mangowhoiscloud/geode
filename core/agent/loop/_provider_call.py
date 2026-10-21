@@ -444,8 +444,10 @@ async def call_llm(
             else "Request exceeds local context budget",
             provider_rejected=provider_rejected,
             can_recover_history=can_recover_history,
-            policy=resolve_request_context_budget(
-                active_request, provider=active_provider, source=active_source
+            policy=loop._ctx_mgr.calibrated(
+                resolve_request_context_budget(
+                    active_request, provider=active_provider, source=active_source
+                )
             ),
             system_prompt=active_request.system_prompt,
             tools_tokens=estimate_tool_tokens(active_request.tools),
@@ -475,13 +477,17 @@ async def call_llm(
             active_request = effective.request
             active_provider = str(getattr(active_adapter, "provider", effective_provider))
             active_source = str(getattr(active_adapter, "source", loop._source))
-            policy = resolve_request_context_budget(
-                active_request, provider=active_provider, source=active_source
+            # The final guard measures in provider-calibrated tokens, so dense
+            # history cannot pass under the route budget on chars/token alone.
+            policy = loop._ctx_mgr.calibrated(
+                resolve_request_context_budget(
+                    active_request, provider=active_provider, source=active_source
+                )
             )
             metrics = check_request_context(active_request, policy=policy)
             if metrics.estimated_tokens > policy.effective_prompt_budget_tokens:
                 raise context_failure(provider_rejected=False)
-            return await observe_llm_call(
+            result = await observe_llm_call(
                 lambda: active_adapter.acomplete(active_request),
                 hooks=loop._hooks,
                 correlation=effective.correlation,
@@ -493,6 +499,15 @@ async def call_llm(
                 purpose=purpose,
                 cost_estimator=calculate_cost,
             )
+            if allow_tools and can_recover_history and active_request.messages == req.messages:
+                # Action requests carry the loop's own history; auxiliary
+                # planner/judge prompts would calibrate a different text.
+                loop._ctx_mgr.record_prompt_usage(
+                    result,
+                    raw_estimated_tokens=metrics.raw_estimated_tokens,
+                    provider=active_provider,
+                )
+            return result
 
         return await loop._middleware_registry.llm_execution(current, terminal)
 

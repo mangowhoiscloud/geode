@@ -105,6 +105,19 @@ functional change.
 
 ### Fixed
 
+- **Context pressure is measured in provider tokens.** The in-turn check
+  estimated 4 characters per token plus a 1.2x margin, but dense text such as
+  hex digests costs about 2 characters per token. A live `codex-oauth`
+  `gpt-6-sol` turn reading eighteen 57 KB files sent 259,201 input tokens on a
+  272K route, past its 176K warning and 227K critical levels, before any
+  maintenance ran. Each action request now records its provider-reported
+  input against the estimate; when that ratio exceeds the static margin it
+  scales the pressure check, the pre-send budget guard and recovery, so
+  compaction starts at the warning level and pruning at critical on every
+  route. Adaptive prune now targets the warning level as measured instead of
+  up to 1.2x above it. Requests below 8,000 estimated tokens, planner and
+  judge prompts, and Anthropic responses that compacted on the server do not
+  change the ratio.
 - **Effect failures no longer freeze a session.** When a write tool such as
   `memory_save` refused a request before acting (for example, project memory
   not initialized), its error was replaced by a generic "Effect outcome is
