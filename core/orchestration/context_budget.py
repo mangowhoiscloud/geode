@@ -20,6 +20,11 @@ DEFAULT_CONTEXT_WINDOW_TOKENS = 200_000
 # Retain the historical name for callers; crossing it never establishes overflow.
 ABSOLUTE_TOKEN_CEILING = 200_000
 TOKEN_ESTIMATE_CHARS_PER_TOKEN = 4
+# Smallest supported positive tool-result limit (guard and offload threshold,
+# in tokens). Lower configured values are raised to it so a short refusal,
+# such as read_session_messages' limit error, reaches the model intact
+# instead of being truncated to ``{}``; 0 still disables either limit.
+MIN_TOOL_RESULT_TOKENS = 32
 DEFAULT_TOOLS_OVERHEAD_TOKENS = 10_000
 
 SAFETY_MARGIN_MULTIPLIER = 1.20

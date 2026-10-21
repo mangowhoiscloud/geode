@@ -20,7 +20,7 @@ import shutil
 import time
 import uuid
 from collections.abc import Iterator
-from contextlib import closing, contextmanager, suppress
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
@@ -55,6 +55,35 @@ _SESSION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 # re-sweep is idempotent, so the set is simply reset when it reaches its bound.
 _ORPHAN_SWEPT_DIRS: set[str] = set()
 _ORPHAN_SWEPT_MAX_DIRS = 256
+
+
+def _remove_fork_dir(destination: Path) -> bool:
+    """Remove an unpublished fork's directory, pending marker last.
+
+    The marker goes only after every other entry, so a partial failure
+    (permissions, I/O, a full disk) leaves it on disk without writing
+    anything: any later sweep, in this process or the next, finds the
+    leftover again. Returns whether the directory is gone.
+    """
+    marker = destination / _FORK_PENDING_MARKER
+    try:
+        for entry in destination.iterdir():
+            if entry == marker:
+                continue
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+        marker.unlink(missing_ok=True)
+        destination.rmdir()
+    except OSError:
+        log.warning(
+            "Unpublished fork directory was not fully removed; later sweeps retry it: %s",
+            destination,
+            exc_info=True,
+        )
+        return False
+    return True
 
 
 class SessionForkError(ValueError):
@@ -573,26 +602,24 @@ class SessionCheckpoint:
         if key in _ORPHAN_SWEPT_DIRS or not self._dir.is_dir():
             return 0
         with self._status_lock():
-            removed = self._remove_orphan_forks_locked()
-            # A marker left in a real directory is a discard that failed.
-            retry = any(
-                not marker.parent.is_symlink()
-                for marker in self._dir.glob(f"*/{_FORK_PENDING_MARKER}")
-            )
-        if not retry:
+            removed, failed = self._remove_orphan_forks_locked()
+        # Any failed discard keeps this directory unswept, whether or not its
+        # marker survived, so every later call in this process retries it.
+        if not failed:
             if len(_ORPHAN_SWEPT_DIRS) >= _ORPHAN_SWEPT_MAX_DIRS:
                 _ORPHAN_SWEPT_DIRS.clear()
             _ORPHAN_SWEPT_DIRS.add(key)
         return removed
 
-    def _remove_orphan_forks_locked(self) -> int:
+    def _remove_orphan_forks_locked(self) -> tuple[int, int]:
         """Remove forks whose publisher died before commit (caller holds the lock).
 
         A live publisher holds ``_status_lock`` for the whole publication, so a
         marker observed under the lock belongs to a dead or failed publisher.
+        Returns ``(removed, failed)`` discard counts.
         """
         # ponytail: O(session dirs) scan per fork; index markers if dirs reach 10^5.
-        removed = 0
+        removed = failed = 0
         for marker in self._dir.glob(f"*/{_FORK_PENDING_MARKER}"):
             session_dir = marker.parent
             if session_dir.is_symlink():
@@ -602,7 +629,9 @@ class SessionCheckpoint:
                 continue
             if self._discard_fork_locked(session_dir.name):
                 removed += 1
-        return removed
+            else:
+                failed += 1
+        return removed, failed
 
     def _discard_fork_locked(self, fork_id: str) -> bool:
         """Delete only an unpublished fork's own rows, index entry, and directory.
@@ -625,20 +654,7 @@ class SessionCheckpoint:
                 exc_info=True,
             )
             return False
-        if destination.is_dir() and not destination.is_symlink():
-            shutil.rmtree(destination, ignore_errors=True)
-            if destination.exists():
-                # A partial removal may have taken the marker with it: put it
-                # back so a later sweep retries the leftover files.
-                with suppress(OSError):
-                    (destination / _FORK_PENDING_MARKER).touch()
-                log.warning(
-                    "Unpublished fork directory was not fully removed; marker kept for retry "
-                    "(fork=%s)",
-                    fork_id,
-                )
-                return False
-        return True
+        return not destination.is_dir() or destination.is_symlink() or _remove_fork_dir(destination)
 
     def load(self, session_id: str) -> SessionState | None:
         """Load a session checkpoint. Returns None if not found.
@@ -948,7 +964,7 @@ class SessionCheckpoint:
 
         cutoff = time.time() - (max_age_hours * 3600)
         with self._status_lock():
-            removed = self._remove_orphan_forks_locked()
+            removed, _failed = self._remove_orphan_forks_locked()
 
         # Transitions-ledger retention — the ledger lives in the sessions
         # ROOT (not a session dir), so directory removal below never prunes

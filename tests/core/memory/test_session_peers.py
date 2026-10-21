@@ -683,7 +683,13 @@ def test_read_fits_the_effective_tool_result_limit_and_delivers_once(
     [
         (50, 0, "subagent.max_tool_result_tokens"),  # 200 chars: no envelope fits
         (25, 0, "subagent.max_tool_result_tokens"),  # 100 chars: below the empty envelope
+        # Below the supported floor: the guard and the offload store raise it,
+        # so the stop signal is never truncated to ``{}``.
+        (14, 0, "subagent.max_tool_result_tokens"),
+        (10, 0, "subagent.max_tool_result_tokens"),
+        (1, 0, "subagent.max_tool_result_tokens"),
         (25_000, 50, "tool_offload.threshold"),
+        (25_000, 1, "tool_offload.threshold"),
     ],
 )
 def test_a_limit_too_small_for_any_message_is_a_final_error(
@@ -698,6 +704,7 @@ def test_a_limit_too_small_for_any_message_is_a_final_error(
     from unittest.mock import MagicMock
 
     from core.agent.tool_executor.processor import ToolCallProcessor
+    from core.agent.tool_executor.result_token_guard import MIN_TOOL_RESULT_TOKENS
     from core.config import settings
     from core.orchestration.tool_offload import ToolResultOffloadStore
 
@@ -718,7 +725,7 @@ def test_a_limit_too_small_for_any_message_is_a_final_error(
     loop = _loop("s-root-b", [])
     loop._admitted_mailbox_ids = set()
     loop._tool_processor = processor
-    limit = 4 * min(t for t in (guard_tokens, offload_tokens) if t > 0)
+    limit = 4 * max(MIN_TOOL_RESULT_TOKENS, min(t for t in (guard_tokens, offload_tokens) if t))
 
     for call in range(2):
         result = _read_tool(project, loop)
@@ -727,6 +734,7 @@ def test_a_limit_too_small_for_any_message_is_a_final_error(
         )
         assert len(block["content"]) <= limit
         content = json.loads(block["content"])
+        assert "_truncated" not in content and "_offloaded" not in content
         assert content["error"] and content["recoverable"] is False
         assert "messages" not in content and "remaining" not in content
         assert names in content["error"]

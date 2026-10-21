@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from core.orchestration.context_budget import MIN_TOOL_RESULT_TOKENS
+
 _MCP_RESULT_KEYS = {
     "_meta",
     "meta",
@@ -72,7 +74,7 @@ def tool_result_char_limit(model: str = "", *, offload_threshold: int | None = N
     guard = _compute_model_tool_limit(model) if model else None
     if guard is None:
         guard = _settings.max_tool_result_tokens
-    limits = [tokens for tokens in (threshold, guard) if tokens > 0]
+    limits = [max(tokens, MIN_TOOL_RESULT_TOKENS) for tokens in (threshold, guard) if tokens > 0]
     return min(limits) * TOKEN_ESTIMATE_CHARS_PER_TOKEN if limits else None
 
 
@@ -83,7 +85,8 @@ def _guard_tool_result(
     """Truncate oversized tool results while preserving summary.
 
     ``None`` uses the configured global limit; values at or below zero disable
-    truncation explicitly.
+    truncation explicitly, and positive values below ``MIN_TOOL_RESULT_TOKENS``
+    are raised to it.
     """
     from core.config import settings as _settings
 
@@ -91,6 +94,7 @@ def _guard_tool_result(
         max_tokens = _settings.max_tool_result_tokens
     if max_tokens <= 0:
         return result
+    max_tokens = max(max_tokens, MIN_TOOL_RESULT_TOKENS)
     try:
         serialized = json.dumps(result, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
