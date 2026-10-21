@@ -352,3 +352,50 @@ def test_failing_completion_callback_does_not_unresolve_a_settled_run(tmp_path: 
 
     assert asyncio.run(_run()) == ["settled"]
     assert _persisted(tmp_path).last_status == "ok"
+
+
+class _GatedLoop(_Loop):
+    """An isolated turn that keeps running until the test opens its gate."""
+
+    gate: asyncio.Event
+
+    async def arun(self, _prompt: str) -> Any:
+        await self.gate.wait()
+        return self.outcome
+
+
+def test_failing_dispatch_callback_does_not_release_a_running_turn(tmp_path: Path) -> None:
+    svc, action_queue, run_id = _svc_with_dispatched_run(tmp_path)
+    services = _Services(None)
+    services.loop = _GatedLoop(SimpleNamespace(termination_reason="natural", error=None))
+    settled: list[str] = []
+
+    def _settle(jid: str, rid: str, status: str, error: str) -> bool:
+        settled.append(status)
+        return svc.record_run_outcome(jid, rid, status, error=error)
+
+    def _boom(job_id: str) -> None:
+        raise RuntimeError(f"announce {job_id} failed")
+
+    async def _run() -> tuple[list[str], str, bool, list[Any]]:
+        services.loop.gate = asyncio.Event()
+        await drain_scheduler_queue(
+            action_queue=action_queue,
+            services=services,
+            session_lane=_Lane(),
+            global_lane=_Lane(),
+            force_isolated=True,
+            on_dispatch=_boom,
+            on_settle=_settle,
+        )
+        await asyncio.sleep(0)  # the turn is now running
+        while_running = (list(settled), _persisted(tmp_path).run_id, _active(run_id))
+        services.loop.gate.set()
+        results = await asyncio.gather(*list(_INFLIGHT_SCHEDULED_TASKS), return_exceptions=True)
+        return (*while_running, list(results))
+
+    settled_while_running, claim, active, results = asyncio.run(_run())
+    assert settled_while_running == []
+    assert claim == run_id and active
+    assert results == ["settled"] and settled == ["ok"]
+    assert _persisted(tmp_path).last_status == "ok"

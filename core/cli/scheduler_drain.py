@@ -307,18 +307,29 @@ async def drain_scheduler_queue(
                             _sess.manual_release(_key)
 
                     task = asyncio.create_task(_arun_isolated(), name=f"scheduled:{job_id}")
-                    _INFLIGHT_SCHEDULED_TASKS.add(task)
-                    task.add_done_callback(_INFLIGHT_SCHEDULED_TASKS.discard)
-                    task.add_done_callback(_log_task_failure)
                     _lanes_acquired = False  # ownership transferred to the task
-                    if on_dispatch:
-                        on_dispatch(job_id)
                 except Exception:
                     if _lanes_acquired:
                         global_lane.manual_release(lane_key)
                         session_lane.manual_release(lane_key)
                     log.warning("Scheduler job %s dispatch failed", job_id, exc_info=True)
                     _report_or_log(on_settle, job_id, run_id, "error", "dispatch failed")
+                    continue
+                # The task now owns this run's outcome: nothing after this point
+                # may settle (and so release the claim of) a turn that is running.
+                _INFLIGHT_SCHEDULED_TASKS.add(task)
+                task.add_done_callback(_INFLIGHT_SCHEDULED_TASKS.discard)
+                task.add_done_callback(_log_task_failure)
+                if on_dispatch:
+                    try:
+                        on_dispatch(job_id)
+                    except Exception:
+                        log.error(
+                            "Scheduler job %s run %s dispatched but its dispatch callback failed",
+                            job_id,
+                            run_id[:8],
+                            exc_info=True,
+                        )
             # Non-isolated: inject into main session (REPL only)
             elif main_loop is not None:
                 if on_main_run:
