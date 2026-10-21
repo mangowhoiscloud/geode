@@ -23,6 +23,7 @@ from core.orchestration.context_budget import (
     ABSOLUTE_TOKEN_CEILING as _ABSOLUTE_TOKEN_CEILING,
 )
 from core.orchestration.context_budget import (
+    CALIBRATED_PAYLOAD_MIN_CHARS,
     DEFAULT_TOOLS_OVERHEAD_TOKENS,
     LARGE_CRITICAL_THRESHOLD_PCT,
     LARGE_WARNING_THRESHOLD_PCT,
@@ -221,6 +222,34 @@ def estimate_message_tokens(
     return max(total_chars // CHARS_PER_TOKEN, 1)
 
 
+def text_payloads(
+    messages: list[dict[str, Any]], *, policy: ContextBudgetPolicy | None = None
+) -> list[tuple[int, int]]:
+    """Return ``(hash, chars)`` for each large text string in message content.
+
+    History and adapter-request messages expose the same tool-result and text
+    strings, so one key identifies a payload in both shapes.
+    """
+    if policy is not None:
+        messages = _anthropic_active_messages(messages, policy)
+    found: list[tuple[int, int]] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            if len(value) >= CALIBRATED_PAYLOAD_MIN_CHARS:
+                found.append((hash(value), len(value)))
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list | tuple):
+            for item in value:
+                walk(item)
+
+    for message in messages:
+        walk(message.get("content", ""))
+    return found
+
+
 def check_context(
     messages: list[dict[str, Any]],
     model: str,
@@ -248,7 +277,8 @@ def check_context(
         raise ValueError("tools_tokens must be non-negative")
     overhead = policy.default_tools_overhead_tokens if tools_tokens is None else tools_tokens
     raw_estimated = system_tokens + message_tokens + overhead
-    estimated = policy.apply_safety_margin(raw_estimated)
+    payloads = text_payloads(messages, policy=policy) if policy.calibration is not None else ()
+    estimated = policy.estimate_prompt_tokens(raw_estimated, payloads)
 
     usage_pct = estimated / context_window * 100
     remaining = max(context_window - estimated, 0)
@@ -297,6 +327,17 @@ def check_request_context(
     Provider-injected native tools, image tokenization and opaque payloads still
     make this a conservative heuristic, not a server token-count response.
     """
+    return check_context(
+        request_context_messages(request),
+        request.model,
+        system_prompt=request.system_prompt,
+        tools_tokens=estimate_tool_tokens(request.tools),
+        policy=policy,
+    )
+
+
+def request_context_messages(request: AdapterCallRequest) -> list[dict[str, Any]]:
+    """Project a frozen request onto the history shape the estimator reads."""
     messages: list[dict[str, Any]] = []
     for message in request.messages:
         content = message.content
@@ -319,13 +360,7 @@ def check_request_context(
                 "phase": message.phase,
             }
         )
-    return check_context(
-        messages,
-        request.model,
-        system_prompt=request.system_prompt,
-        tools_tokens=estimate_tool_tokens(request.tools),
-        policy=policy,
-    )
+    return messages
 
 
 def prune_oldest_messages(

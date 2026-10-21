@@ -502,10 +502,22 @@ async def call_llm(
             if allow_tools and can_recover_history and active_request.messages == req.messages:
                 # Action requests carry the loop's own history; auxiliary
                 # planner/judge prompts would calibrate a different text.
+                from core.orchestration.context_monitor import (
+                    request_context_messages,
+                    text_payloads,
+                )
+
+                payloads = text_payloads(request_context_messages(active_request), policy=policy)
+                sent = {key for key, _chars in payloads}
                 loop._ctx_mgr.record_prompt_usage(
                     result,
                     raw_estimated_tokens=metrics.raw_estimated_tokens,
                     provider=active_provider,
+                    payloads=payloads,
+                    other_payload_keys=frozenset(
+                        key for key, _chars in text_payloads(messages, policy=policy)
+                    )
+                    - sent,
                 )
             return result
 

@@ -130,6 +130,23 @@ def _guard_tool_result(
     return _fit_prefix(base, key, text, max_chars) or base
 
 
+def bound_tool_result_text(content: str, max_chars: int) -> str:
+    """Re-guard one serialized tool result to about ``max_chars`` for recovery.
+
+    A JSON object passes through the ordinary guard, so its failure control
+    fields survive; any other text becomes a truncated preview.
+    """
+    from core.orchestration.context_budget import TOKEN_ESTIMATE_CHARS_PER_TOKEN
+
+    try:
+        parsed: Any = json.loads(content)
+    except ValueError:
+        parsed = content
+    result = parsed if isinstance(parsed, dict) else {"result": parsed}
+    max_tokens = max(max_chars // TOKEN_ESTIMATE_CHARS_PER_TOKEN, MIN_TOOL_RESULT_TOKENS)
+    return _dumps(_guard_tool_result(result, max_tokens=max_tokens))
+
+
 def keep_failure_control(
     base: dict[str, Any], result: dict[str, Any], max_chars: int
 ) -> dict[str, Any]:
