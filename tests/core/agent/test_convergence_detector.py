@@ -71,6 +71,17 @@ class TestConvergenceDetector:
         assert det.last_success_tool == "check_status"
         assert det.check_repeated_success_no_progress() is True
 
+    def test_repeated_offloaded_success_ignores_the_per_call_ref_id(self) -> None:
+        det = ConvergenceDetector()
+        for i in range(5):
+            reference = {"_offloaded": True, "_ref_id": f"toolu_{i}", "summary": "same output"}
+            det.update_tool_error_tracking(
+                [{"tool_use_id": f"toolu_{i}", "content": json.dumps(reference)}],
+                [{"tool": "read_file", "input": {"path": "a"}, "tool_use_id": f"toolu_{i}"}],
+            )
+
+        assert det.check_repeated_success_no_progress() is True
+
     def test_repeated_success_resets_when_input_changes(self) -> None:
         det = ConvergenceDetector()
         for i in range(4):
