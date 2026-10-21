@@ -22,6 +22,8 @@ ALL_PHASES = frozenset({ROUTER, SIGNALS, ANALYSIS, EVALUATION, SCORING, VERIFICA
 
 _SAFE_NAME_RE = re.compile(r"[^a-z0-9_]")
 GATEWAY_KEY_PREFIX = "gateway:"
+# Runtime/checkpoint ids of gateway threads in the shared sessions.db.
+GATEWAY_CHECKPOINT_PREFIX = "s-gw-"
 
 
 def _normalize_name(name: str) -> str:
@@ -63,7 +65,7 @@ def build_gateway_session_key(
 def build_gateway_checkpoint_session_id(session_key: str) -> str:
     """Derive the stable runtime machine id used by checkpoint and Lane."""
     digest = hashlib.sha256(session_key.encode("utf-8")).hexdigest()[:12]
-    return f"s-gw-{digest}"
+    return f"{GATEWAY_CHECKPOINT_PREFIX}{digest}"
 
 
 def gateway_session_visible(session_key: str, caller_session_ids: Collection[str]) -> bool:
@@ -74,6 +76,8 @@ def gateway_session_visible(session_key: str, caller_session_ids: Collection[str
     :func:`build_gateway_checkpoint_session_id`. Only that thread (or a worker
     it spawned, via its parent id) may read the conversation; every other
     caller, operator sessions included, is denied. Non-gateway keys are unchanged.
+    Transcript search applies the same rule to ``sessions.db`` rows in SQL
+    (``SessionManager.search_messages(visible_to=...)``).
     """
     if not session_key.startswith(GATEWAY_KEY_PREFIX):
         return True

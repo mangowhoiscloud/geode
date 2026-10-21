@@ -62,11 +62,12 @@ import json
 import logging
 import re
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.memory.session_key import GATEWAY_CHECKPOINT_PREFIX
 from core.paths import GLOBAL_PROJECTS_DIR, GLOBAL_SEARCH_DB
 
 log = logging.getLogger(__name__)
@@ -293,10 +294,22 @@ class SearchIndex:
         src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         src.row_factory = sqlite3.Row
         try:
+            # Gateway threads and their workers are readable only by that
+            # thread, so they never enter the cross-project index.
+            pattern = f"{GATEWAY_CHECKPOINT_PREFIX}*"
+            where, params = " WHERE session_id NOT GLOB ?", [pattern]
+            columns = {row[1] for row in src.execute("PRAGMA table_info(sessions)")}
+            if "parent_session_id" in columns:
+                where += (
+                    " AND session_id NOT IN (SELECT session_id FROM sessions "
+                    "WHERE parent_session_id GLOB ?)"
+                )
+                params.append(pattern)
             rows = src.execute(
-                "SELECT id, session_id, seq, role, content, tool_name, "
-                "tool_calls, timestamp FROM messages "
-                "ORDER BY timestamp ASC"
+                "SELECT id, session_id, seq, role, content, tool_name, "  # noqa: S608  # nosec B608
+                f"tool_calls, timestamp FROM messages{where} "
+                "ORDER BY timestamp ASC",
+                params,
             ).fetchall()
         finally:
             src.close()
@@ -332,8 +345,13 @@ class SearchIndex:
         project_id: str | None = None,
         session_id: str | None = None,
         limit: int = 20,
+        visible_to: Collection[str] | None = None,
     ) -> list[SearchIndexHit]:
         """Cross-project FTS5 search.
+
+        ``visible_to`` (the caller's own session ids, never tool arguments)
+        keeps a gateway thread's rows, left in an index rebuilt before they
+        were excluded, to that thread or its workers; ``None`` applies no filter.
 
         Both ``project_id`` and ``session_id`` (Codex MCP catch on
         PR-Hermes-1d.2: pre-fix the tool applied session_id AFTER
@@ -373,6 +391,14 @@ class SearchIndex:
         if session_id is not None:
             sql += " AND m.session_id = ?"
             params.append(session_id)
+        if visible_to is not None:
+            ids = sorted(set(visible_to))
+            sql += " AND (m.session_id NOT GLOB ?"
+            params.append(f"{GATEWAY_CHECKPOINT_PREFIX}*")
+            if ids:
+                sql += f" OR m.session_id IN ({','.join('?' for _ in ids)})"
+                params.extend(ids)
+            sql += ")"
         sql += " ORDER BY m.timestamp DESC LIMIT ?"
         params.append(limit)
         try:

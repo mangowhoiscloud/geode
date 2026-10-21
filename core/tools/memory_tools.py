@@ -103,10 +103,12 @@ def _bounded_matches(matches: list[dict[str, Any]]) -> tuple[list[dict[str, Any]
     return kept, 0
 
 
-def _caller_session_ids(context: Any) -> frozenset[str]:
+def caller_session_ids(context: Any) -> frozenset[str]:
     """The executing loop's session and parent ids, never tool arguments.
 
-    Mirrors ``core.cli.tool_handlers.session.tool_principal``.
+    Mirrors ``core.cli.tool_handlers.session.tool_principal``; every reader of
+    the shared session stores (memory_search, session_search) passes these to
+    the gateway visibility rule.
     """
     from core.agent.cognitive_state_ctx import get_parent_session_id, get_session_id
 
@@ -194,7 +196,7 @@ class MemorySearchTool(_AsyncExecuteMixin):
         # Session tier: the store is shared by every gateway conversation, so a
         # caller only sees gateway keys its own thread owns.
         if tier in ("session", "all"):
-            callers = _caller_session_ids(kwargs.get("_tool_context"))
+            callers = caller_session_ids(kwargs.get("_tool_context"))
             for session_id in store.list_sessions():
                 if not gateway_session_visible(session_id, callers):
                     continue
