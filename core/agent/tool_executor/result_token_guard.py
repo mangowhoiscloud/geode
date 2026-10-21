@@ -113,16 +113,16 @@ def _guard_tool_result(
         len(serialized) + TOKEN_ESTIMATE_CHARS_PER_TOKEN - 1
     ) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
 
-    base: dict[str, Any] = {
-        "_truncated": True,
-        "_original_tokens": estimated_tokens,
-    }
+    base: dict[str, Any] = {"_truncated": True}
+    if not result.get("_offloaded"):
+        base["_original_tokens"] = estimated_tokens
     base = keep_failure_control(base, result, max_chars)
+    # An offload reference keeps what convergence and recall read, the content
+    # digest ahead of the per-call ref id; its size note comes after both.
+    base = _with_fitting(base, result, max_chars, ("_offloaded", "_digest", "_ref_id"))
+    base = _with_fitting(base, {"_original_tokens": estimated_tokens}, max_chars)
     base = _with_fitting(
-        base,
-        result,
-        max_chars,
-        ("_offloaded", "_ref_id", "task_id", "task_type", "status", "error_message", "tier"),
+        base, result, max_chars, ("task_id", "task_type", "status", "error_message", "tier")
     )
 
     key = "summary" if "summary" in result else "preview"
