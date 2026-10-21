@@ -392,6 +392,9 @@ functional change.
 
 ### Security
 
+- Lock `certifi` at 2026.10.19 to address PYSEC-2026-4320 reported by the
+  runtime dependency audit; it is a transitive dependency, no declared range
+  changes.
 - Lock `mcp` at 1.30.0 to address CVE-2026-59951 reported by the runtime
   dependency audit; the declared `mcp>=1.28,<2` range is unchanged.
 - Lock the site's optional sharp dependency at 0.35.5 and its prebuilt libvips
