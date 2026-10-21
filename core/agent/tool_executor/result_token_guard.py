@@ -40,6 +40,10 @@ def _project_mcp_result(result: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
+# Failure control fields a truncated result keeps (see _guard_tool_result).
+_ERROR_CONTROL_KEYS = ("recoverable", "outcome_uncertain", "effect_applied", "error_type")
+
+
 def _compute_model_tool_limit(model: str) -> int | None:
     """Return a tighter model-specific cap, or defer to the global cap.
 
@@ -112,25 +116,58 @@ def _guard_tool_result(
         "_truncated": True,
         "_original_tokens": estimated_tokens,
     }
-    for key in ("task_id", "task_type", "status", "error_message", "tier"):
-        if key in result:
-            candidate = {**base, key: result[key]}
-            if len(json.dumps(candidate, ensure_ascii=False, default=str)) <= max_chars:
-                base = candidate
+    # A failure's control fields outrank metadata and preview: the error (as a
+    # bounded prefix), whether a retry can help, and whether an effect landed
+    # survive truncation, so the model and convergence tracking still see it.
+    error = result.get("error")
+    error_text = "" if not error else error if isinstance(error, str) else _dumps(error)
+    if error_text:
+        # Reserve one character first so the flags below cannot crowd it out.
+        base = _with_fitting(base, {"error": error_text[:1]}, max_chars)
+    base = _with_fitting(base, result, max_chars, _ERROR_CONTROL_KEYS)
+    if "error" in base:
+        base = _fit_prefix(base, "error", error_text, max_chars) or base
+    base = _with_fitting(
+        base, result, max_chars, ("task_id", "task_type", "status", "error_message", "tier")
+    )
 
     key = "summary" if "summary" in result else "preview"
     text = str(result["summary"]) if key == "summary" else serialized
+    return _fit_prefix(base, key, text, max_chars) or base
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _with_fitting(
+    base: dict[str, Any],
+    source: dict[str, Any],
+    max_chars: int,
+    keys: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """Add each of ``keys`` (default: all) from ``source`` that still fits, in order."""
+    for key in source if keys is None else keys:
+        if key in source:
+            candidate = {**base, key: source[key]}
+            if len(_dumps(candidate)) <= max_chars:
+                base = candidate
+    return base
+
+
+def _fit_prefix(base: dict[str, Any], key: str, text: str, max_chars: int) -> dict[str, Any] | None:
+    """Return ``base`` with the longest prefix of ``text`` at ``key`` that fits, or None."""
     low, high = 0, len(text)
-    guarded: dict[str, Any] = {}
+    fitted: dict[str, Any] | None = None
     while low <= high:
         middle = (low + high) // 2
         candidate = {**base, key: text[:middle]}
-        if len(json.dumps(candidate, ensure_ascii=False, default=str)) <= max_chars:
-            guarded = candidate
+        if len(_dumps(candidate)) <= max_chars:
+            fitted = candidate
             low = middle + 1
         else:
             high = middle - 1
-    return guarded
+    return fitted
 
 
 # Public projection boundary used by packaged benchmark adapters.

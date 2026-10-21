@@ -20,7 +20,7 @@ import shutil
 import time
 import uuid
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
@@ -63,7 +63,8 @@ def _remove_fork_dir(destination: Path) -> bool:
     The marker goes only after every other entry, so a partial failure
     (permissions, I/O, a full disk) leaves it on disk without writing
     anything: any later sweep, in this process or the next, finds the
-    leftover again. Returns whether the directory is gone.
+    leftover again. If only the final rmdir fails, the marker is written back
+    (best effort). Returns whether the directory is gone.
     """
     marker = destination / _FORK_PENDING_MARKER
     try:
@@ -77,6 +78,11 @@ def _remove_fork_dir(destination: Path) -> bool:
         marker.unlink(missing_ok=True)
         destination.rmdir()
     except OSError:
+        if destination.is_dir() and not marker.exists():
+            # Only the final rmdir failed: an unmarked empty directory would
+            # never be found again, so mark it once more (best effort).
+            with suppress(OSError):
+                marker.touch()
         log.warning(
             "Unpublished fork directory was not fully removed; later sweeps retry it: %s",
             destination,
