@@ -1729,10 +1729,12 @@ table.records td.id a:hover { text-decoration-color: var(--accent); }
 .role-label { background: transparent; border: 0; color: var(--ink-faint); letter-spacing: var(--tracking-caps); }
 .bucket { letter-spacing: var(--tracking-caps); }
 
-/* Controls: night field, hairline frame, vermilion focus. */
+/* Controls: night field, hairline frame, vermilion focus. The frame is the
+   only cue to an empty input, so it takes --ink-faint (6.3:1 on --paper),
+   not --rule-strong (2.7:1), to meet the 3:1 of WCAG 1.4.11. */
 .table-filter input {
   background: var(--paper);
-  border: 1px solid var(--rule-strong);
+  border: 1px solid var(--ink-faint);
   color: var(--ink);
 }
 .table-filter input:focus-visible { border-color: var(--accent); }
