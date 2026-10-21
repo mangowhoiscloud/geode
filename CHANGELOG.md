@@ -124,8 +124,10 @@ functional change.
   `session_search` (both its default and `scope="all"` modes, including indexes
   built before this change) return a gateway conversation only to that thread
   or its workers, resolved from the tool context rather than arguments, so one
-  channel or sender can no longer read another's messages; `geode reindex` no
-  longer copies gateway rows into the global index. `memory_search` responses
+  channel or sender can no longer read another's messages. Rows whose owner
+  cannot be established are visible only to their own session, and
+  `geode reindex` records each row's owner; a global index built without that
+  ownership data is not searched until it is rebuilt. `memory_search` responses
   are capped at 4,000 serialized characters in total (1,000 per match) and
   `session_search` snippets at 1,000, with explicit truncation markers.
 - **Peer reads within the tool-result limit.** `read_session_messages` bounds
@@ -133,7 +135,8 @@ functional change.
   read is never offloaded or truncated into a redelivery loop; an oversized
   message is delivered once as a marked prefix, and a limit too small for any
   message returns a short final error naming the setting to raise instead of
-  an empty batch. Concurrent reads no longer
+  an empty batch. Positive tool-result guard and offload limits below 32
+  tokens are raised to 32 so that error always fits. Concurrent reads no longer
   return the same message twice, and notified ids stay within the unread
   backlog.
 - **Session ownership and fork recovery.** Resuming a child session keeps its
