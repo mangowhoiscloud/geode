@@ -61,7 +61,10 @@ export default function Page() {
               고정하고, 프로젝트 <code>sessions.db</code>에 receipt를 기록합니다.
               재시작은 이 anchor로만 복구하며 provider call ID는 tool use/result
               짝맞춤에만 씁니다. 완료 receipt는 PostToolUse까지 끝난 결과를 재생하고,
-              미완료 receipt는 effect_outcome_uncertain으로 중단합니다. 재시작은
+              미완료 receipt는 effect_outcome_uncertain으로 중단합니다. 도구가 효과
+              전에 반환한 거절(validation, not_found, permission, authorization,
+              dependency, clarification)은 복구 가능한 결과로 commit하고, timeout,
+              예외, 그 밖의 오류는 경계·마스킹한 원인과 함께 uncertain으로 남깁니다. 재시작은
               이 call을 receipt 상태로 닫은 뒤에만 모델을 다시 호출합니다. 이는
               중복 억제 경계이며 외부 시스템의 exactly-once 보장은 아닙니다.
               미해결 이전 step은 <code>geode session effects</code>와{" "}
@@ -236,7 +239,11 @@ export default function Page() {
               <code>sessions.db</code>. Restart recovers only through that anchor;
               the provider call ID merely pairs tool use with tool result. A committed receipt
               replays the PostToolUse-final result; an unfinished receipt stops with
-              effect_outcome_uncertain. Restart closes that anchored call from the
+              effect_outcome_uncertain. A returned pre-effect refusal (validation,
+              not_found, permission, authorization, dependency, or clarification)
+              commits as that operation&apos;s recoverable result; a timeout, raised
+              exception, or other error stays uncertain with its bounded, redacted
+              cause. Restart closes that anchored call from the
               receipt before another model request. This is duplicate suppression,
               not an external exactly-once guarantee. After checking the external
               sink, operators resolve older uncertain steps through{" "}

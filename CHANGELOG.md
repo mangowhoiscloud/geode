@@ -105,6 +105,17 @@ functional change.
 
 ### Fixed
 
+- **Effect failures no longer freeze a session.** When a write tool such as
+  `memory_save` refused a request before acting (for example, project memory
+  not initialized), its error was replaced by a generic "Effect outcome is
+  uncertain" and every later write in the session, such as `generate_report`,
+  was refused until an operator reconciled it. Such refusals now reach the model
+  as their own recoverable error and are recorded as the operation's outcome.
+  Effects that may have applied (timeouts, exceptions, other errors) stay
+  quarantined but now state their bounded, redacted cause, and a blocked later
+  call names the unresolved operation and its `geode session resolve-effect`
+  command.
+
 - **memory_search gateway isolation.** Session-store results now include a
   gateway conversation only for the caller's own thread or its parent, resolved
   from the tool context rather than arguments, so one channel or sender can no
