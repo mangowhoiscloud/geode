@@ -209,6 +209,12 @@ def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
         if callable(attach_ledger):
             attach_ledger(loop._evidence_ledger)
     loop._session_id = state.session_id
+    # The durable R6.5 child marker travels with the session, so a resumed
+    # child stays a child; a legacy record falls back to the runtime binding,
+    # never to the previous conversation of a reused (IPC poller) loop.
+    loop._parent_session_id = str(
+        getattr(state, "parent_session_id", "") or getattr(loop, "_bound_parent_session_id", "")
+    )
     if getattr(getattr(loop, "_session_metrics", None), "session_id", "") != state.session_id:
         loop._session_metrics = SessionMetrics(
             session_id=state.session_id,
