@@ -676,3 +676,59 @@ def test_read_fits_the_effective_tool_result_limit_and_delivers_once(
         admit_collaboration_messages(loop, messages)
         assert peer_message_status(expected.message_id)["status"] == "applied"
     assert _read_tool(project, loop)["messages"] == [] and _unread(project, "s-root-b") == []
+
+
+@pytest.mark.parametrize(
+    ("guard_tokens", "offload_tokens", "names"),
+    [
+        (50, 0, "subagent.max_tool_result_tokens"),  # 200 chars: no envelope fits
+        (25, 0, "subagent.max_tool_result_tokens"),  # 100 chars: below the empty envelope
+        (25_000, 50, "tool_offload.threshold"),
+    ],
+)
+def test_a_limit_too_small_for_any_message_is_a_final_error(
+    project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    guard_tokens: int,
+    offload_tokens: int,
+    names: str,
+) -> None:
+    """No "retry later" shape: the read refuses with an error the limit can carry."""
+    import json
+    from unittest.mock import MagicMock
+
+    from core.agent.tool_executor.processor import ToolCallProcessor
+    from core.config import settings
+    from core.orchestration.tool_offload import ToolResultOffloadStore
+
+    monkeypatch.setattr(settings, "max_tool_result_tokens", guard_tokens)
+    offload = (
+        ToolResultOffloadStore(
+            session_id="s-root-b", threshold=offload_tokens, base_dir=project / "offload"
+        )
+        if offload_tokens
+        else None
+    )
+    executor = MagicMock()
+    executor._contains_restricted_data.return_value = False
+    processor = ToolCallProcessor(
+        executor=executor, op_logger=MagicMock(), error_recovery=MagicMock(), offload_store=offload
+    )
+    receipt = send_peer_message(OPERATOR, "s-root-b", "hello")
+    loop = _loop("s-root-b", [])
+    loop._admitted_mailbox_ids = set()
+    loop._tool_processor = processor
+    limit = 4 * min(t for t in (guard_tokens, offload_tokens) if t > 0)
+
+    for call in range(2):
+        result = _read_tool(project, loop)
+        block = asyncio.run(
+            processor._serialize_tool_result(result, f"toolu_{call}", "read_session_messages")
+        )
+        assert len(block["content"]) <= limit
+        content = json.loads(block["content"])
+        assert content["error"] and content["recoverable"] is False
+        assert "messages" not in content and "remaining" not in content
+        assert names in content["error"]
+    assert loop._admitted_mailbox_ids == set()
+    assert peer_message_status(receipt.message_id)["status"] == "queued"
