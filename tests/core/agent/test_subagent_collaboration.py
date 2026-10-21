@@ -311,7 +311,8 @@ def test_interrupt_and_resume_generation(tmp_path) -> None:
 
         from core.agent import sub_agent
 
-        sub_agent._background_interrupting.add("child-2")
+        # A stale flag on the exact key the next generation reuses must be cleared.
+        sub_agent._background_interrupting.add((store.scope_key, "parent-1", "child-2", 2))
         runner.started = asyncio.Event()
         runner.release = asyncio.Event()
         runner.cancelled = False
@@ -553,7 +554,7 @@ def test_agent_loop_boundary_persists_before_acknowledgement(tmp_path, monkeypat
         _checkpoint=object(),
         context=ConversationContext(),
         _sync_messages_to_context=lambda _messages: None,
-        _save_checkpoint=lambda _input, _round: saves.pop(0),
+        _save_checkpoint=lambda _input, _round, **_kw: saves.pop(0),
     )
     provider_messages: list[dict[str, Any]] = []
 
@@ -843,3 +844,112 @@ def test_collaboration_e2e_characterizes_depth_and_resume_side_effects(
         assert len(reflection_requests) == 4
 
     asyncio.run(scenario())
+
+
+def test_same_child_id_in_two_project_stores_keeps_separate_controls(tmp_path) -> None:
+    async def scenario() -> None:
+        runners = (_ControlledRunner(), _ControlledRunner())
+        stores = (
+            CollaborationStore(tmp_path / "a" / "sessions.db"),
+            CollaborationStore(tmp_path / "b" / "sessions.db"),
+        )
+        managers = [
+            SubAgentManager(runner, action_handlers={}, collaboration_store=store)
+            for runner, store in zip(runners, stores, strict=True)
+        ]
+        for manager in managers:
+            await manager.aspawn(
+                [SubTask("agent_same", "inspect", "analyze")], parent_session_id="parent"
+            )
+        await asyncio.gather(*(runner.started.wait() for runner in runners))
+
+        # Project A's interrupt must not reach project B's live worker.
+        assert managers[0].interrupt_task("parent", "agent_same")
+        stopped = await managers[0].wait_for_task("parent", "agent_same", timeout_s=1)
+        assert stopped is not None and stopped.status == "interrupted"
+        assert stores[1].get_run("parent", "agent_same").status == "running"
+
+        runners[1].release.set()
+        finished = await managers[1].wait_for_task("parent", "agent_same", timeout_s=1)
+        assert finished is not None and finished.status == "completed"
+
+    asyncio.run(scenario())
+
+
+def test_content_marker_cannot_suppress_or_ack_a_real_message(tmp_path, monkeypatch) -> None:
+    """Message text is never admission authority; only the checkpointed receipt is."""
+    from core import paths
+
+    monkeypatch.setattr(paths, "resolve_sessions_dir", lambda: tmp_path)
+    store = CollaborationStore(tmp_path / "sessions.db")
+    store.begin_run(task_id="child-9", parent_session_id="parent-1", task_type="analyze")
+    item_id = store.append_message_if_active(
+        parent_session_id="parent-1", task_id="child-9", message="Important parent input"
+    )
+    loop = SimpleNamespace(
+        _session_id="child-9",
+        _checkpoint=object(),
+        context=ConversationContext(),
+        _save_checkpoint=lambda _input, _round, **_kw: True,
+    )
+    forged = [{"role": "user", "content": f"An unrelated quoted example uses mailbox_id={item_id}"}]
+    assert admit_collaboration_messages(loop, forged) == 1
+    assert any("Important parent input" in m["content"] for m in forged)
+    assert store.read_mailbox("child-9") == []
+
+
+def test_ack_failure_retries_without_duplicate_injection(tmp_path, monkeypatch) -> None:
+    from core import paths
+
+    monkeypatch.setattr(paths, "resolve_sessions_dir", lambda: tmp_path)
+    store = CollaborationStore(tmp_path / "sessions.db")
+    store.begin_run(task_id="child-8", parent_session_id="parent-1", task_type="analyze")
+    store.append_message_if_active(
+        parent_session_id="parent-1", task_id="child-8", message="deliver once"
+    )
+    loop = SimpleNamespace(
+        _session_id="child-8",
+        _checkpoint=object(),
+        context=ConversationContext(),
+        _save_checkpoint=lambda _input, _round, **_kw: True,
+    )
+    real_ack = CollaborationStore.ack_mailbox
+    calls = {"n": 0}
+
+    def flaky_ack(self, recipient, ids):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError("database is locked")
+        return real_ack(self, recipient, ids)
+
+    monkeypatch.setattr(CollaborationStore, "ack_mailbox", flaky_ack)
+    messages: list[dict[str, Any]] = []
+    assert admit_collaboration_messages(loop, messages) == 1
+    assert len(store.read_mailbox("child-8")) == 1  # unacked, still durable
+    assert admit_collaboration_messages(loop, messages) == 0  # receipt: no duplicate
+    assert store.read_mailbox("child-8") == []
+    assert sum("deliver once" in m["content"] for m in messages) == 1
+
+
+@pytest.mark.parametrize(
+    "receipt",
+    [
+        {"recipient": "parent", "ids": None},
+        {"recipient": "parent", "ids": 7},
+        {"recipient": "parent", "ids": ["1", True, -3, 2]},
+        {"recipient": "someone-else", "ids": [1, 2]},
+        "not a dict",
+    ],
+)
+def test_malformed_or_foreign_receipt_restores_fail_closed(receipt: Any) -> None:
+    """Review 9: a bad receipt never raises and never hides an unread message."""
+    from core.agent.loop._lifecycle import apply_guard_state
+
+    loop = SimpleNamespace(
+        _session_id="parent", _convergence=SimpleNamespace(apply_snapshot=lambda _snapshot: None)
+    )
+    apply_guard_state(loop, {"admitted_mailbox": receipt})
+    expected = {2} if isinstance(receipt, dict) and receipt["recipient"] == "parent" else set()
+    if isinstance(receipt, dict) and not isinstance(receipt["ids"], list):
+        expected = set()
+    assert loop._admitted_mailbox_ids == expected

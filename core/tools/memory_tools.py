@@ -13,6 +13,7 @@ Layer 5 tools for memory access:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -21,9 +22,10 @@ from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
 from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
-from core.memory.project import ProjectMemory
+from core.memory.project import MemoryWrite, ProjectMemory
 from core.memory.session import InMemorySessionStore
-from core.tools.base import tool_error
+from core.memory.session_key import gateway_session_visible
+from core.tools.base import ToolErrorType, tool_error
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +56,91 @@ def _get_session_store(store: SessionStorePort | None) -> tuple[SessionStorePort
         "InMemorySessionStore — data will NOT survive this call"
     )
     return InMemorySessionStore(), True
+
+
+# Hard budgets for one memory_search result, in serialized characters as the
+# tool processor measures them. Stored session data and MEMORY.md lines have no
+# length limit, so neither one match nor the whole response may grow with them.
+SEARCH_MATCH_CHAR_CAP = 1_000
+SEARCH_RESULT_CHAR_CAP = 4_000
+_SEARCH_QUERY_ECHO_CHARS = 200
+_SEARCH_TIER_ECHO_CHARS = 32
+# The CLI handler flattens the result under these keys; the registry tool
+# wraps it as ``{"result": ...}``. The result cap bounds both forms.
+SEARCH_RESPONSE_ENVELOPE: dict[str, str] = {"status": "ok", "action": "memory_search"}
+
+
+def _json_len(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _bounded_match(match: dict[str, Any]) -> dict[str, Any]:
+    """Return *match*, or an explicitly marked excerpt within the per-match cap."""
+    text = json.dumps(match, ensure_ascii=False, default=str)
+    if len(text) <= SEARCH_MATCH_CHAR_CAP:
+        return match
+
+    def excerpt(keep: int) -> dict[str, Any]:
+        return {
+            "tier": str(match.get("tier", ""))[:16],
+            "truncated": True,
+            "original_chars": len(text),
+            "excerpt": f"{text[:keep]}…[truncated {len(text) - keep} chars]",
+        }
+
+    # Escapes grow on re-serialization, so search for the longest prefix that
+    # fits rather than subtracting serialized overflow from a raw length.
+    fitted = excerpt(0)
+    low, high = 1, min(len(text), SEARCH_MATCH_CHAR_CAP)
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = excerpt(middle)
+        if _json_len(candidate) <= SEARCH_MATCH_CHAR_CAP:
+            fitted, low = candidate, middle + 1
+        else:
+            high = middle - 1
+    return fitted
+
+
+def _bounded_matches(
+    matches: list[dict[str, Any]], budget: int = SEARCH_RESULT_CHAR_CAP
+) -> tuple[list[dict[str, Any]], int]:
+    """Cap every match, then stop before *budget* for the serialized list.
+
+    Returns (kept, omitted).
+    """
+    kept: list[dict[str, Any]] = []
+    used = 2  # the enclosing ``[]``
+    for index, match in enumerate(matches):
+        item = _bounded_match(match)
+        size = _json_len(item) + 2  # ``, `` separator
+        if used + size > budget:
+            return kept, len(matches) - index
+        kept.append(item)
+        used += size
+    return kept, 0
+
+
+def _search_response_chars(result: dict[str, Any]) -> int:
+    """The larger serialized form of *result*: registry tool or CLI handler."""
+    return max(_json_len({"result": result}), _json_len({**SEARCH_RESPONSE_ENVELOPE, **result}))
+
+
+def caller_session_ids(context: Any) -> frozenset[str]:
+    """The executing loop's session and parent ids, never tool arguments.
+
+    Mirrors ``core.cli.tool_handlers.session.tool_principal``; every reader of
+    the shared session stores (memory_search, session_search) passes these to
+    the gateway visibility rule.
+    """
+    from core.agent.cognitive_state_ctx import get_parent_session_id, get_session_id
+
+    loop = getattr(context, "agent_loop", None)
+    ids = (
+        str(getattr(context, "session_id", "") or get_session_id()),
+        get_parent_session_id() or str(getattr(loop, "_parent_session_id", "") or ""),
+    )
+    return frozenset(session_id for session_id in ids if session_id)
 
 
 class _AsyncExecuteMixin:
@@ -129,9 +216,13 @@ class MemorySearchTool(_AsyncExecuteMixin):
         matches: list[dict[str, Any]] = []
         query_lower = query.lower()
 
-        # Session tier
+        # Session tier: the store is shared by every gateway conversation, so a
+        # caller only sees gateway keys its own thread owns.
         if tier in ("session", "all"):
+            callers = caller_session_ids(kwargs.get("_tool_context"))
             for session_id in store.list_sessions():
+                if not gateway_session_visible(session_id, callers):
+                    continue
                 data = store.get(session_id)
                 if data is None:
                     continue
@@ -199,15 +290,25 @@ class MemorySearchTool(_AsyncExecuteMixin):
                         }
                     )
 
-        return {
-            "result": {
-                "query": query,
-                "tier_searched": tier,
-                "matches": matches,
-                "total_found": len(matches),
-                "ephemeral": ephemeral,
-            }
+        # Reserve the envelope at its largest (truncation fields included)
+        # so the whole response the model receives stays within the cap.
+        result: dict[str, Any] = {
+            "query": query[:_SEARCH_QUERY_ECHO_CHARS],
+            "tier_searched": str(tier)[:_SEARCH_TIER_ECHO_CHARS],
+            "matches": [],
+            "total_found": len(matches),
+            "ephemeral": ephemeral,
+            "truncated": True,
+            "omitted_matches": len(matches),
         }
+        budget = SEARCH_RESULT_CHAR_CAP - _search_response_chars(result) + 2  # ``[]``
+        bounded, omitted = _bounded_matches(matches, budget)
+        result["matches"] = bounded
+        if omitted:
+            result["omitted_matches"] = omitted
+        else:
+            del result["truncated"], result["omitted_matches"]
+        return {"result": result}
 
 
 class MemoryGetTool(_AsyncExecuteMixin):
@@ -335,15 +436,14 @@ class MemorySaveTool(_AsyncExecuteMixin):
         else:
             store.set(session_id, data)
 
-        # Persistent write to MEMORY.md (P1.5)
+        # Persistent write to MEMORY.md (P1.5): report the owner's real outcome.
+        persistent_outcome = ""
         if persistent:
             proj = self._services.project_memory
-            if proj is not None:
-                from core.memory.project import ProjectMemory
-
-                if isinstance(proj, ProjectMemory):
-                    insight = str(data.get("content", data))
-                    proj.add_insight(insight)
+            if isinstance(proj, ProjectMemory):
+                persistent_outcome = str(proj.record_insight(str(data.get("content", data))))
+            else:
+                persistent_outcome = "unavailable"
 
         self._fire_hook(HookEvent.MEMORY_SAVED, {"key": session_id, "persistent": persistent})
 
@@ -356,6 +456,7 @@ class MemorySaveTool(_AsyncExecuteMixin):
                 "ephemeral": ephemeral,
                 "merged": merge,
                 "persistent": persistent,
+                "persistent_outcome": persistent_outcome,
                 "keys_stored": list(data.keys()),
             }
         }
@@ -580,14 +681,28 @@ class NoteSaveTool(_AsyncExecuteMixin):
                 hint="Project memory initializes from .geode/memory/. Check directory exists.",
             )
 
-        note_text = f"**{key}**: {content}"
-        proj.add_insight(note_text)
-        return {
-            "result": {
-                "saved": True,
-                "key": key,
-            }
+        outcome = proj.record_insight(f"**{key}**: {content}")
+        if outcome is MemoryWrite.APPLIED:
+            return {"result": {"saved": True, "key": key}}
+        if outcome is MemoryWrite.UNCHANGED:
+            return {"result": {"saved": False, "unchanged": True, "key": key}}
+        failures: dict[MemoryWrite, tuple[ToolErrorType, str]] = {
+            MemoryWrite.NOT_FOUND: (
+                "not_found",
+                "Run `geode init` to create .geode/memory/PROJECT.md.",
+            ),
+            MemoryWrite.INVALID: ("validation", "Notes must be one line of 10-500 characters."),
         }
+        error_type, hint = failures.get(
+            outcome,
+            ("internal", "Project memory could not be read or written; it was left unchanged."),
+        )
+        return tool_error(
+            f"Note '{key}' was not saved ({outcome}).",
+            error_type=error_type,
+            recoverable=outcome is MemoryWrite.INVALID,
+            hint=hint,
+        )
 
 
 class NoteReadTool(_AsyncExecuteMixin):

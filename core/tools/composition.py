@@ -30,7 +30,7 @@ _ADMINISTRATIVE_TOOLS = frozenset(
     }
 )
 _COMMUNICATION_TOOLS = frozenset(
-    {"send_message", "followup_task", "send_notification", "gmail_send"}
+    {"send_message", "followup_task", "send_session_message", "send_notification", "gmail_send"}
 )
 _EXECUTION_TOOLS = frozenset(
     {
@@ -145,6 +145,8 @@ def _resource_metadata() -> dict[str, tuple[str, Any]]:
         "interrupt_agent": ("subagent-task:v1", selected("task_id")),
         "send_message": ("subagent-task:v1", selected("task_id")),
         "followup_task": ("subagent-task:v1", selected("task_id")),
+        "send_session_message": ("peer-session:v1", selected("session_id")),
+        "fork_session": ("session-fork:v1", selected("source_session_id")),
         "create_goal": ("active-goal:v1", constant("goal")),
         "update_goal": ("active-goal:v1", constant("goal")),
         "update_plan": ("turn-plan:v1", constant("plan")),
@@ -265,7 +267,7 @@ def compose_tool_plan(
                 mcp_manager=mcp_manager,
                 command_registry=compose_command_registry(command_specs),
                 hooks=hooks,
-                project_memory=(persistence.memory.project_memory if persistence else None),
+                memory_services=(persistence.memory if persistence else None),
                 scheduler_service=scheduler_service,
             ),
             *handler_groups,
@@ -314,9 +316,12 @@ def compose_tool_plan(
     profile_write_tools = {
         "memory_save",
         "note_save",
+        "manage_rule",
         "manage_login",
         "profile_update",
         *GOOGLE_WRITE_TOOLS,
+        "send_session_message",
+        "fork_session",
     }
     safety = {
         item["name"]: SafetyPolicy(

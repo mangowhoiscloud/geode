@@ -101,6 +101,10 @@ def cmd_resume(args: str) -> SessionState | None:
             _pkg.console.print()
             return None
         _pkg.console.print(f"  [success]Resuming session: {state.session_id}[/success]")
+        if state.lineage:
+            from core.memory.session_peers import describe_lineage
+
+            _pkg.console.print(f"  [muted]Lineage: {describe_lineage(state.lineage)}[/muted]")
         if state.user_input:
             _pkg.console.print(f"  [muted]Original input: {state.user_input[:80]}[/muted]")
         _pkg.console.print(
@@ -131,10 +135,58 @@ def cmd_resume(args: str) -> SessionState | None:
         suffix = f" | {cognitive_summary}" if cognitive_summary else ""
         _pkg.console.print(f"  {i}. [bold]{s.session_id}[/bold] [{s.status}] {age_str}{suffix}")
         _pkg.console.print(f"     [muted]{label}[/muted]")
+        if s.lineage:
+            from core.memory.session_peers import describe_lineage
+
+            _pkg.console.print(f"     [muted]{describe_lineage(s.lineage)}[/muted]")
     _pkg.console.print()
     _pkg.console.print("  [muted]Usage: /resume <session_id>[/muted]")
     _pkg.console.print()
     return None
+
+
+def _slash_principal(agentic_ref: Any) -> Any:
+    """Explicit operator intent issued from the bound session, if any."""
+    from core.memory.session_peers import SessionPrincipal
+
+    return SessionPrincipal(
+        session_id=str(getattr(agentic_ref, "_session_id", "") or ""),
+        parent_session_id=str(getattr(agentic_ref, "_parent_session_id", "") or ""),
+        operator_intent=True,
+    )
+
+
+def cmd_fork(args: str, *, agentic_ref: Any = None) -> None:
+    """Handle /fork [session_id] — publish a paused fork of a completed turn.
+
+    Without an id the current session is the source. Refusals raise so the
+    daemon reports them as command errors rather than captured text.
+    """
+    from core.cli import commands as _pkg
+    from core.memory.session_peers import describe_lineage, fork_session
+
+    receipt = fork_session(_slash_principal(agentic_ref), args.strip())
+    _pkg.console.print(f"  [success]Forked session: {receipt.session_id}[/success] (paused)")
+    _pkg.console.print(f"  [muted]{describe_lineage(receipt.lineage)}[/muted]")
+    _pkg.console.print(f"  [muted]Resume with: /resume {receipt.session_id}[/muted]")
+    _pkg.console.print()
+
+
+def cmd_send(args: str, *, agentic_ref: Any = None) -> None:
+    """Handle /send <session_id> <message> — queue input for a peer session."""
+    from core.cli import commands as _pkg
+    from core.memory.session_peers import send_peer_message
+
+    target, _, message = args.strip().partition(" ")
+    if not target or not message.strip():
+        raise ValueError("Usage: /send <session_id> <message>")
+    receipt = send_peer_message(_slash_principal(agentic_ref), target, message.strip())
+    _pkg.console.print(
+        f"  [success]Queued message {receipt.message_id} for {receipt.recipient_session_id}"
+        "[/success]"
+    )
+    _pkg.console.print("  [muted]Not started: the target reads it at its next turn.[/muted]")
+    _pkg.console.print()
 
 
 def cmd_cognitive(args: str) -> None:

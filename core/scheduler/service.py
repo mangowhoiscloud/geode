@@ -3,20 +3,31 @@
 Combines the data models, run log, lock, jitter, and timezone helpers from
 sibling modules into a single long-running service that ticks once per
 second and fires due jobs.
+
+Durable state follows one rule: every store mutation takes the cross-process
+``SchedulerLock``, reloads the store, applies the operation to that fresh
+state, and persists before releasing. A run is claimed the same way and
+carries a ``run_id`` fence, so a second instance or a late completion of an
+older run cannot fire the same occurrence twice or settle a newer run. The
+lock is never held while a callback or dispatched session executes.
 """
 
 from __future__ import annotations
 
 import contextlib
+import inspect
 import json
 import logging
 import os
 import threading
 import time
+import uuid
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.memory.atomic_write import atomic_write_text
+from core.memory.collaboration import current_process_owner, process_owner_alive
 from core.observability.run_log import JobRunLog
 from core.scheduler.jitter import _jittered_next_run
 from core.scheduler.lock import SchedulerLock
@@ -41,13 +52,48 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+_LOCK_FILENAME = "scheduled_tasks.lock"
+
+# Run IDs claimed by this process and not yet settled. With the persisted
+# owner identity this is the observed-termination authority for same-process
+# runs; it is process-wide because several service instances may share a store.
+_ACTIVE_RUNS: set[str] = set()
+# Fields a run claim writes, restored when the claim's transaction fails.
+_CLAIM_FIELDS = (
+    "running_since_ms",
+    "run_id",
+    "run_owner",
+    "run_kind",
+    "last_status",
+    "last_run_at_ms",
+    "last_scheduled_at_ms",
+    "next_run_at_ms",
+)
+# Fields a settlement writes, restored when the settlement's transaction fails.
+_SETTLE_FIELDS = (*_CLAIM_FIELDS, "enabled", "last_duration_ms")
+_ACTIVE_RUNS_LOCK = threading.Lock()
+
+
+def _accepts_args(callback: Callable[..., Any], count: int) -> bool:
+    try:
+        inspect.signature(callback).bind(*([None] * count))
+    except TypeError:
+        return False
+    except ValueError:  # no introspectable signature (builtin): assume current form
+        return True
+    return True
+
+
+class SchedulerStoreError(RuntimeError):
+    """The durable job store is unreadable; it is left unchanged."""
+
 
 class SchedulerService:
     """Advanced scheduler with 3-type scheduling + active hours.
 
-    Extends (via composition) the existing :class:`TriggerManager` from
-    ``core.scheduler.triggers``.  The scheduler manages its own job store
-    (atomic JSON) and per-job JSONL run logs.
+    Owns the :class:`TriggerManager` passed at composition (exposed as
+    :attr:`trigger_manager` for manual trigger dispatch). The scheduler
+    manages its own job store (atomic JSON) and per-job JSONL run logs.
     """
 
     MAX_JOBS: int = 50  # Maximum number of scheduled jobs (claude-code pattern)
@@ -58,7 +104,7 @@ class SchedulerService:
         hooks: HookSystem | None = None,
         store_path: Path | None = None,
         log_dir: Path | None = None,
-        on_job_fired: OnJobFired | None = None,
+        on_job_fired: Callable[..., None] | None = None,
         *,
         session_id: str = "",
         enable_jitter: bool = True,
@@ -73,21 +119,30 @@ class SchedulerService:
         self._session_id = session_id or f"pid-{os.getpid()}"
         self._run_log = JobRunLog(log_dir=log_dir if log_dir is not None else DEFAULT_LOG_DIR)
         self._jobs: dict[str, ScheduledJob] = {}
-        self._lock = threading.Lock()
+        # Re-entrant: store transactions call the CRUD methods below.
+        self._lock = threading.RLock()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        # Durable CRUD made outside a transaction, applied onto the freshly
+        # reloaded store at the next save so stale copies never overwrite it.
+        self._pending: dict[str, tuple[str, dict[str, Any]]] = {}
+        self._txn_depth = 0
+        # Stuck runs already reported, keyed by run ID so a store reload
+        # (which rebuilds job objects) does not re-report them every tick.
+        self._stuck_reported: set[tuple[str, str]] = set()
 
         # Callback protocol (replaces action_queue)
-        _fired_cb: OnJobFired | None = None
+        self._on_job_fired: OnJobFired | None = None
+        self._dispatch_reports_outcome = False
         if on_job_fired is not None:
-            _fired_cb = on_job_fired
+            self.set_on_job_fired(on_job_fired)
         elif action_queue is not None:
-            # Backward-compat: wrap queue.put as callback (ignore agent_id)
-            def _queue_adapter(jid: str, act: str, iso: bool, _aid: str = "") -> None:
+            # Backward-compat: wrap queue.put as callback. A bare queue cannot
+            # report the session outcome, so its runs settle at dispatch.
+            def _queue_adapter(jid: str, act: str, iso: bool, _aid: str, _rid: str) -> None:
                 action_queue.put((jid, act, iso))
 
-            _fired_cb = _queue_adapter
-        self._on_job_fired: OnJobFired | None = _fired_cb
+            self._on_job_fired = _queue_adapter
 
         # Jitter settings
         self._enable_jitter = enable_jitter
@@ -99,11 +154,32 @@ class SchedulerService:
         # CRON dedup: prevent same cron job from firing twice in same minute
         self._last_fired_minute: dict[str, int] = {}
 
-    def set_on_job_fired(self, callback: OnJobFired | None) -> None:
-        """Replace the action-dispatch callback for this scheduler."""
-        self._on_job_fired = callback
+    @property
+    def trigger_manager(self) -> TriggerManager | None:
+        """The composed trigger owner used for manual trigger dispatch."""
+        return self._trigger_manager
 
-    # -- CRUD ---------------------------------------------------------------
+    def set_on_job_fired(self, callback: Callable[..., None] | None) -> None:
+        """Replace the action-dispatch callback for this scheduler.
+
+        A five-argument ``(job_id, action, isolated, agent_id, run_id)``
+        callback owns the run until it calls :meth:`record_run_outcome`. A
+        legacy four-argument callback cannot report an outcome, so its runs
+        settle immediately as ``dispatched`` (outcome unknown, never ``ok``).
+        """
+        self._dispatch_reports_outcome = False
+        if callback is None or _accepts_args(callback, 5):
+            self._on_job_fired = callback
+            self._dispatch_reports_outcome = callback is not None
+            return
+        legacy = callback
+
+        def _legacy_adapter(jid: str, act: str, iso: bool, aid: str, _rid: str) -> None:
+            legacy(jid, act, iso, aid)
+
+        self._on_job_fired = _legacy_adapter
+
+    # -- CRUD (in-memory; durable changes persist at the next save) -------
 
     def add_job(self, job: ScheduledJob) -> None:
         """Add a new scheduled job.
@@ -143,12 +219,22 @@ class SchedulerService:
                 job.created_at_ms = time.time() * 1000
             job.next_run_at_ms = self.compute_next_run(job)
             self._jobs[job.job_id] = job
+            if job.durable:
+                self._pending[job.job_id] = ("add", {})
         log.info("Added job '%s' (%s)", job.job_id, job.schedule.kind.value)
 
     def remove_job(self, job_id: str) -> bool:
         """Remove a job. Returns True if found and removed."""
         with self._lock:
-            return self._jobs.pop(job_id, None) is not None
+            job = self._jobs.pop(job_id, None)
+            if job is None:
+                return False
+            if job.durable:
+                if self._pending.get(job_id, ("", {}))[0] == "add":
+                    del self._pending[job_id]
+                else:
+                    self._pending[job_id] = ("delete", {})
+            return True
 
     def update_job(self, job_id: str, **updates: Any) -> bool:
         """Update fields on an existing job. Returns True if found."""
@@ -156,14 +242,20 @@ class SchedulerService:
             job = self._jobs.get(job_id)
             if job is None:
                 return False
-            for key, value in updates.items():
-                if hasattr(job, key):
-                    setattr(job, key, value)
-            # Recompute next_run if schedule-related fields changed
-            schedule_keys = {"schedule", "enabled"}
-            if schedule_keys & set(updates):
-                job.next_run_at_ms = self.compute_next_run(job)
+            self._apply_updates(job, updates)
+            if job.durable:
+                op, previous = self._pending.get(job_id, ("update", {}))
+                if op != "add":
+                    self._pending[job_id] = ("update", {**previous, **updates})
             return True
+
+    def _apply_updates(self, job: ScheduledJob, updates: dict[str, Any]) -> None:
+        for key, value in updates.items():
+            if hasattr(job, key):
+                setattr(job, key, value)
+        # Recompute next_run if schedule-related fields changed
+        if {"schedule", "enabled"} & set(updates):
+            job.next_run_at_ms = self.compute_next_run(job)
 
     def get_job(self, job_id: str) -> ScheduledJob | None:
         """Get a job by ID."""
@@ -171,10 +263,28 @@ class SchedulerService:
 
     def list_jobs(self, include_disabled: bool = False) -> list[ScheduledJob]:
         """List jobs, optionally including disabled ones."""
-        jobs = list(self._jobs.values())
+        with self._lock:
+            jobs = list(self._jobs.values())
         if not include_disabled:
             jobs = [j for j in jobs if j.enabled]
         return jobs
+
+    # -- Durable commands (lock -> reload -> operate -> persist) -----------
+
+    def create_job(self, job: ScheduledJob) -> None:
+        """Add and persist a job against the current store (ValueError if invalid)."""
+        with self._store_transaction():
+            self.add_job(job)
+
+    def delete_job(self, job_id: str) -> bool:
+        """Remove and persist; False when the current store has no such job."""
+        with self._store_transaction():
+            return self.remove_job(job_id)
+
+    def set_job_enabled(self, job_id: str, enabled: bool) -> bool:
+        """Enable/disable and persist; False when the current store has no such job."""
+        with self._store_transaction():
+            return self.update_job(job_id, enabled=enabled)
 
     # -- Scheduling ---------------------------------------------------------
 
@@ -310,11 +420,16 @@ class SchedulerService:
     # -- Execution ----------------------------------------------------------
 
     def run_now(self, job_id: str) -> dict[str, Any]:
-        """Force immediate execution of a job, bypassing schedule & active hours."""
-        job = self._jobs.get(job_id)
+        """Force one manual run, bypassing schedule & active hours.
+
+        A manual run never consumes the job's next scheduled occurrence.
+        Returns a ``skipped`` entry while another run of the job is active.
+        """
+        now = time.time() * 1000
+        job = self._claim(job_id, now, mode="manual")
         if job is None:
-            raise KeyError(f"Job '{job_id}' not found")
-        return self._execute_job(job)
+            return self._already_running(job_id, now)
+        return self._execute_job(job, now_ms=now)
 
     def check_due_jobs(self, now_ms: float | None = None) -> list[dict[str, Any]]:
         """Check all jobs and execute those that are due.
@@ -323,13 +438,16 @@ class SchedulerService:
         """
         now = now_ms if now_ms is not None else time.time() * 1000
         results: list[dict[str, Any]] = []
-        to_delete: list[str] = []
 
         with self._lock:
             snapshot = list(self._jobs.values())
 
         for job in snapshot:
             if not job.enabled:
+                continue
+            # A durable callback job loaded where its callback is not registered
+            # has nothing to run here; it stays stored for the process that has it.
+            if job.callback is None and not job.action:
                 continue
 
             # A composition root may attach the action callback immediately
@@ -342,15 +460,13 @@ class SchedulerService:
             kind = job.schedule.kind
 
             # Age-out: recurring, non-permanent, older than RECURRING_MAX_AGE_MS
-            if (
-                kind in (ScheduleKind.EVERY, ScheduleKind.CRON)
-                and not job.permanent
-                and job.created_at_ms > 0
-                and (now - job.created_at_ms) > RECURRING_MAX_AGE_MS
-            ):
-                result = self._execute_job(job, now_ms=now)
+            if self._aged_out(job, now):
+                claimed = self._claim(job.job_id, now, mode="aged_out")
+                if claimed is None:
+                    continue
+                result = self._execute_job(claimed, now_ms=now)
                 result["aged_out"] = True
-                to_delete.append(job.job_id)
+                self._delete_durable(job.job_id)
                 results.append(result)
                 log.info(
                     "Job '%s' aged out (%.0f days)",
@@ -378,72 +494,227 @@ class SchedulerService:
                 results.append(result)
                 continue
 
-            result = self._execute_job(job, now_ms=now)
-            results.append(result)
-
-            # Post-execution handling for AT jobs
-            if kind == ScheduleKind.AT:
-                if result.get("status") == "ok" and job.delete_after_run:
-                    to_delete.append(job.job_id)
-                else:
-                    # Disable AT job after execution (even if errored)
-                    job.enabled = False
-                    job.next_run_at_ms = None
-
-        # Clean up delete-after-run jobs
-        with self._lock:
-            for jid in to_delete:
-                self._jobs.pop(jid, None)
+            try:
+                claimed = self._claim(job.job_id, now, mode="due")
+            except BaseException:
+                if kind == ScheduleKind.CRON:
+                    # The minute was marked fired before the claim; a failed
+                    # claim fired nothing, so this occurrence stays retryable.
+                    self._last_fired_minute.pop(job.job_id, None)
+                raise
+            if claimed is None:
+                continue
+            results.append(self._execute_job(claimed, now_ms=now))
 
         return results
+
+    @staticmethod
+    def _aged_out(job: ScheduledJob, now: float) -> bool:
+        return (
+            job.schedule.kind in (ScheduleKind.EVERY, ScheduleKind.CRON)
+            and not job.permanent
+            and job.created_at_ms > 0
+            and (now - job.created_at_ms) > RECURRING_MAX_AGE_MS
+        )
+
+    def _missed(self, job: ScheduledJob, now: float, grace_ms: float) -> bool:
+        if job.schedule.kind == ScheduleKind.AT:
+            at = job.schedule.at_ms
+            never_ran = job.last_run_at_ms is None and job.last_scheduled_at_ms is None
+            return never_ran and at < now and (now - at) <= grace_ms
+        if job.schedule.kind == ScheduleKind.EVERY:
+            nxt = job.next_run_at_ms
+            interval = job.schedule.every_ms
+            return nxt is not None and interval > 0 and (now - nxt) > 2 * interval
+        return False
+
+    def _eligible(self, job: ScheduledJob, now: float, mode: str) -> bool:
+        """Re-check on freshly loaded state that this run is still authorized.
+
+        Another instance may have paused, rescheduled, re-timed, or already
+        claimed the job since the caller's stale snapshot decided to run it.
+        """
+        if mode == "manual":
+            return True
+        if not job.enabled or (job.callback is None and not job.action):
+            return False
+        if job.active_hours and not self.is_within_active_hours(job.active_hours, now):
+            return False
+        if mode == "aged_out":
+            return self._aged_out(job, now)
+        if mode == "missed":
+            return self._missed(job, now, MISSED_TASK_GRACE_MS)
+        if job.schedule.kind == ScheduleKind.CRON:
+            last = job.last_scheduled_at_ms
+            if last is not None and int(last / 60_000) == int(now / 60_000):
+                return False
+            try:
+                return CronParser.matches(
+                    job.schedule.cron_expr, _cron_tuple_for_tz(job.schedule.timezone)
+                )
+            except ValueError:
+                return False
+        return job.next_run_at_ms is not None and now >= job.next_run_at_ms
+
+    def _run_alive(self, job: ScheduledJob) -> bool:
+        """Whether the claimed run's owner has not been observed to terminate.
+
+        Same process: the run is alive until it settles here. Another process:
+        alive while that exact process (PID + birth time) exists. A legacy row
+        with no owner is unknown, which never counts as terminated.
+        """
+        if job.running_since_ms is None:
+            return False
+        if job.run_owner == current_process_owner():
+            with _ACTIVE_RUNS_LOCK:
+                return job.run_id in _ACTIVE_RUNS
+        if not job.run_owner:
+            return True
+        return process_owner_alive(job.run_owner)
+
+    def _claim(self, job_id: str, now: float, *, mode: str) -> ScheduledJob | None:
+        """Atomically mark one run of ``job_id`` as started.
+
+        ``mode`` is ``due``, ``missed``, ``aged_out`` (scheduled occurrences)
+        or ``manual``. Returns the claimed job, or None when it is gone,
+        another run's owner is still alive, or the occurrence is no longer
+        authorized on the current store. Raises KeyError for a manual run of
+        an unknown job. A previous run whose owner is observed gone is
+        recorded as ``interrupted`` before the new claim.
+        """
+        scheduled = mode != "manual"
+        registered = ""
+        interrupted: dict[str, Any] | None = None
+        claimed: ScheduledJob | None = None
+        # A failed transaction rebuilds persisted rows from disk, but keeps a
+        # session-only job, or a durable one not saved yet (pending add), in
+        # memory as is, so the claim fields are restored here. Restoring a row
+        # the reload already replaced is a no-op.
+        restore: tuple[ScheduledJob, dict[str, Any]] | None = None
+        with self._lock:  # no other thread sees the failed claim before the restore
+            try:
+                with self._persisted_transaction():
+                    job = self._jobs.get(job_id)
+                    if job is not None:
+                        restore = (job, {name: getattr(job, name) for name in _CLAIM_FIELDS})
+                    if job is None:
+                        if not scheduled:
+                            raise KeyError(f"Job '{job_id}' not found")
+                    elif not self._run_alive(job):
+                        if job.running_since_ms is not None:
+                            interrupted = {
+                                "job_id": job_id,
+                                "run_id": job.run_id,
+                                "status": "interrupted",
+                                "error": "run owner exited before reporting an outcome",
+                                "executed_at_ms": now,
+                            }
+                            job.running_since_ms, job.run_id = None, ""
+                            job.run_owner, job.run_kind, job.last_status = "", "", "interrupted"
+                        if self._eligible(job, now, mode):
+                            job.running_since_ms = now
+                            job.run_id = uuid.uuid4().hex
+                            job.run_owner = current_process_owner()
+                            job.run_kind = "scheduled" if scheduled else "manual"
+                            job.last_run_at_ms = now
+                            if scheduled:
+                                job.last_scheduled_at_ms = now
+                                # AT runs once; recurring kinds advance past this occurrence.
+                                at_once = job.schedule.kind == ScheduleKind.AT
+                                job.next_run_at_ms = (
+                                    None if at_once else self.compute_next_run(job, now)
+                                )
+                            # Registered while the store lock is held, so no
+                            # same-process instance sees the claim on disk without
+                            # its owner record; withdrawn below if the write fails.
+                            registered = job.run_id
+                            with _ACTIVE_RUNS_LOCK:
+                                _ACTIVE_RUNS.add(registered)
+                            claimed = job
+            except BaseException:
+                if registered:
+                    with _ACTIVE_RUNS_LOCK:
+                        _ACTIVE_RUNS.discard(registered)
+                if restore is not None:
+                    held, fields = restore
+                    for name, value in fields.items():
+                        setattr(held, name, value)
+                raise
+        # Only reached once the transaction (if any) was written.
+        if interrupted is not None:
+            self._run_log.append(job_id, interrupted)
+        return claimed
+
+    def _already_running(self, job_id: str, now: float) -> dict[str, Any]:
+        return {
+            "job_id": job_id,
+            "status": "skipped",
+            "reason": "already_running",
+            "error": f"Job '{job_id}' already has an active run",
+            "executed_at_ms": now,
+        }
 
     def _execute_job(
         self,
         job: ScheduledJob,
         now_ms: float | None = None,
     ) -> dict[str, Any]:
-        """Execute a single job and record the result."""
+        """Execute one claimed run and record it.
+
+        A callback finishes synchronously and is settled here. An action is
+        handed to the dispatch callback; when that callback reports outcomes
+        the run stays ``dispatched`` until :meth:`record_run_outcome`.
+        """
         now = now_ms if now_ms is not None else time.time() * 1000
+        if not job.run_id:  # unclaimed direct call: claim in memory only
+            job.run_id = uuid.uuid4().hex
+            job.run_owner = current_process_owner()
+            job.run_kind = "manual"
+            job.running_since_ms = now
+            job.last_run_at_ms = now
+            with _ACTIVE_RUNS_LOCK:
+                _ACTIVE_RUNS.add(job.run_id)
+        run_id = job.run_id
         start = time.time() * 1000
         status = "ok"
         error = ""
-
-        job.running_since_ms = start
 
         try:
             if job.callback is not None:
                 job.callback({"job_id": job.job_id, "name": job.name, **job.metadata})
             elif job.action and self._on_job_fired is not None:
-                self._on_job_fired(job.job_id, job.action, job.isolated, job.agent_id)
+                self._on_job_fired(job.job_id, job.action, job.isolated, job.agent_id, run_id)
+                status = "dispatched"
                 log.debug(
-                    "Job '%s' fired action (isolated=%s, agent=%s): %s",
+                    "Job '%s' dispatched action (isolated=%s, agent=%s): %s",
                     job.job_id,
                     job.isolated,
                     job.agent_id or "main",
                     job.action[:60],
                 )
+            else:
+                status = "error"
+                error = "no callback or dispatch path for this job"
         except Exception as exc:
             status = "error"
             error = str(exc)
             log.warning("Job '%s' failed: %s", job.job_id, exc)
 
         duration = time.time() * 1000 - start
-        job.running_since_ms = None
-
-        # Update job state
-        job.last_run_at_ms = now
-        job.last_status = status
-        job.last_duration_ms = duration
-        job.next_run_at_ms = self.compute_next_run(job, now)
-
         entry: dict[str, Any] = {
             "job_id": job.job_id,
+            "run_id": run_id,
             "status": status,
             "error": error,
             "duration_ms": duration,
             "executed_at_ms": now,
         }
-        self._run_log.append(job.job_id, entry)
+        if status == "dispatched" and self._dispatch_reports_outcome:
+            job.last_status = status
+            self._run_log.append(job.job_id, entry)
+        else:
+            # Terminal here; a failure to persist it propagates and the claim stays.
+            self._settle(job.job_id, run_id, status, error=error, duration_ms=duration)
 
         # Fire hook
         if self._hooks:
@@ -455,6 +726,103 @@ class SchedulerService:
             )
 
         return entry
+
+    def record_run_outcome(
+        self,
+        job_id: str,
+        run_id: str,
+        status: str,
+        *,
+        error: str = "",
+        duration_ms: float | None = None,
+    ) -> bool:
+        """Settle a dispatched run. Returns False when ``run_id`` is not current.
+
+        A stale outcome (a newer run was claimed, or the job was deleted)
+        leaves the current state untouched. A store failure propagates: the
+        run then stays claimed rather than being reported as settled.
+        """
+        return self._settle(job_id, run_id, status, error=error, duration_ms=duration_ms)
+
+    def _settle(
+        self,
+        job_id: str,
+        run_id: str,
+        status: str,
+        *,
+        error: str = "",
+        duration_ms: float | None = None,
+    ) -> bool:
+        now = time.time() * 1000
+        current: bool | None = None
+        # Job, fields and pending entry before this settlement. If it is not
+        # written the run stays claimed, but the failure reload re-applies the
+        # settlement's pending delete/disable and keeps an in-memory-only row as
+        # mutated, so the prior state is put back (still under the lock).
+        restore: tuple[ScheduledJob, dict[str, Any], tuple[str, dict[str, Any]] | None] | None
+        restore = None
+        with self._lock:
+            try:
+                with self._persisted_transaction():
+                    job = self._jobs.get(job_id)
+                    if job is None or not run_id or job.run_id != run_id:
+                        log.info("Ignoring stale outcome for job '%s' run %s", job_id, run_id[:8])
+                        current = False
+                    else:
+                        current = True
+                        fields = {name: getattr(job, name) for name in _SETTLE_FIELDS}
+                        restore = (job, fields, self._pending.get(job_id))
+                        manual = job.run_kind == "manual"
+                        job.running_since_ms = None
+                        job.run_id = ""
+                        job.run_owner = ""
+                        job.run_kind = ""
+                        job.last_status = status
+                        if duration_ms is not None:
+                            job.last_duration_ms = duration_ms
+                        if job.schedule.kind == ScheduleKind.AT and not manual:
+                            if status == "ok" and job.delete_after_run:
+                                self.remove_job(job_id)
+                            else:
+                                # Disable AT job after execution (even if errored)
+                                self.update_job(job_id, enabled=False)
+                                job.next_run_at_ms = None
+            except BaseException:
+                if restore is not None:
+                    held, fields, pending = restore
+                    for name, value in fields.items():
+                        setattr(held, name, value)
+                    if pending is None:
+                        self._pending.pop(job_id, None)
+                    else:
+                        self._pending[job_id] = pending
+                    # As before the settlement; a stored row equals its unchanged disk row.
+                    self._jobs[job_id] = held
+                elif current is False:
+                    # A stale outcome holds no claim; its ID must not outlive it.
+                    with _ACTIVE_RUNS_LOCK:
+                        _ACTIVE_RUNS.discard(run_id)
+                raise
+        # Persisted (or no longer ours): the in-process liveness record ends.
+        with _ACTIVE_RUNS_LOCK:
+            _ACTIVE_RUNS.discard(run_id)
+        if not current:
+            return False
+        entry: dict[str, Any] = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "status": status,
+            "error": error,
+            "executed_at_ms": now,
+        }
+        if duration_ms is not None:
+            entry["duration_ms"] = duration_ms
+        self._run_log.append(job_id, entry)
+        return True
+
+    def _delete_durable(self, job_id: str) -> None:
+        with self._persisted_transaction():
+            self.remove_job(job_id)
 
     def _skip_job(
         self,
@@ -475,21 +843,86 @@ class SchedulerService:
 
     # -- Persistence --------------------------------------------------------
 
-    def save(self) -> None:
-        """Atomically persist the durable job store to disk (tmp + rename).
+    def _lock_path(self) -> Path:
+        return Path(self._store_path).parent / _LOCK_FILENAME
 
-        Uses O_EXCL lock file with PID liveness probe for cross-process
-        coordination. Non-durable (session-only) jobs are excluded.
+    def _read_path(self) -> Path:
+        path = Path(self._store_path)
+        # Backward-compat: fall back to legacy global store
+        # Only when using default store path (not explicitly provided)
+        if not path.exists() and not self._store_path_explicit and _LEGACY_STORE_PATH.exists():
+            return _LEGACY_STORE_PATH
+        return path
+
+    @contextlib.contextmanager
+    def _store_transaction(self) -> Iterator[None]:
+        """Lock the store, reload it, let the caller operate, then persist.
+
+        Nested transactions on the same thread join the outer one. Nothing is
+        written when the body raises, and a body or write failure reloads the
+        durable rows so a failed run claim does not survive in memory only.
+        Pending job mutations (``_pending``) are re-applied by the reload and
+        persist with the next successful transaction, as before.
         """
+        with self._lock:
+            if self._txn_depth:
+                self._txn_depth += 1
+                try:
+                    yield
+                finally:
+                    self._txn_depth -= 1
+                return
+            with SchedulerLock(self._lock_path()):
+                self._load_locked(strict=True)
+                self._txn_depth = 1
+                try:
+                    yield
+                    self._txn_depth = 0
+                    self._write_locked()
+                except BaseException:
+                    self._txn_depth = 0
+                    try:
+                        self._load_locked(strict=True)
+                    except Exception:
+                        log.warning(
+                            "Scheduler store reload after a failed transaction failed",
+                            exc_info=True,
+                        )
+                    raise
+
+    @contextlib.contextmanager
+    def _persisted_transaction(self) -> Iterator[None]:
+        """Store transaction when a store exists; in-memory only otherwise.
+
+        Run claims and settles on a never-persisted scheduler (no store file)
+        have no other instance to coordinate with, so they do not create one.
+        """
+        with self._lock:
+            # Only the project store: a run must never trigger legacy migration.
+            if self._txn_depth or Path(self._store_path).exists():
+                with self._store_transaction():
+                    yield
+            else:
+                yield
+
+    def save(self) -> None:
+        """Persist pending durable changes onto the current store.
+
+        Reloads under the cross-process lock first, so another instance's
+        additions, deletions, pauses and run claims are preserved; this
+        instance's own adds/updates/deletes are then applied and written
+        atomically (tmp + rename). Non-durable (session-only) jobs are
+        excluded.
+        """
+        with self._store_transaction():
+            pass
+
+    def _write_locked(self) -> None:
         path = Path(self._store_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        # Filter: only persist durable jobs
         data = {jid: _job_to_dict(j) for jid, j in self._jobs.items() if j.durable}
-        payload = json.dumps(data, ensure_ascii=False, indent=2)
-        lock = SchedulerLock(path.parent / "scheduled_tasks.lock", session_id=self._session_id)
-        with lock:
-            atomic_write_text(path, payload)
-        # Update mtime tracking
+        atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=2))
+        self._pending.clear()
         with contextlib.suppress(OSError):
             self._last_store_mtime = os.path.getmtime(path)
         log.debug("Scheduler state saved to %s (%d durable jobs)", path, len(data))
@@ -498,60 +931,88 @@ class SchedulerService:
         """Load job store from disk.
 
         Reads atomically (os.replace guarantees consistent writes).
-        Preserves in-memory non-durable jobs across reloads.
+        Preserves in-memory non-durable jobs and pending local changes.
         Falls back to legacy global store if project-local doesn't exist.
+        An unreadable store is reported and leaves memory unchanged.
         """
-        path = Path(self._store_path)
+        with self._lock:
+            self._load_locked(strict=False)
 
-        # Backward-compat: fall back to legacy global store
-        # Only when using default store path (not explicitly provided)
-        if not path.exists() and not self._store_path_explicit and _LEGACY_STORE_PATH.exists():
-            log.info(
-                "Migrating from legacy store %s -> %s",
-                _LEGACY_STORE_PATH,
-                path,
-            )
-            path = _LEGACY_STORE_PATH
-
-        if not path.exists():
+    def _load_locked(self, *, strict: bool) -> None:
+        path = self._read_path()
+        if path != Path(self._store_path):
+            log.info("Migrating from legacy store %s -> %s", path, self._store_path)
+        data: dict[str, Any] = {}
+        if path.exists():
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict):
+                    raise ValueError("store root is not an object")
+            except (json.JSONDecodeError, OSError, ValueError) as exc:
+                if strict:
+                    raise SchedulerStoreError(
+                        f"Scheduler store {path} is unreadable; it was left unchanged"
+                    ) from exc
+                log.warning("Failed to read scheduler store %s: %s", path, exc)
+                return
+        else:
             log.debug("No scheduler store at %s", path)
-            return
 
-        try:
-            with open(path, encoding="utf-8") as f:
-                data: dict[str, Any] = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            log.warning("Failed to read scheduler store %s: %s", path, exc)
-            return
-
-        # Preserve non-durable (session-only) jobs
-        session_jobs = {jid: j for jid, j in self._jobs.items() if not j.durable}
-
+        previous = self._jobs
+        merged: dict[str, ScheduledJob] = {}
         loaded = 0
         zombies = 0
         for _jid, jdata in data.items():
             try:
                 job = _job_from_dict(jdata)
-                # Skip zombie jobs (no action, no callback) — auto-cleanup
-                if not job.action and job.callback is None:
-                    zombies += 1
-                    continue
-                self._jobs[job.job_id] = job
-                loaded += 1
             except Exception as exc:
+                if strict:
+                    # Rewriting would silently delete the row; refuse instead.
+                    raise SchedulerStoreError(
+                        f"Scheduler store {path} has a malformed job entry; it was left unchanged"
+                    ) from exc
                 log.warning("Skipping malformed job entry: %s", exc)
+                continue
+            old = previous.get(job.job_id)
+            if old is not None and old.callback is not None:
+                job.callback = old.callback
+            # A callback job persists without its callable. Keep the row (and the
+            # operator's flags) for the process that registers the callback; it
+            # is never run here (check_due_jobs skips it).
+            if not job.action and job.callback is None:
+                zombies += 1
+            merged[job.job_id] = job
+            loaded += 1
 
-        # Re-add session-only jobs
-        self._jobs.update(session_jobs)
+        # Re-apply this instance's pending durable changes onto the fresh state.
+        for jid, (op, updates) in list(self._pending.items()):
+            if op == "delete":
+                merged.pop(jid, None)
+            elif op == "add":
+                if jid in merged:
+                    log.warning("Job '%s' was added by another scheduler; keeping it", jid)
+                    del self._pending[jid]
+                elif jid in previous:
+                    merged[jid] = previous[jid]
+            elif jid in merged:
+                self._apply_updates(merged[jid], updates)
+            else:
+                # Deleted elsewhere: an update must not resurrect it.
+                del self._pending[jid]
+
+        # Preserve non-durable (session-only) jobs
+        merged.update({jid: j for jid, j in previous.items() if not j.durable})
+        self._jobs = merged
 
         if zombies:
-            log.warning("Skipped %d zombie jobs (empty action) on load", zombies)
+            log.debug("Loaded %d callback jobs without a registered callback", zombies)
 
         # Track file mtime for change detection
         with contextlib.suppress(OSError):
             self._last_store_mtime = os.path.getmtime(path)
 
-        log.info("Loaded %d jobs from %s", loaded, path)
+        log.debug("Loaded %d jobs from %s", loaded, path)
 
     # -- Background runner --------------------------------------------------
 
@@ -592,28 +1053,52 @@ class SchedulerService:
     STUCK_TIMEOUT_MS: float = 600_000.0  # 10 minutes
 
     def detect_stuck_jobs(self, now_ms: float | None = None) -> list[str]:
-        """Detect and mark jobs that have been running longer than STUCK_TIMEOUT_MS.
+        """Report runs active longer than STUCK_TIMEOUT_MS.
 
-        Returns a list of stuck job IDs.
+        Elapsed time alone never releases a claim: the original run may still
+        be executing. A run whose owner is observed gone is settled as
+        ``interrupted``; a still-owned (or unknown legacy) run is only marked
+        ``stuck`` for display and keeps blocking a second execution.
+
+        A still-owned run is reported once per run ID; later ticks do not
+        repeat the warning or hook while that same run stays stuck.
+
+        Returns the job IDs newly reported (or settled) by this call.
         """
         now = now_ms if now_ms is not None else time.time() * 1000
-        stuck: list[str] = []
         with self._lock:
-            for job in self._jobs.values():
-                if (
-                    job.running_since_ms is not None
-                    and (now - job.running_since_ms) > self.STUCK_TIMEOUT_MS
-                ):
-                    elapsed_s = (now - job.running_since_ms) / 1000
-                    log.warning(
-                        "Stuck job detected: '%s' running for %.0fs (threshold %.0fs)",
-                        job.job_id,
-                        elapsed_s,
-                        self.STUCK_TIMEOUT_MS / 1000,
-                    )
-                    job.last_status = "stuck"
-                    job.running_since_ms = None
-                    stuck.append(job.job_id)
+            candidates = [
+                job
+                for job in self._jobs.values()
+                if job.running_since_ms is not None
+                and (now - job.running_since_ms) > self.STUCK_TIMEOUT_MS
+            ]
+        stuck: list[str] = []
+        current = {(job.job_id, job.run_id) for job in candidates}
+        self._stuck_reported &= current  # settled or replaced runs are forgotten
+        newly_reported: list[tuple[str, str]] = []
+        for job in candidates:
+            owner_gone = bool(job.run_id) and not self._run_alive(job)
+            if not owner_gone and (job.job_id, job.run_id) in self._stuck_reported:
+                job.last_status = "stuck"  # a reload rebuilt the row; keep the label
+                continue
+            log.warning(
+                "Stuck job detected: '%s' running for %.0fs (threshold %.0fs)",
+                job.job_id,
+                (now - (job.running_since_ms or now)) / 1000,
+                self.STUCK_TIMEOUT_MS / 1000,
+            )
+            if owner_gone:
+                self._settle(
+                    job.job_id,
+                    job.run_id,
+                    "interrupted",
+                    error="run owner exited before reporting an outcome",
+                )
+            else:
+                job.last_status = "stuck"
+                newly_reported.append((job.job_id, job.run_id))
+            stuck.append(job.job_id)
         if stuck and self._hooks:
             from core.hooks import HookEvent
 
@@ -621,6 +1106,8 @@ class SchedulerService:
                 HookEvent.TRIGGER_FIRED,
                 {"stuck_jobs": stuck, "source": "scheduler_stuck_detection"},
             )
+        # Marked only once reported, so a failure earlier in this tick re-reports.
+        self._stuck_reported.update(newly_reported)
         return stuck
 
     def _reload_if_changed(self) -> bool:
@@ -655,7 +1142,8 @@ class SchedulerService:
     ) -> list[ScheduledJob]:
         """Find one-shot/interval jobs that missed their execution window.
 
-        AT jobs:   missed if ``at_ms < now < at_ms + grace_ms`` and never ran.
+        AT jobs:   missed if ``at_ms < now < at_ms + grace_ms`` and it never ran
+                   (at-most-once: any earlier run, manual or scheduled, counts).
         EVERY jobs: missed if ``next_run_at_ms`` is more than 2 intervals past.
         CRON jobs: skipped (they naturally fire on the next matching minute).
         """
@@ -663,23 +1151,11 @@ class SchedulerService:
         missed: list[ScheduledJob] = []
 
         with self._lock:
-            for job in self._jobs.values():
-                if not job.enabled:
-                    continue
-
-                kind = job.schedule.kind
-
-                if kind == ScheduleKind.AT:
-                    at = job.schedule.at_ms
-                    if job.last_run_at_ms is None and at < now and (now - at) <= grace_ms:
-                        missed.append(job)
-
-                elif kind == ScheduleKind.EVERY:
-                    nxt = job.next_run_at_ms
-                    interval = job.schedule.every_ms
-                    if nxt is not None and interval > 0 and (now - nxt) > 2 * interval:
-                        missed.append(job)
-
+            missed.extend(
+                job
+                for job in self._jobs.values()
+                if job.enabled and self._missed(job, now, grace_ms)
+            )
         return missed
 
     def recover_missed_tasks(
@@ -695,7 +1171,10 @@ class SchedulerService:
         results: list[dict[str, Any]] = []
         for job in missed:
             log.info("Recovering missed job '%s' (%s)", job.job_id, job.schedule.kind.value)
-            result = self._execute_job(job, now_ms=now)
+            claimed = self._claim(job.job_id, now, mode="missed")
+            if claimed is None:
+                continue
+            result = self._execute_job(claimed, now_ms=now)
             result["recovered"] = True
             results.append(result)
 
@@ -714,4 +1193,4 @@ class SchedulerService:
 
 
 # Re-export DEFAULT_LOG_DIR for service consumers that need the constant
-__all__ = ["DEFAULT_LOG_DIR", "SchedulerService"]
+__all__ = ["DEFAULT_LOG_DIR", "SchedulerService", "SchedulerStoreError"]

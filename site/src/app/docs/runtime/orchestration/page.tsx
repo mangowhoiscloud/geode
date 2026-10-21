@@ -43,6 +43,9 @@ export default function Page() {
               <tbody>
                 <tr><td><code>send_message</code></td><td>새 세대를 시작하지 않고 실행 중인 자식에게 컨텍스트를 큐잉</td></tr>
                 <tr><td><code>followup_task</code></td><td>실행 중이면 다음 루프 경계에 전달하고, 종료 상태면 같은 자식 세션을 재개</td></tr>
+                <tr><td><code>send_session_message</code></td><td>자식이 아닌 같은 프로젝트의 다른 root 세션에 큐잉. 대상을 깨우지 않으며 자식 세션은 보내지도 받지도 못함</td></tr>
+                <tr><td><code>read_session_messages</code></td><td>다른 root 세션이 보낸 미읽음 메시지를 tool 결과 데이터로 한 번씩 읽음. 운영자 지시가 아니며 승인이나 도구 권한을 주지 않음</td></tr>
+                <tr><td><code>fork_session</code></td><td>이 세션 또는 자신의 종료된 자식의 완료 turn을 새 일시정지 root 세션으로 분기</td></tr>
               </tbody>
             </table>
             <p>
@@ -245,6 +248,9 @@ export default function Page() {
               <tbody>
                 <tr><td><code>send_message</code></td><td>Queue context for a running child without starting a generation</td></tr>
                 <tr><td><code>followup_task</code></td><td>Deliver at the next loop boundary when running, or resume the same child session when terminal</td></tr>
+                <tr><td><code>send_session_message</code></td><td>Queue input for another root session of the project, not a child; the target is not woken, and children can neither send nor receive</td></tr>
+                <tr><td><code>read_session_messages</code></td><td>Read unread messages from other root sessions once each, as tool-result data that is neither operator instruction nor approval or tool authority</td></tr>
+                <tr><td><code>fork_session</code></td><td>Fork a completed turn of this session, or of its own finished child, into a new paused root session</td></tr>
               </tbody>
             </table>
             <p>

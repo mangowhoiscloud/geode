@@ -161,14 +161,12 @@ def test_dead_executor_fire_hook_stays_deleted() -> None:
 
 def test_thin_wrappers_delegate_to_dispatch() -> None:
     """The already-thin module wrappers keep routing through dispatch."""
-    import core.cli as cli_module
     from core.llm.router import _hooks as router_hooks
     from evolve.scaffold_search.loop import _hooks as sil_hooks
 
     for module, func_name in [
         (router_hooks, "_fire_hook"),
         (sil_hooks, "_fire_hook"),
-        (cli_module, "_fire_hook"),
     ]:
         source = inspect.getsource(getattr(module, func_name))
         assert "fire_hook(" in source, f"{module.__name__}.{func_name} does not delegate"
@@ -296,28 +294,37 @@ def test_fixed_seed_orchestrator_payload_does_not_warn(
 # ---------------------------------------------------------------------------
 
 
-def test_rule_changed_cli_handler_emits_action() -> None:
-    """CLI rule CRUD fires RULE_CHANGED with the action discriminator.
+def test_rule_changed_manage_rule_handler_emits_action(tmp_path) -> None:
+    """The manage_rule tool fires RULE_CHANGED with the action discriminator,
+    only after the owner actually applied the mutation.
 
-    (The tool-side sibling is pinned in test_hooks.py
+    (The registry-tool sibling is pinned in test_hooks.py
     ``test_rule_create_fires_hook``; the auto-trigger ``stage`` sibling in
     tests/evolve/scaffold_search/test_ol_a15_telemetry.py.)
     """
-    from unittest.mock import MagicMock, patch
+    from core.cli.tool_handlers.memory import _build_memory_handlers
+    from core.memory.project import ProjectMemory
+    from core.tools.memory_tools import MemoryToolServices
 
-    from core.cli.memory_handler import _handle_rule_action
-
+    hooks = HookSystem()
     fired: list[tuple[HookEvent, dict[str, Any]]] = []
-    mem = MagicMock()
-    mem.update_rule.return_value = True
-    with patch("core.memory.project.ProjectMemory", return_value=mem):
-        _handle_rule_action(
-            "update",
-            {"name": "my-rule"},
-            "body",
-            lambda event, data: fired.append((event, data)),
-        )
-    assert fired == [(HookEvent.RULE_CHANGED, {"action": "updated", "name": "my-rule"})]
+    hooks.register(
+        HookEvent.RULE_CHANGED, lambda event, data: fired.append((event, data)), name="spy"
+    )
+    memory = ProjectMemory(tmp_path)
+    handlers = _build_memory_handlers(MemoryToolServices(project_memory=memory), hooks)
+    manage_rule = handlers["manage_rule"]
+
+    missing = manage_rule(action="update", name="my-rule", content="body")
+    assert missing["status"] == "error" and missing["outcome"] == "not_found"
+    assert fired == []
+    assert manage_rule(action="create", name="my-rule", content="v1")["status"] == "ok"
+    assert manage_rule(action="update", name="my-rule", content="body")["status"] == "ok"
+    assert [data["action"] for _, data in fired] == ["created", "updated"]
+    assert {k: fired[1][1][k] for k in ("action", "name")} == {
+        "action": "updated",
+        "name": "my-rule",
+    }
 
 
 def test_collapsed_events_have_no_per_state_members() -> None:

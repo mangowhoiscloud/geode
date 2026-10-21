@@ -16,6 +16,7 @@ import logging
 import sqlite3
 import threading
 import time
+from collections.abc import Collection
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -50,6 +51,11 @@ class SessionMeta:
     user_input: str = ""
     round_count: int = 0
     message_count: int = 0
+    # R6.9 lineage projection of ``state.json``; empty/zero on legacy rows.
+    parent_session_id: str = ""
+    source_session_id: str = ""
+    source_generation: int = 0
+    source_message_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +105,17 @@ _HANDOFF_COLUMNS: tuple[tuple[str, str], ...] = (
     ("handoff_platform", "TEXT NOT NULL DEFAULT ''"),
     ("handoff_error", "TEXT NOT NULL DEFAULT ''"),
     ("handoff_triggered_at", "REAL NOT NULL DEFAULT 0.0"),
+    # R6.9 — child parent and persistent-fork source lineage (additive).
+    ("parent_session_id", "TEXT NOT NULL DEFAULT ''"),
+    ("source_session_id", "TEXT NOT NULL DEFAULT ''"),
+    ("source_generation", "INTEGER NOT NULL DEFAULT 0"),
+    ("source_message_count", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+_META_COLUMNS = (
+    "session_id, created_at, updated_at, status, model, provider, user_input, "
+    "round_count, message_count, parent_session_id, source_session_id, "
+    "source_generation, source_message_count"
 )
 
 _CREATE_INDEX_SQL = """\
@@ -490,6 +507,49 @@ def _loads_json_object(raw: Any) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {"value": parsed}
 
 
+def session_owner_sql(column: str, *, sessions: bool = True, runs: bool = False) -> str:
+    """SQL expression naming who may read rows of the session in *column*.
+
+    ``''`` means any caller: an established non-gateway session. Otherwise it is
+    the one session id whose loop, or a worker under it, may read the row (the
+    ``gateway_session_visible`` rule): a gateway thread for its own rows and its
+    workers' (parent in ``collaboration_runs`` or ``sessions``), and the row's
+    own session when neither table records it. Messages commit before session
+    metadata and that write may fail, so unknown ownership is never public.
+    *sessions* / *runs* say which tables the database has; *column* is a fixed
+    ``alias.session_id`` literal.
+    """
+    from core.memory.session_key import GATEWAY_CHECKPOINT_PREFIX
+
+    gateway = f"'{GATEWAY_CHECKPOINT_PREFIX}*'"  # a constant, not caller input
+    cases = [f"WHEN {column} GLOB {gateway} THEN {column}"]
+    known: list[str] = []
+    parents = []
+    if runs:
+        parents.append(
+            f"(SELECT r.parent_session_id FROM collaboration_runs r WHERE r.task_id = {column})"  # noqa: S608  # nosec B608
+        )
+    if sessions:
+        parents.append(
+            f"(SELECT s.parent_session_id FROM sessions s WHERE s.session_id = {column})"  # noqa: S608  # nosec B608
+        )
+    for parent in parents:
+        cases.append(f"WHEN {parent} GLOB {gateway} THEN {parent}")
+        known.append(f"{parent} IS NOT NULL")
+    if known:
+        cases.append(f"WHEN {' OR '.join(known)} THEN ''")
+    return f"(CASE {' '.join(cases)} ELSE {column} END)"
+
+
+def _gateway_visibility_clause(
+    column: str, callers: Collection[str], *, runs: bool
+) -> tuple[str, list[Any]]:
+    """Keep rows that are public or owned by one of *callers*."""
+    ids = sorted(set(callers))
+    placeholders = "".join(", ?" for _ in ids)
+    return f" AND {session_owner_sql(column, runs=runs)} IN (''{placeholders})", ids
+
+
 class SessionManager:
     """SQLite-backed session index.
 
@@ -612,8 +672,9 @@ class SessionManager:
                 """\
                 INSERT INTO sessions
                     (session_id, created_at, updated_at, status, model, provider,
-                     user_input, round_count, message_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     user_input, round_count, message_count, parent_session_id,
+                     source_session_id, source_generation, source_message_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO UPDATE SET
                     updated_at    = excluded.updated_at,
                     status        = excluded.status,
@@ -621,7 +682,16 @@ class SessionManager:
                     provider      = excluded.provider,
                     user_input    = excluded.user_input,
                     round_count   = excluded.round_count,
-                    message_count = excluded.message_count
+                    message_count = excluded.message_count,
+                    parent_session_id = CASE WHEN excluded.parent_session_id != ''
+                        THEN excluded.parent_session_id ELSE sessions.parent_session_id END,
+                    source_session_id = CASE WHEN excluded.source_session_id != ''
+                        THEN excluded.source_session_id ELSE sessions.source_session_id END,
+                    source_generation = CASE WHEN excluded.source_session_id != ''
+                        THEN excluded.source_generation ELSE sessions.source_generation END,
+                    source_message_count = CASE WHEN excluded.source_session_id != ''
+                        THEN excluded.source_message_count
+                        ELSE sessions.source_message_count END
                 """,
                 (
                     meta.session_id,
@@ -633,6 +703,10 @@ class SessionManager:
                     meta.user_input,
                     meta.round_count,
                     meta.message_count,
+                    meta.parent_session_id,
+                    meta.source_session_id,
+                    meta.source_generation,
+                    meta.source_message_count,
                 ),
             )
             self._conn.commit()
@@ -654,7 +728,8 @@ class SessionManager:
         """Fetch a single session by ID."""
         with self._lock:
             row = self._conn.execute(
-                "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+                f"SELECT {_META_COLUMNS} FROM sessions WHERE session_id = ?",  # noqa: S608  # nosec B608
+                (session_id,),
             ).fetchone()
         if row is None:
             return None
@@ -670,12 +745,14 @@ class SessionManager:
         with self._lock:
             if status:
                 rows = self._conn.execute(
-                    "SELECT * FROM sessions WHERE status = ? ORDER BY updated_at DESC LIMIT ?",
+                    f"SELECT {_META_COLUMNS} FROM sessions WHERE status = ? "  # noqa: S608  # nosec B608
+                    "ORDER BY updated_at DESC LIMIT ?",
                     (status, limit),
                 ).fetchall()
             else:
                 rows = self._conn.execute(
-                    "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?",
+                    f"SELECT {_META_COLUMNS} FROM sessions "  # noqa: S608  # nosec B608
+                    "ORDER BY updated_at DESC LIMIT ?",
                     (limit,),
                 ).fetchall()
         return [self._row_to_meta(r) for r in rows]
@@ -832,6 +909,13 @@ class SessionManager:
             self._conn.commit()
             return cursor.rowcount
 
+    def _has_table(self, name: str) -> bool:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+            ).fetchone()
+        return row is not None
+
     def search_messages(
         self,
         query: str,
@@ -839,6 +923,7 @@ class SessionManager:
         session_id: str | None = None,
         limit: int = 20,
         prefer_trigram: bool = False,
+        visible_to: Collection[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Full-text search across mirrored messages. Returns row dicts.
 
@@ -854,6 +939,10 @@ class SessionManager:
                 index. Useful for substring-recall scenarios (partial
                 Korean words, identifier fragments). Silently falls back
                 to unicode61 when trigram isn't supported.
+            visible_to: The caller's own session ids (never tool arguments).
+                When given, rows are returned only when public or owned by
+                one of them (:func:`session_owner_sql`); ``None`` applies no
+                filter.
 
         Returns:
             Newest-first list of ``{seq, role, content, timestamp,
@@ -879,6 +968,12 @@ class SessionManager:
         if session_id is not None:
             sql += " AND m.session_id = ?"
             params.append(session_id)
+        if visible_to is not None:
+            clause, extra = _gateway_visibility_clause(
+                "m.session_id", visible_to, runs=self._has_table("collaboration_runs")
+            )
+            sql += clause
+            params.extend(extra)
         sql += " ORDER BY m.timestamp DESC LIMIT ?"
         params.append(limit)
         try:
@@ -1029,8 +1124,12 @@ class SessionManager:
         session_id: str | None = None,
         kinds: list[str] | tuple[str, ...] | None = None,
         limit: int = 20,
+        visible_to: Collection[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """FTS5 search over synthesized context artifacts."""
+        """FTS5 search over synthesized context artifacts.
+
+        ``visible_to`` filters rows by owner as in :meth:`search_messages`.
+        """
         from core.memory.fts_query import sanitize_fts5_query
 
         clean = sanitize_fts5_query(query)
@@ -1050,6 +1149,12 @@ class SessionManager:
         if session_id is not None:
             sql += " AND a.session_id = ?"
             params.append(session_id)
+        if visible_to is not None:
+            clause, extra = _gateway_visibility_clause(
+                "a.session_id", visible_to, runs=self._has_table("collaboration_runs")
+            )
+            sql += clause
+            params.extend(extra)
         if kinds:
             placeholders = ",".join("?" for _ in kinds)
             sql += f" AND a.kind IN ({placeholders})"
@@ -1164,4 +1269,8 @@ class SessionManager:
             user_input=row[6],
             round_count=row[7],
             message_count=row[8],
+            parent_session_id=row[9],
+            source_session_id=row[10],
+            source_generation=row[11],
+            source_message_count=row[12],
         )

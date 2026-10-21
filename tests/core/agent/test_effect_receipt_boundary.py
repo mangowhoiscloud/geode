@@ -20,9 +20,10 @@ from core.memory.effect_receipts import (
 )
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 from core.memory.session_manager import SessionManager
-from core.tools.base import ToolContext
+from core.tools.base import ToolContext, refused_before_effect, tool_error
 from core.tools.plan import (
     ExecutionBinding,
+    PersistenceRule,
     SafetyPolicy,
     ToolEffect,
     ToolSpec,
@@ -31,7 +32,7 @@ from core.tools.plan import (
 )
 
 
-def _bound(effect: ToolEffect, handler: Any):
+def _bound(effect: ToolEffect, handler: Any, *, safety: SafetyPolicy | None = None):
     side_effecting = effect is not ToolEffect.READ
     plan = compile_tool_plan(
         ((ToolSpec("action", "action", {"type": "object"}), "test"),),
@@ -42,19 +43,19 @@ def _bound(effect: ToolEffect, handler: Any):
                 resource_strategy="test" if side_effecting else "none",
             ),
         ),
-        safety={"action": SafetyPolicy(effect=effect)},
+        safety={"action": safety or SafetyPolicy(effect=effect)},
     )
     resolvers = {"action": lambda _arguments: ("test-resource",)} if side_effecting else None
     return bind_tool_plan(plan, {"action": handler}, resolvers)
 
 
-def _context() -> ToolContext:
+def _context(step: int = 1) -> ToolContext:
     operation_id = effect_operation_id()
-    assert operation_id and operation_id != "call-1"
+    assert operation_id and operation_id != f"call-{step}"
     return ToolContext(
         session_id="s-test",
-        step_id="step-1",
-        tool_call_id="call-1",
+        step_id=f"step-{step}",
+        tool_call_id=f"call-{step}",
         operation_id=operation_id,
     )
 
@@ -275,7 +276,12 @@ def test_post_effect_commit_failure_stays_uncertain_without_replay(tmp_path) -> 
 
 
 def test_effect_handler_error_stays_uncertain_without_replay(tmp_path) -> None:
-    handler = MagicMock(return_value={"error": "connection closed after request"})
+    handler = MagicMock(
+        return_value={
+            "error": "connection closed after request; api_key=sk-test-not-a-real-key",
+            "error_type": "connection",
+        }
+    )
     executor = ToolExecutor(
         bound_tool_plan=_bound(ToolEffect.ADMINISTRATIVE, handler),
         effect_receipts=EffectReceiptStore(tmp_path / "sessions.db"),
@@ -284,9 +290,153 @@ def test_effect_handler_error_stays_uncertain_without_replay(tmp_path) -> None:
 
     first = asyncio.run(executor.aexecute("action", {"value": 1}, context=context))
     second = asyncio.run(executor.aexecute("action", {"value": 1}, context=context))
+    blocked = asyncio.run(executor.aexecute("action", {"value": 2}, context=_context(2)))
 
     assert first["error_type"] == second["error_type"] == "effect_outcome_uncertain"
+    assert first["recoverable"] is False
+    # The quarantine names its cause instead of discarding it, redacted.
+    assert first["cause_error_type"] == "connection"
+    assert "connection closed after request" in first["error"]
+    assert "sk-test-not-a-real-key" not in first["error"]
+    # A later step is blocked by, and told about, the unresolved operation.
+    assert blocked["error_type"] == "effect_outcome_uncertain"
+    assert blocked["blocking_operation_id"] == context.operation_id
+    assert blocked["blocking_tool_name"] == "action"
+    assert context.operation_id in blocked["error"]
     assert handler.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        refused_before_effect(
+            {"error": "Project memory file is missing.", "error_type": "not_found"}
+        ),
+        refused_before_effect({"error": "action requires: value", "clarification_needed": True}),
+    ],
+    ids=["not_found", "clarification"],
+)
+def test_declared_no_effect_failure_commits_without_quarantining_session(
+    tmp_path, failure: dict[str, Any]
+) -> None:
+    calls: list[int] = []
+
+    def handler(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs["value"])
+        return dict(failure) if kwargs["value"] == 1 else {"ok": True}
+
+    store = EffectReceiptStore(tmp_path / "sessions.db")
+    executor = ToolExecutor(
+        bound_tool_plan=_bound(ToolEffect.MUTATE, handler),
+        effect_receipts=store,
+    )
+    context = _context()
+
+    failed = asyncio.run(executor.aexecute("action", {"value": 1}, context=context))
+    replayed = asyncio.run(executor.aexecute("action", {"value": 1}, context=context))
+    later = asyncio.run(executor.aexecute("action", {"value": 2}, context=_context(2)))
+
+    # The handler's own recoverable error reaches the model unmasked and is the
+    # committed outcome of that logical operation.
+    assert failed == replayed == failure
+    assert later == {"ok": True}
+    assert calls == [1, 2]
+    assert store.list_uncertain(session_id="s-test") == []
+
+
+@pytest.mark.parametrize("error_type", ["authorization", "validation", "not_found"])
+def test_error_category_without_no_effect_declaration_stays_uncertain(
+    tmp_path, error_type: str
+) -> None:
+    """A Docs-style create that wrote, then failed a follow-up call, must not replay."""
+    created: list[str] = []
+
+    def create_document(**kwargs: Any) -> dict[str, Any]:
+        created.append(f"doc-{len(created) + 1}")  # the external create succeeded
+        return tool_error("token refresh failed during body insert", error_type=error_type)
+
+    store = EffectReceiptStore(tmp_path / "sessions.db")
+    executor = ToolExecutor(
+        bound_tool_plan=_bound(ToolEffect.MUTATE, create_document),
+        effect_receipts=store,
+    )
+    context = _context()
+    arguments = {"action": "create", "title": "Plan"}
+
+    first = asyncio.run(executor.aexecute("action", arguments, context=context))
+    duplicate = asyncio.run(executor.aexecute("action", arguments, context=_context(2)))
+
+    assert first["error_type"] == "effect_outcome_uncertain"
+    assert first["cause_error_type"] == error_type
+    assert "token refresh failed" in first["error"]
+    assert duplicate["blocking_operation_id"] == context.operation_id
+    assert created == ["doc-1"]
+    assert [row["operation_id"] for row in store.list_uncertain(session_id="s-test")] == [
+        context.operation_id
+    ]
+
+
+def test_raised_effect_exception_stays_uncertain_with_bounded_cause(tmp_path) -> None:
+    def handler(**_kwargs: Any) -> dict[str, Any]:
+        raise ValueError("sink rejected request after partial write " + "x" * 700)
+
+    store = EffectReceiptStore(tmp_path / "sessions.db")
+    executor = ToolExecutor(
+        bound_tool_plan=_bound(ToolEffect.MUTATE, handler),
+        effect_receipts=store,
+    )
+
+    result = asyncio.run(executor.aexecute("action", {"value": 1}, context=_context()))
+
+    assert result["error_type"] == "effect_outcome_uncertain"
+    assert result["outcome_uncertain"] is True
+    assert result["cause_error_type"] == "validation"
+    assert "sink rejected request after partial write" in result["error"]
+    assert "[truncated:" in result["error"]
+    assert len(result["error"]) < 1_000
+    assert [row["tool_name"] for row in store.list_uncertain(session_id="s-test")] == ["action"]
+
+
+def test_personal_effect_failure_cause_and_receipt_stay_redacted(tmp_path) -> None:
+    secret = "private recipient person@example.com"
+    outcomes = iter(
+        [
+            refused_before_effect(
+                {"error": f"mailbox missing for {secret}", "error_type": "not_found"}
+            ),
+            {"error": f"connection reset after sending to {secret}"},
+        ]
+    )
+    store = EffectReceiptStore(tmp_path / "sessions.db")
+    executor = ToolExecutor(
+        bound_tool_plan=_bound(
+            ToolEffect.COMMUNICATE,
+            lambda **_kwargs: next(outcomes),
+            safety=SafetyPolicy(effect=ToolEffect.COMMUNICATE, persistence=PersistenceRule.REDACT),
+        ),
+        effect_receipts=store,
+    )
+    definite_context = _context()
+
+    definite = asyncio.run(executor.aexecute("action", {"value": 1}, context=definite_context))
+    uncertain = asyncio.run(executor.aexecute("action", {"value": 2}, context=_context(2)))
+    recovered = store.recover(
+        operation_id=definite_context.operation_id,
+        session_id="s-test",
+        step_id="step-1",
+        tool_call_id="call-1",
+        tool_name="action",
+        arguments={"value": 1},
+    )
+
+    assert definite["error_type"] == "not_found"
+    assert recovered is not None and recovered.kind is EffectAdmissionKind.REPLAY
+    assert recovered.result is not None
+    assert recovered.result["error_type"] == "not_found"
+    assert recovered.result["effect_applied"] is False
+    assert secret not in json.dumps(recovered.result)
+    assert uncertain["error_type"] == "effect_outcome_uncertain"
+    assert secret not in uncertain["error"]
 
 
 def test_concurrent_duplicate_never_reaches_second_handler(tmp_path) -> None:

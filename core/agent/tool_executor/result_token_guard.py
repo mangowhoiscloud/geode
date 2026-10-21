@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
+
+from core.orchestration.context_budget import MIN_TOOL_RESULT_TOKENS
 
 _MCP_RESULT_KEYS = {
     "_meta",
@@ -38,6 +41,10 @@ def _project_mcp_result(result: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
+# Failure control fields a truncated result keeps (see _guard_tool_result).
+_ERROR_CONTROL_KEYS = ("recoverable", "outcome_uncertain", "effect_applied", "error_type")
+
+
 def _compute_model_tool_limit(model: str) -> int | None:
     """Return a tighter model-specific cap, or defer to the global cap.
 
@@ -57,6 +64,25 @@ def _compute_model_tool_limit(model: str) -> int | None:
     return min(global_limit, policy.per_tool_result_limit_tokens)
 
 
+def tool_result_char_limit(model: str = "", *, offload_threshold: int | None = None) -> int | None:
+    """Largest serialized result the processor passes through unchanged.
+
+    Mirrors ``ToolCallProcessor._serialize_tool_result``: a result is offloaded
+    once its estimated tokens exceed the offload threshold (``None`` reads the
+    configured one; non-positive disables it) and truncated past the
+    model-aware guard limit. Returns None when neither bounds the result.
+    """
+    from core.config import settings as _settings
+    from core.orchestration.context_budget import TOKEN_ESTIMATE_CHARS_PER_TOKEN
+
+    threshold = _settings.tool_offload_threshold if offload_threshold is None else offload_threshold
+    guard = _compute_model_tool_limit(model) if model else None
+    if guard is None:
+        guard = _settings.max_tool_result_tokens
+    limits = [max(tokens, MIN_TOOL_RESULT_TOKENS) for tokens in (threshold, guard) if tokens > 0]
+    return min(limits) * TOKEN_ESTIMATE_CHARS_PER_TOKEN if limits else None
+
+
 def _guard_tool_result(
     result: dict[str, Any],
     max_tokens: int | None = None,
@@ -64,7 +90,8 @@ def _guard_tool_result(
     """Truncate oversized tool results while preserving summary.
 
     ``None`` uses the configured global limit; values at or below zero disable
-    truncation explicitly.
+    truncation explicitly, and positive values below ``MIN_TOOL_RESULT_TOKENS``
+    are raised to it.
     """
     from core.config import settings as _settings
 
@@ -72,6 +99,7 @@ def _guard_tool_result(
         max_tokens = _settings.max_tool_result_tokens
     if max_tokens <= 0:
         return result
+    max_tokens = max(max_tokens, MIN_TOOL_RESULT_TOKENS)
     try:
         serialized = json.dumps(result, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
@@ -85,29 +113,134 @@ def _guard_tool_result(
         len(serialized) + TOKEN_ESTIMATE_CHARS_PER_TOKEN - 1
     ) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
 
-    base: dict[str, Any] = {
-        "_truncated": True,
-        "_original_tokens": estimated_tokens,
-    }
-    for key in ("task_id", "task_type", "status", "error_message", "tier"):
-        if key in result:
-            candidate = {**base, key: result[key]}
-            if len(json.dumps(candidate, ensure_ascii=False, default=str)) <= max_chars:
-                base = candidate
+    base: dict[str, Any] = {"_truncated": True}
+    if not result.get("_offloaded"):
+        base["_original_tokens"] = estimated_tokens
+    base = keep_failure_control(base, result, max_chars)
+    # An offload reference keeps what convergence and recall read, the content
+    # digest ahead of the per-call ref id; its size note comes after both.
+    base = _with_fitting(base, result, max_chars, ("_offloaded", "_digest", "_ref_id"))
+    base = _with_fitting(base, {"_original_tokens": estimated_tokens}, max_chars)
+    base = _with_fitting(
+        base, result, max_chars, ("task_id", "task_type", "status", "error_message", "tier")
+    )
 
     key = "summary" if "summary" in result else "preview"
     text = str(result["summary"]) if key == "summary" else serialized
+    return _fit_prefix(base, key, text, max_chars) or base
+
+
+def bound_tool_result_text(content: str, max_chars: int) -> str:
+    """Re-guard one serialized tool result to about ``max_chars`` for recovery.
+
+    A JSON object passes through the ordinary guard, so its failure control
+    fields survive; any other text becomes a truncated preview.
+    """
+    from core.orchestration.context_budget import TOKEN_ESTIMATE_CHARS_PER_TOKEN
+
+    try:
+        parsed: Any = json.loads(content)
+    except ValueError:
+        parsed = content
+    result = parsed if isinstance(parsed, dict) else {"result": parsed}
+    max_tokens = max(max_chars // TOKEN_ESTIMATE_CHARS_PER_TOKEN, MIN_TOOL_RESULT_TOKENS)
+    return _dumps(_guard_tool_result(result, max_tokens=max_tokens))
+
+
+def keep_failure_control(
+    base: dict[str, Any], result: dict[str, Any], max_chars: int
+) -> dict[str, Any]:
+    """Add ``result``'s failure control fields to ``base`` within ``max_chars``.
+
+    The one rule for every lossy stand-in (guard truncation, offload): the
+    error (as a bounded prefix), whether a retry can help, and whether an
+    effect landed outrank metadata and previews, so the model and convergence
+    tracking still see a failure as one.
+    """
+    error = result.get("error")
+    error_text = "" if not error else error if isinstance(error, str) else _dumps(error)
+    if error_text:
+        # Reserve one character first so the flags below cannot crowd it out.
+        base = _with_fitting(base, {"error": error_text[:1]}, max_chars)
+    base = _with_fitting(base, result, max_chars, _ERROR_CONTROL_KEYS)
+    if "error" in base:
+        base = _fit_prefix(base, "error", error_text, max_chars) or base
+    return base
+
+
+def offload_reference(
+    result: Any,
+    *,
+    ref_id: str,
+    original_tokens: int,
+    summary: str,
+    hint: str,
+    max_chars: int,
+) -> dict[str, Any]:
+    """Build the in-context stand-in for an offloaded ``result``.
+
+    ``_digest`` identifies the full original content, so identical results
+    compare equal across calls while the per-call ``_ref_id`` differs. A
+    failure is fitted within ``max_chars`` (the threshold that offloaded it)
+    by priority: the stop signal (an error prefix and ``recoverable``), then
+    ``_ref_id`` for recall, the other control fields and the full error
+    prefix, and only then the remaining metadata, hint, and summary. Any
+    other result keeps the plain summary and recall hint.
+    """
+    reference: dict[str, Any] = {
+        "_offloaded": True,
+        "_ref_id": ref_id,
+        "_original_tokens": original_tokens,
+        "_digest": hashlib.sha256(_dumps(result).encode("utf-8")).hexdigest()[:16],
+    }
+    if not (isinstance(result, dict) and result.get("error")):
+        return {**reference, "summary": summary, "hint": hint}
+    error = result["error"]
+    error_text = error if isinstance(error, str) else _dumps(error)
+    fitted = _with_fitting({"_offloaded": True}, {"error": error_text[:1]}, max_chars)
+    fitted = _with_fitting(fitted, result, max_chars, ("recoverable",))
+    fitted = _with_fitting(fitted, reference, max_chars, ("_ref_id",))
+    fitted = keep_failure_control(fitted, result, max_chars)
+    fitted = _with_fitting(fitted, reference, max_chars, ("_original_tokens", "_digest"))
+    fitted = _with_fitting(fitted, {"hint": hint}, max_chars)
+    fitted = _fit_prefix(fitted, "summary", summary, max_chars) or fitted
+    # Display order only; inclusion was decided by priority above.
+    order = ("_offloaded", "_ref_id", "error", *_ERROR_CONTROL_KEYS, *reference)
+    return {key: fitted[key] for key in dict.fromkeys((*order, *fitted)) if key in fitted}
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _with_fitting(
+    base: dict[str, Any],
+    source: dict[str, Any],
+    max_chars: int,
+    keys: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """Add each of ``keys`` (default: all) from ``source`` that still fits, in order."""
+    for key in source if keys is None else keys:
+        if key in source:
+            candidate = {**base, key: source[key]}
+            if len(_dumps(candidate)) <= max_chars:
+                base = candidate
+    return base
+
+
+def _fit_prefix(base: dict[str, Any], key: str, text: str, max_chars: int) -> dict[str, Any] | None:
+    """Return ``base`` with the longest prefix of ``text`` at ``key`` that fits, or None."""
     low, high = 0, len(text)
-    guarded: dict[str, Any] = {}
+    fitted: dict[str, Any] | None = None
     while low <= high:
         middle = (low + high) // 2
         candidate = {**base, key: text[:middle]}
-        if len(json.dumps(candidate, ensure_ascii=False, default=str)) <= max_chars:
-            guarded = candidate
+        if len(_dumps(candidate)) <= max_chars:
+            fitted = candidate
             low = middle + 1
         else:
             high = middle - 1
-    return guarded
+    return fitted
 
 
 # Public projection boundary used by packaged benchmark adapters.

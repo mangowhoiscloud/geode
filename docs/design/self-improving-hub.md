@@ -1,8 +1,8 @@
 ---
 title: DESIGN.md · `/geode/self-improving/` (Hub)
 geode_version: 0.99.65
-schema_version: 1
-last_updated: 2026-05-26
+schema_version: 2
+last_updated: 2026-10-08
 applies_to_geode: ">=0.99.65"
 parent: self-improving-hub-system.md
 ---
@@ -35,10 +35,18 @@ Build-time render — static HTML produced by `scripts/build_self_improving_hub.
 
 ## 4. Sections (h2.section, top to bottom)
 
-1. **Petri Audit** — table of recent audits (5-10 rows max, "view all ↗" link)
-2. **Seed Generation** — table of seed-gen runs (all of them; small N for now)
-3. **Autoresearch** — table of baseline / mutations / results / policies artifacts (4 rows static)
-4. **Documentation** — table of `/geode/docs/petri/*` pages (5 rows static)
+0. **In this hub** (`#in-this-hub`, schema 2) — the first-screen orientation
+   list from master §6: one flat row per surface (Petri Audit, Seed
+   Generation, Autoresearch, Crucible) with its in-page jump, the builder's
+   existing count/status label (`petri_section_label`,
+   `seedgen_section_label`, `baseline {autoresearch_status_label}`,
+   `crucible_count_label`), one sentence, and the surface's own page.
+   Marked `data-page-map`, so no second "On this page" map is generated.
+1. **Petri Audit** (`#petri-audit`) — table of recent audits (5-10 rows max, "view all ↗" link)
+2. **Seed Generation** (`#seed-generation`) — table of seed-gen runs (all of them; small N for now)
+3. **Autoresearch** (`#autoresearch`) — table of baseline / mutations / results / policies artifacts (4 rows static)
+4. **Crucible** (`#crucible`) — per-attempt campaign ledger usage (metered floor)
+5. **Documentation** (`#documentation`) — table of `/geode/docs/petri/*` pages (5 rows static)
 
 ## 5. Per-section columns
 
@@ -95,41 +103,10 @@ Static 5-row table:
 
 ## 6. Sidebar contract
 
-Per master DESIGN.md §7:
-
-```
-GEODE
-/self-improving
-
-──── Hub
-  Overview                    [active]
-
-──── Petri Audit            [11]
-  SPA log viewer ↗
-  Recent audits
-    audit_Hz4Qrv4Z
-    audit_k4QhmKXs
-    audit_m8BRHKDA          (top 3 by started_at)
-
-──── Seed Generation        [1 run]
-  All runs
-    gen1-redundant_tool_invocation
-  Run dashboard ↗            (link to /geode/docs/petri/seeds)
-
-──── Autoresearch          [stale or live]
-  Baseline
-  Mutations
-  Results
-  Policies
-
-──── Docs
-  Petri overview
-  Run an audit
-  Judge dimensions
-
-──── Meta
-  GitHub ↗                  (https://github.com/mangowhoiscloud/geode)
-```
+The nav is the shared `render_hub_nav` output defined in master DESIGN.md §7;
+on this page `Hub > Overview` carries `aria-current="page"`. Recent audits
+(top 3 by `started_at`) and Runs by campaign are collapsible groups. There is
+no breadcrumb on the hub root.
 
 ## 7. Empty states
 
@@ -156,7 +133,7 @@ Repo: github.com/mangowhoiscloud/geode
 | Link | Target |
 |---|---|
 | Sidebar `Hub > Overview` (self) | `/geode/self-improving/` |
-| Petri audit row id | `/geode/self-improving/petri-bundle/#/tasks/<task_id>` (SPA deep link) |
+| Petri audit row id | `/geode/self-improving/petri-bundle/#/logs/<encodeURIComponent(eval filename)>` (SPA deep link; `#/tasks/` is not a viewer route, see `site/DESIGN.md` §11) |
 | Petri section footer | `/geode/self-improving/petri-bundle/` |
 | Seed-gen run row id | `/geode/self-improving/seed-generation/<run_id>/` |
 | Seed-gen footer | `/geode/docs/petri/seeds` (Next.js dashboard) |

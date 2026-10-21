@@ -56,7 +56,6 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "check_status",
         "calculate",
         "memory_search",
-        "manage_rule",
         "web_fetch",
         "llms_txt_index",
         "general_web_search",
@@ -90,6 +89,8 @@ WRITE_TOOLS: frozenset[str] = frozenset(
     {
         "memory_save",
         "note_save",
+        # Rule create/update/delete persist into every later system prompt.
+        "manage_rule",
         "manage_login",
         "profile_update",
         "profile_preference",
@@ -100,6 +101,9 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "document_ingest",
         "edit_file",
         "write_file",
+        # R6.9: cross-session input and new persistent sessions.
+        "send_session_message",
+        "fork_session",
     }
 )
 
@@ -111,7 +115,16 @@ COMPUTER_USE_TOOLS: frozenset[str] = frozenset({"computer", "computer_use"})
 COLLABORATION_TOOLS: frozenset[str] = frozenset(
     {"spawn_agent", "list_agents", "wait_agent", "interrupt_agent", "send_message", "followup_task"}
 )
-SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset({"delegate_task", *COLLABORATION_TOOLS})
+# R6.9 root-session operations; children keep only their R6.5 parent route.
+SESSION_PEER_TOOLS: frozenset[str] = frozenset(
+    {"send_session_message", "fork_session", "read_session_messages"}
+)
+# Reading one's own peer mailbox is a READ with no approval to wait for, so a
+# headless root session (daemon, scheduler) may still admit its messages.
+SESSION_PEER_READ_TOOLS: frozenset[str] = frozenset({"read_session_messages"})
+SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset(
+    {"delegate_task", *COLLABORATION_TOOLS, *SESSION_PEER_TOOLS}
+)
 
 # Compatibility denials for tools outside a BoundToolPlan (native hosted,
 # transient, and MCP routes). Plan-owned tools derive their minimum from
@@ -120,7 +133,7 @@ SUBAGENT_CONTROL_TOOLS: frozenset[str] = frozenset({"delegate_task", *COLLABORAT
 HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
-        *SUBAGENT_CONTROL_TOOLS,
+        *(SUBAGENT_CONTROL_TOOLS - SESSION_PEER_READ_TOOLS),
         *COMPUTER_USE_TOOLS,
         *SENSITIVE_TOOLS,
     }

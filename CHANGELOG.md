@@ -49,6 +49,10 @@ functional change.
 
 ### Added
 
+- **Research desktop navigation.** Recognize one bounded horizontal wheel
+  stroke per scene inside artwork, with direction and momentum guards. Keep
+  native scrolling, zoom, nested controls, and mobile touch navigation; widen
+  the existing desktop pager targets and add the existing neutral focus fill.
 - **GPT-6.1 Sol.** Select `gpt-6.1-sol` on the Platform API and the Codex
   subscription. Requests accept only `low`..`max` effort (no `none`, `minimal`
   or Codex `ultra`), budget context per route (1.05M/922K input on the API,
@@ -61,12 +65,131 @@ functional change.
   choice on Sonnet 5.5 (Haiku 5.5 keeps it), and Haiku 5.5's 5x tariff when a
   prompt, counting cache reads and writes, exceeds 100,000 tokens. Account-bound
   thinking drops are now reported by reason and count.
+- **Peer-session messages and persistent session forks (R6.9).** `/send`,
+  `geode session send`, and the `send_session_message` tool queue a message for
+  another existing root session of the same project. The sender comes from the
+  bound session or explicit operator intent, never from tool arguments; child,
+  gateway, unknown, and other-project sessions are refused before any write.
+  The result is a durable `queued` receipt; `geode session message-status`
+  reports `applied` only after the target checkpointed the message, and neither
+  means a turn ran. The target is never woken. At its next loop boundary it
+  receives only a GEODE notice; its model reads the text with the
+  `read_session_messages` tool, so peer text reaches a provider only as
+  tool-result data, never as user or system input, and each message is
+  returned once. Messages are at most 4,000 characters without control
+  characters (line breaks and tabs allowed), and a read returns up to 5 within
+  8,000 serialized characters. A message counts as `applied` only after the
+  checkpoint holds the read result carrying it; a read whose result was lost,
+  interrupted or cancelled returns the message to unread. Peer backlog never
+  delays a child's messages or completion. A full peer mailbox (200 unread)
+  refuses new input instead of evicting.
+  `/fork`, `geode session fork`, and the `fork_session` tool publish a new
+  paused session from a frozen completed-turn cut of a permitted source. The
+  operator may fork root sessions and finished children. A root session may
+  fork only itself or its own finished child. The fork records source session,
+  generation, and cut, and copies bounded, balanced conversation history and
+  model settings only. Busy or incomplete sources are refused, the source stays
+  byte-identical, and publication is atomic, with crashed partial forks removed.
+  A fork reads only messages bound to the source's last committed checkpoint
+  (a failed save is never copied; a checkpoint written before this release
+  needs one completed turn first), refuses symlinked source files and histories
+  with an orphaned, duplicate or open tool call, and lets the owning parent
+  fork a finished child after its run record was pruned. A cancelled IPC fork
+  keeps the source Lane until the fork has actually finished.
+  `geode session list` and `/resume` show the lineage. Live sub-agent controls
+  are now keyed by store, parent, child, and generation, so equal child ids in
+  two projects cannot interrupt each other.
 - **Research reader touch navigation.** Swipe artwork left or right to move
   between GEODE, Jev, and JEVDB scenes. Preserve scene URLs, language, browser
   history, vertical scrolling, pinch zoom, and taps on full-size image links.
 
 ### Fixed
 
+- **Context pressure is measured in provider tokens.** The in-turn check
+  estimated 4 characters per token plus a 1.2x margin, but dense text such as
+  hex digests costs about 2 characters per token. A live `codex-oauth`
+  `gpt-6-sol` turn reading eighteen 57 KB files sent 259,201 input tokens on a
+  272K route, past its 176K warning and 227K critical levels, before any
+  maintenance ran. Each action request now records its provider-reported
+  input and attributes it to the text it sent: strings already measured keep
+  their own ratio, raised whenever a later measurement shows they were
+  under-priced (a first request mixing prose and dense text prices both at
+  its average), and text added since the last response (a new tool batch)
+  is estimated at no less than the hex density (2.2x the 4 chars/token
+  guess). The pressure check, the pre-send budget guard and recovery use these
+  estimates, so compaction starts at the warning level and pruning at
+  critical on every route. When a tool batch that compaction and pruning must
+  keep still exceeds the budget, or the provider rejects the request, the
+  largest tool results are bounded through the result guard, keeping their
+  failure fields, instead of sending the request or ending the turn.
+  Adaptive prune targets the warning level as measured instead of up to 1.2x
+  above it. Requests below 8,000 estimated tokens, planner and judge prompts,
+  and Anthropic responses that compacted on the server do not recalibrate.
+- **Effect failures no longer freeze a session.** When a write tool such as
+  `memory_save` refused a request before acting (for example, project memory
+  not initialized), its error was replaced by a generic "Effect outcome is
+  uncertain" and every later write in the session, such as `generate_report`,
+  was refused until an operator reconciled it. A tool can now declare that it
+  refused before doing anything (`effect_applied: false`; set for
+  `memory_save`'s missing-argument, missing-memory, and invalid-insight paths
+  and the argument checks of `manage_rule` and `generate_report`), and that
+  error reaches the model as a
+  recoverable result recorded as the operation's outcome. Every other effect
+  error, even one labelled `validation` or `authorization`, may have partly
+  applied and stays quarantined, but now states its bounded, redacted cause, and
+  a blocked later call names the unresolved operation and its
+  `geode session resolve-effect` command.
+
+- **Gateway conversation isolation in search tools.** `memory_search` and
+  `session_search` (both its default and `scope="all"` modes, including indexes
+  built before this change) return a gateway conversation only to that thread
+  or its workers, resolved from the tool context rather than arguments, so one
+  channel or sender can no longer read another's messages. Rows whose owner
+  cannot be established are visible only to their own session, and
+  `geode reindex` records each row's owner; a global index built without that
+  ownership data is not searched until it is rebuilt. `memory_search` responses
+  are capped at 4,000 serialized characters in total (1,000 per match) and
+  `session_search` snippets at 1,000, with explicit truncation markers.
+- **Peer reads within the tool-result limit.** `read_session_messages` bounds
+  the whole serialized result by min(8,000, the live tool-result limit), so a
+  read is never offloaded or truncated into a redelivery loop; an oversized
+  message is delivered once as a marked prefix, and a limit too small for any
+  message returns a short final error naming the setting to raise instead of
+  an empty batch. Positive tool-result guard and offload limits below 32
+  tokens are raised to 32 so that error always fits, and a truncated tool
+  result of any tool keeps its `error`, `error_type`, `recoverable`, and effect
+  flags even after hooks add context. Concurrent reads no longer
+  return the same message twice, and notified ids stay within the unread
+  backlog.
+- **Session ownership and fork recovery.** Resuming a child session keeps its
+  durable parent marker. Fork cleanup removes database rows before the
+  directory and `.fork-pending` marker, keeps or restores the marker when row
+  cleanup or directory removal fails so a later sweep retries, and bounds the
+  swept-directory set.
+- **Scheduler claims under write failures.** A failing dispatch callback no
+  longer releases a running turn's claim; claim and settlement writes that fail
+  restore the job, its pending command, and its run id, so one-shot jobs are not
+  lost and `_ACTIVE_RUNS` does not leak.
+- **Non-finite audit samples.** A dimension with any NaN or infinite sample is
+  unscored (NaN mean and stderr), so the promotion gate rejects instead of
+  promoting on the remaining samples.
+- **Self-improving hub post-processing.** Table wrapping is idempotent for any
+  label length, and the row filter's border meets 3:1 contrast.
+
+- **Eco² links.** The about page and RSI roadmap link to the moved Eco²
+  case page at `mangowhois.ai/eco2/`; the retired GitHub Pages address
+  returned 404.
+
+- **Guarded roadmap closure merges.** `scripts/merge_pr.py` now admits the
+  roadmap §0.3 tracking-only topic → `main` PR instead of rejecting every
+  non-promotion main target. Admission additionally requires the current-main
+  diff to modify only `docs/architecture/extensibility-roadmap.md`, reads both
+  exact-commit blobs from GitHub and verifies their git blob ids, proves from
+  the commits' Git trees that the file stays a regular `100644` blob, then runs the
+  existing roadmap checker and requires at least one `IN_DEVELOP` → `DONE`
+  closure. Every existing protection, check, ancestry, double-snapshot and
+  merge-parent requirement is unchanged. Receipts name the `flow` and, for
+  closures, the blob ids and closed GAPs.
 - **Current models in evaluations.** Petri and seed-generation roles now admit
   current catalog offerings (opt-in `current_models = true`; pinned defaults
   and custom `allowed_models` unchanged), so explicit GPT-6/6.1 and Claude 5.5
@@ -111,9 +234,65 @@ functional change.
   language and selected pages when navigating browser history.
   Shorten collection selection URLs to the default report, `#jev`, or `#jevdb`,
   preserving historical selection links without duplicate history entries.
+- **Truthful tool outcomes.** `trigger_event` lists and fires the runtime's
+  real `TriggerManager` (unknown, disabled or callback-less triggers are
+  errors). `schedule_job` rejects malformed mutations instead of answering with
+  a listing. `memory_save`, `note_save` and `manage_rule` report the project
+  memory owner's real result (written, already recorded, missing file,
+  invalid, conflict, not found, failed), and `memory_search` searches by query
+  and tier. `generate_report` writes the requested markdown, JSON or HTML,
+  keeps the supplied findings and data, leaves an absent score unknown instead
+  of `0.0`, and returns the saved path, size and digest.
+- **MCP failure envelopes.** Notification and calendar adapters treat
+  `isError` and transport errors as failures: no `sent`/`created`/deleted
+  success, no event without an ID, and a failed calendar read is an error
+  rather than an empty schedule (a partial multi-source read is labelled with
+  its failed sources). Calendar sync skips pushing when existing events
+  cannot be read.
+- **Scheduler store and run lifecycle.** Every job change reloads the store
+  under a cross-process `flock` before writing, so concurrent instances no
+  longer lose additions or resurrect deleted or paused jobs; an unreadable or
+  malformed store is refused and left byte-identical. A run is claimed in the
+  store with a `run_id`, owner process and manual/scheduled provenance after
+  re-checking eligibility; one occurrence fires once, elapsed time never takes
+  over a live run, a manual run does not consume a scheduled occurrence, and a
+  stale outcome cannot settle a newer run. Queued action runs settle only from
+  the turn's real termination after the session state is saved; a failed
+  required write leaves the run claimed and unsettled. A failed run-claim
+  write leaves that occurrence retryable (recurring, cron and session-only
+  jobs alike), and a still-owned stuck run is reported once per run instead
+  of on every tick.
+- **Project memory integrity.** PROJECT.md and rule changes lock a separate
+  inode, reload, validate and write atomically, so concurrent threads and
+  processes do not lose updates and unreadable content is left unchanged.
+  Symlinked or project-escaping memory and rule paths are neither read into
+  context nor written, and nothing is created outside the project.
+- **Collaboration mailbox.** Message admission uses a checkpointed,
+  recipient-scoped receipt instead of searching message text for
+  `mailbox_id=` markers, so quoted text can no longer suppress and
+  acknowledge a real message. A full child inbox rejects new input instead of
+  evicting accepted messages, and a new child is refused while its parent's
+  completions would not fit, so every child result stays deliverable.
+- **Promotion coverage.** Scaffold-search promotion (gate, bootstrap and random
+  control arm) requires every weighted dimension to be measured in both the
+  audit and the baseline; a missing dimension is unknown, not a best-case score.
+  NaN and infinite dimension scores are dropped at extraction and rejected
+  before scoring, so they can no longer pass the bootstrap floor, the margin or
+  the random arm; a non-finite stderr on any dimension is rejected too. With
+  anchor confidence enabled, an anchor dimension missing from the audit blocks
+  promotion (gate, bootstrap and random arm) instead of scoring as best case,
+  and a baseline with only some anchors requires a rebaseline. A
+  non-finite bench field is unmeasured rather than clamped to 1.0, and an
+  unreadable baseline sample count applies the conservative N=1 margin.
+  Weights, margins and thresholds are unchanged.
+- **Petri split judge.** A live `--judge-mode split` audit is refused before
+  dispatch; split remains a cost preview.
 
 ### Removed
 
+- **CLI memory action module.** `core/cli/memory_handler.py` and the module
+  hook globals it alone used are deleted; `manage_rule` uses the injected
+  project memory owner directly.
 - **Duplicate sync approval gates.** The unused synchronous
   `ApprovalWorkflow.apply_safety_gates` / `confirm_write` / `confirm_cost` /
   `confirm_sensitive` / `confirm_mcp` / `request_bash_approval` twins are
@@ -122,6 +301,14 @@ functional change.
 
 ### Changed
 
+- **Rule mutations require approval.** `manage_rule` is a write tool (cached
+  approval) rather than an auto-approved safe tool, because rules persist
+  into later system prompts.
+- **Scheduler dispatch callback.** `on_job_fired` receives a fifth `run_id`
+  argument and reports outcomes through `record_run_outcome`; a legacy
+  four-argument callback still works and its runs settle as `dispatched`
+  (outcome unknown). `SchedulerLock` is a non-reentrant `flock` and its
+  `session_id` argument is ignored.
 - **Public documentation destination.** Publish the moved landing and docs
   routes as redirects to `mangowhois.ai`, preserving language and fragments.
   Retain research readers, replay, experiment archives and PDFs on GitHub
@@ -201,9 +388,44 @@ functional change.
   pins and limits; local selection, independent validation, and release remain
   distinct. The landing now exposes an explicit KO/EN control; Escape closes
   mobile docs navigation even while its search field contains a query.
+- **Responsive Self-Improving Hub shell.** Every generated hub page, the 11
+  templates and the seedgen sub-pages alike, now takes one nav from
+  `render_hub_nav` and is written through `write_hub_page` in
+  `scripts/build_self_improving_hub.py`. Narrow screens get a brand bar with a
+  native "Contents" disclosure and start at the content; from 64rem the same
+  list is a sticky sidebar. Pages gain a skip link, breadcrumbs, a
+  build-time "On this page" map, and a first-screen surface list on the hub
+  landing. Each table now scrolls inside a labelled, keyboard-reachable region
+  instead of widening the page; no column is hidden. A deferred
+  `assets/hub.js` adds a row filter to tables with 8+ rows and keeps pages
+  fully usable without JS. Type sizes and touch targets were raised (12px
+  floor, 44px rows). The hub now wears the mangowhois research room (hub
+  design schema 3): a night substrate with paper ink, condensed display titles,
+  mono ledger tables, square forms and hairline rules, chips as outlines in
+  their own tone, and one signal vermilion for the current place, hover and
+  focus only; every text colour keeps at least 4.5:1, and the title's single
+  registration settle is off under reduced motion. The research host supplies
+  the mangowhois fonts; elsewhere the system stack renders the same layout.
+  Rendered data, page URLs and viewer routes
+  are unchanged; every page's nav now lists the full route set, and the
+  duplicate "Recent audits" link to the log viewer became a disclosure label.
+  `--refresh-presentation DIR` applies the same shell to a copy of the
+  already-published pages without recomputing data, so values with no tracked
+  source (runtime baselines, local Crucible ledgers, retired runs) and their
+  build stamps stay as published; Inspect bundles are left byte-identical and
+  a rerun changes nothing. Two chrome corrections ride along: the Autoresearch
+  nav status reads `snapshot` instead of `live` (`stale`/`absent` unchanged),
+  and the 404 Crucible link `/geode/docs/architecture/crucible-kernel` now
+  points to the kernel source pinned at `80b130c3`, next to the official
+  Crucible bounded-search docs page.
 
 ### Security
 
+- Lock `certifi` at 2026.10.19 to address PYSEC-2026-4320 reported by the
+  runtime dependency audit; it is a transitive dependency, no declared range
+  changes.
+- Lock `mcp` at 1.30.0 to address CVE-2026-59951 reported by the runtime
+  dependency audit; the declared `mcp>=1.28,<2` range is unchanged.
 - Lock the site's optional sharp dependency at 0.35.5 and its prebuilt libvips
   packages at 1.3.4 to address GHSA-wq5f-xc86-pv6w (librsvg CVE-2026-96889),
   restoring the dependency audit without changing Next.js or the ESLint patch.

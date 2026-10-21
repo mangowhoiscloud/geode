@@ -103,6 +103,11 @@ def collect_guard_state(loop: AgenticLoop) -> dict[str, Any]:
         "last_verify_rubric_misses": list(getattr(metrics, "last_verify_rubric_misses", ())),
         "last_verify_reflection_hint": str(getattr(metrics, "last_verify_reflection_hint", "")),
         "last_verify_should_retry": bool(getattr(metrics, "last_verify_should_retry", False)),
+        # Mailbox items already in ``messages`` but not yet acknowledged.
+        "admitted_mailbox": {
+            "recipient": getattr(loop, "_session_id", ""),
+            "ids": sorted(getattr(loop, "_admitted_mailbox_ids", set())),
+        },
     }
 
 
@@ -165,6 +170,18 @@ def apply_guard_state(loop: AgenticLoop, data: Any) -> None:
         )
         metrics.last_verify_reflection_hint = str(data.get("last_verify_reflection_hint") or "")
         metrics.last_verify_should_retry = bool(data.get("last_verify_should_retry", False))
+    # Trusted, recipient-scoped admission receipt; anything malformed resets to
+    # empty (fail closed: an unread item is then delivered again, never hidden).
+    receipt = data.get("admitted_mailbox")
+    ids = receipt.get("ids") if isinstance(receipt, dict) else None
+    owned = isinstance(receipt, dict) and receipt.get("recipient") == getattr(
+        loop, "_session_id", ""
+    )
+    loop._admitted_mailbox_ids = (
+        {i for i in ids if isinstance(i, int) and not isinstance(i, bool) and i > 0}
+        if owned and isinstance(ids, list)
+        else set()
+    )
 
 
 def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
@@ -192,6 +209,12 @@ def restore_loop_state(loop: AgenticLoop, state: Any) -> None:
         if callable(attach_ledger):
             attach_ledger(loop._evidence_ledger)
     loop._session_id = state.session_id
+    # The durable R6.5 child marker travels with the session, so a resumed
+    # child stays a child; a legacy record falls back to the runtime binding,
+    # never to the previous conversation of a reused (IPC poller) loop.
+    loop._parent_session_id = str(
+        getattr(state, "parent_session_id", "") or getattr(loop, "_bound_parent_session_id", "")
+    )
     if getattr(getattr(loop, "_session_metrics", None), "session_id", "") != state.session_id:
         loop._session_metrics = SessionMetrics(
             session_id=state.session_id,
@@ -246,6 +269,7 @@ def save_checkpoint(
             user_input=user_input,
             loop_guards=collect_guard_state(loop),
             pending_verification=dict(getattr(loop, "_pending_verification", {}) or {}),
+            parent_session_id=str(getattr(loop, "_parent_session_id", "") or ""),
         )
         if strict_messages:
             loop._checkpoint.save(state, strict_messages=True)

@@ -15,7 +15,7 @@
     "verify-metadata": "node scripts/verify-public-metadata.mjs",
     "verify-geo": "node scripts/verify-geo-preflight.mjs",
     "typecheck": "next typegen && tsc --noEmit",
-    "postbuild": "node scripts/export-research-routes.mjs && node scripts/test-research-routes.mjs && node scripts/test-reader-swipe.mjs"
+    "postbuild": "node scripts/export-research-routes.mjs && node scripts/test-research-routes.mjs && node scripts/test-reader-swipe.mjs && node scripts/test-reader-wheel.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.1.4",

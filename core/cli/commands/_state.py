@@ -300,6 +300,8 @@ COMMAND_MAP: dict[str, str] = {
     "/skill": "skill_invoke",
     "/cost": "cost",
     "/resume": "resume",
+    "/fork": "fork",
+    "/send": "send",
     "/cognitive": "cognitive",
     "/context": "context",
     "/ctx": "context",
@@ -340,6 +342,8 @@ def show_help(command_registry: _Any = None) -> None:
     console.print("  [label]/skills[/label]             — List/add/reload skills")
     console.print("  [label]/skill[/label] <name> [args] — Invoke a skill")
     console.print("  [label]/resume[/label]             — Resume interrupted session")
+    console.print("  [label]/fork[/label] [sid]         — Fork a completed turn into a new session")
+    console.print("  [label]/send[/label] <sid> <msg>   — Queue a message for a peer session")
     console.print("  [label]/cognitive[/label] <sid>    — Show cognitive state for a session")
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")

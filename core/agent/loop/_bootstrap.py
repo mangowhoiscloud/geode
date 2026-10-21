@@ -238,6 +238,13 @@ def initialize_runtime(
         import logging
 
         logging.getLogger(__name__).warning("SessionCheckpoint init failed", exc_info=True)
+    if loop._checkpoint is not None:
+        try:
+            loop._checkpoint.sweep_orphan_forks_once()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("Crashed fork sweep failed", exc_info=True)
 
     from core.agent.cognitive_state import CognitiveState
 

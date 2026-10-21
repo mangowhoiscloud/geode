@@ -13,8 +13,12 @@ from typing import Any
 
 from core.paths import GLOBAL_SCHEDULER_DIR, PROJECT_SCHEDULER_FILE, PROJECT_SCHEDULER_LOG_DIR
 
-OnJobFired = Callable[[str, str, bool, str], None]
-"""Callback: (job_id, action, isolated, agent_id) -> None."""
+OnJobFired = Callable[[str, str, bool, str, str], None]
+"""Callback: (job_id, action, isolated, agent_id, run_id) -> None.
+
+``run_id`` fences the dispatched run: its outcome is settled with
+``SchedulerService.record_run_outcome(job_id, run_id, ...)``.
+"""
 
 DEFAULT_STORE_PATH = PROJECT_SCHEDULER_FILE
 DEFAULT_LOG_DIR = PROJECT_SCHEDULER_LOG_DIR
@@ -92,6 +96,15 @@ class ScheduledJob:
     created_at_ms: float = 0.0
     next_run_at_ms: float | None = None
     last_run_at_ms: float | None = None
-    last_status: str = ""  # "ok" | "error" | "skipped" | "stuck"
+    # "ok" | "error" | "skipped" | "stuck" | "paused", or "dispatched" while an
+    # action prompt handed to the session queue has not reported its outcome.
+    last_status: str = ""
     last_duration_ms: float = 0.0
-    running_since_ms: float | None = None  # Set when executing, cleared on completion
+    running_since_ms: float | None = None  # Set when claimed, cleared on settle
+    run_id: str = ""  # Fence for the claimed run; empty when idle
+    # Process identity (pid + birth time) that owns the claimed run; a claim is
+    # only taken over once this owner is observed gone, never by elapsed time.
+    run_owner: str = ""
+    run_kind: str = ""  # "scheduled" | "manual" for the claimed run
+    # Scheduled (not manual) claim time; a manual run never consumes a slot.
+    last_scheduled_at_ms: float | None = None

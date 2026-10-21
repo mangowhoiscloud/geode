@@ -1,9 +1,9 @@
 """Output/Export Tools — LLM-callable tools for results export.
 
 Layer 5 tools for output generation:
-- GenerateReportTool: Generate a lightweight report artifact
+- GenerateReportTool: Render a markdown/json/html report artifact with a save receipt
 - ExportJsonTool: Export analysis result as JSON file
-- SendNotificationTool: Stub notification sender
+- SendNotificationTool: Deliver through the injected NotificationPort, or report not sent
 
 All artifact-producing tools auto-save to Vault (.geode/vault/).
 """
@@ -11,9 +11,12 @@ All artifact-producing tools auto-save to Vault (.geode/vault/).
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import html
 import json
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -39,12 +42,94 @@ def _save_to_vault(
         log.debug("Vault save failed (best-effort)", exc_info=True)
 
 
+_REPORT_FORMATS = {"markdown": ".md", "json": ".json", "html": ".html"}
+_REPORT_KNOWN_KEYS = ("summary", "tier", "final_score", "subscores", "recommendation", "findings")
+
+
+def _report_sections(subject: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Project caller data into report sections; absent values stay None."""
+    score = data.get("final_score")
+    tier = data.get("tier")
+    if data.get("summary"):
+        summary = str(data["summary"])
+    elif score is not None:
+        tier_text = f" as Tier {tier}" if tier is not None else ""
+        summary = f"Subject '{subject}' evaluated{tier_text} with final score {score:.1f}/100."
+    else:
+        summary = None
+    findings = data.get("findings")
+    return {
+        "executive_summary": summary,
+        "scores": data.get("subscores") if data.get("subscores") is not None else {},
+        "tier": tier,
+        "final_score": score,
+        "findings": findings if isinstance(findings, list) or findings is None else [findings],
+        "recommendations": data.get("recommendation"),
+        "details": {k: v for k, v in data.items() if k not in _REPORT_KNOWN_KEYS},
+    }
+
+
+def _items(value: Any, text: Callable[[Any], str]) -> list[str]:
+    """One display line per entry of a caller value of any JSON shape."""
+    if isinstance(value, dict):
+        return [f"{k}: {text(v)}" for k, v in value.items()]
+    if isinstance(value, list):
+        return [text(v) for v in value]
+    return [] if value in (None, "") else [text(value)]
+
+
+def _render_report(report: dict[str, Any], fmt: str) -> str:
+    """Serialize the report in the requested format (values escaped for HTML)."""
+    if fmt == "json":
+        return json.dumps(report, indent=2, ensure_ascii=False, default=str)
+    sections = report["sections"]
+    unknown = "not provided"
+
+    def text(value: Any) -> str:
+        if value is None:
+            return unknown
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False, default=str)
+
+    blocks: list[tuple[str, list[str]]] = [
+        ("Summary", [text(sections["executive_summary"])]),
+        ("Tier", [text(sections["tier"])]),
+        ("Final score", [text(sections["final_score"])]),
+        ("Scores", _items(sections["scores"], text) or [unknown]),
+        ("Findings", _items(sections["findings"] or [], text) or [unknown]),
+        ("Recommendations", [text(sections["recommendations"])]),
+    ]
+    if sections["details"]:
+        blocks.append(("Details", [f"{k}: {text(v)}" for k, v in sections["details"].items()]))
+    if fmt == "markdown":
+        lines = [f"# {report['title']}", "", f"_Generated {report['generated_at']}_", ""]
+        for heading, items in blocks:
+            lines += [f"## {heading}", "", *(f"- {item}" for item in items), ""]
+        return "\n".join(lines)
+    esc = html.escape
+    body = "".join(
+        f"<h2>{esc(heading)}</h2><ul>{''.join(f'<li>{esc(i)}</li>' for i in items)}</ul>"
+        for heading, items in blocks
+    )
+    return (
+        '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">'
+        f"<title>{esc(report['title'])}</title></head><body>"
+        f"<h1>{esc(report['title'])}</h1><p><em>Generated {esc(report['generated_at'])}"
+        f"</em></p>{body}</body></html>\n"
+    )
+
+
 class GenerateReportTool:
     """Tool for generating structured reports.
 
-    Produces a lightweight artifact from caller-provided structured data.
+    Renders caller-provided analysis data in the requested format, saves the
+    exact bytes to the Vault, and returns the saved path as the receipt.
     Specialized report generators belong in external packages.
     """
+
+    def __init__(self, vault: Any = None) -> None:
+        self._vault = vault
 
     @property
     def name(self) -> str:
@@ -77,40 +162,56 @@ class GenerateReportTool:
                     "default": "markdown",
                 },
             },
-            "required": ["subject"],
+            "required": [],
         }
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
-        subject: str = kwargs.get("subject") or kwargs.get("subject_id") or "Untitled"
-        analysis_data: dict[str, Any] = kwargs.get("analysis_data", {})
-        fmt: str = kwargs.get("format", "markdown")
+        from core.memory.vault import Vault, _slugify
+        from core.tools.base import refused_before_effect, tool_error
 
-        tier = analysis_data.get("tier", "N/A")
-        score = analysis_data.get("final_score", 0.0)
+        subject = str(kwargs.get("subject") or kwargs.get("subject_id") or "Untitled")
+        analysis_data = kwargs.get("analysis_data") or {}
+        fmt = str(kwargs.get("format") or "markdown")
+        # Argument validation precedes rendering and the vault write.
+        if fmt not in _REPORT_FORMATS:
+            return refused_before_effect(
+                tool_error(
+                    f"Unsupported report format '{fmt}'; use one of {sorted(_REPORT_FORMATS)}",
+                    error_type="validation",
+                )
+            )
+        if not isinstance(analysis_data, dict):
+            return refused_before_effect(
+                tool_error("analysis_data must be an object", error_type="validation")
+            )
+        score = analysis_data.get("final_score")
+        if score is not None and (isinstance(score, bool) or not isinstance(score, int | float)):
+            return refused_before_effect(
+                tool_error("final_score must be a number when provided", error_type="validation")
+            )
 
-        report = {
+        report: dict[str, Any] = {
             "title": f"GEODE Analysis Report: {subject}",
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "format": fmt,
-            "sections": {
-                "executive_summary": (
-                    f"Subject '{subject}' evaluated as Tier {tier} "
-                    f"with final score {score:.1f}/100."
-                ),
-                "scores": analysis_data.get("subscores", {}),
-                "tier": tier,
-                "final_score": score,
-                "recommendations": analysis_data.get("recommendation", "See full analysis."),
-            },
+            "sections": _report_sections(subject, analysis_data),
         }
-
-        # Auto-save to vault
-        _save_to_vault(
-            f"analysis-{subject.lower().replace(' ', '-')}.json",
-            json.dumps(report, indent=2, ensure_ascii=False, default=str),
-            category="research",
-        )
-
+        content = _render_report(report, fmt)
+        vault = self._vault or Vault()
+        try:
+            path = vault.save(
+                f"analysis-{_slugify(subject)}{_REPORT_FORMATS[fmt]}",
+                content,
+                category="research",
+            )
+        except OSError as exc:
+            return tool_error(f"Report was rendered but not saved: {exc}", error_type="internal")
+        encoded = content.encode("utf-8")
+        report["artifact"] = {
+            "path": str(path),
+            "bytes": len(encoded),
+            "sha256": hashlib.sha256(encoded).hexdigest(),
+        }
         return {"result": report}
 
     async def aexecute(self, **kwargs: Any) -> dict[str, Any]:
@@ -192,8 +293,9 @@ class ExportJsonTool:
 class SendNotificationTool:
     """Send notifications via external messaging services.
 
-    Routes to NotificationPort adapter (Slack, Discord, Telegram) when
-    available; falls back to stub response in demo mode.
+    Routes to the NotificationPort adapter (Slack, Discord, Telegram) when
+    available. Without one the result says ``sent: false``; a failed send is
+    a top-level error.
     """
 
     def __init__(self, notification: Any = None) -> None:
@@ -258,7 +360,7 @@ def _notification_result(
     recipient: str,
     message: str,
 ) -> dict[str, Any]:
-    return {
+    body: dict[str, Any] = {
         "result": {
             "sent": result.success,
             "channel": result.channel,
@@ -270,6 +372,10 @@ def _notification_result(
             "error": result.error,
         }
     }
+    if not result.success:
+        body["error"] = f"Notification not delivered: {result.error or 'unknown error'}"
+        body["error_type"] = "connection"
+    return body
 
 
 def _notification_unavailable_result(

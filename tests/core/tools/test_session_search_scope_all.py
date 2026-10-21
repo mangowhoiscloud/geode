@@ -37,17 +37,37 @@ CREATE TABLE messages (
 """
 
 
-def _seed_db(path: Path, rows: list[tuple[str, int, str, str, float]]) -> None:
+def _seed_db(
+    path: Path,
+    rows: list[tuple[str, int, str, str, float]],
+    *,
+    parents: dict[str, str] | None = None,
+    unregistered: frozenset[str] = frozenset(),
+) -> None:
+    """Seed messages plus the ``sessions`` rows SessionManager always keeps.
+
+    ``parents`` records worker parents; ``unregistered`` sessions get no
+    ``sessions`` row (metadata never committed).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     try:
         conn.executescript(_MESSAGES_SCHEMA_SQL)
+        conn.execute(
+            "CREATE TABLE sessions (session_id TEXT PRIMARY KEY, "
+            "parent_session_id TEXT NOT NULL DEFAULT '')"
+        )
         for session_id, seq, role, content, ts in rows:
             conn.execute(
                 "INSERT INTO messages (session_id, seq, role, content, timestamp) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (session_id, seq, role, content, ts),
             )
+            if session_id not in unregistered:
+                conn.execute(
+                    "INSERT OR IGNORE INTO sessions VALUES (?, ?)",
+                    (session_id, (parents or {}).get(session_id, "")),
+                )
         conn.commit()
     finally:
         conn.close()
@@ -168,3 +188,125 @@ def test_scope_all_empty_query_via_sanitiser(index_with_two_projects: Path):
     assert result["matched"] is False
     assert result["count"] == 0
     assert result["scope"] == SCOPE_ALL
+
+
+def test_scope_all_never_crosses_gateway_principals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every indexed row carries its owner: gateway threads and their workers
+    (parent in ``sessions`` or ``collaboration_runs``) reach only that thread,
+    and a session with no ownership record only itself."""
+    from types import SimpleNamespace
+
+    from core.memory.search_index import SearchIndex
+    from core.tools.base import ToolContext
+
+    alice, bob = "s-gw-aaaaaaaaaaaa", "s-gw-bbbbbbbbbbbb"
+    source = tmp_path / "projects" / "alpha" / "sessions" / "sessions.db"
+    _seed_db(
+        source,
+        [
+            (alice, 0, "user", "quarterly alice payroll", 1.0),
+            ("task-alice-1", 0, "user", "quarterly alice worker draft", 2.0),
+            ("task-alice-2", 0, "user", "quarterly alice run-only worker", 3.0),
+            ("s-orphan", 0, "user", "quarterly orphan transcript", 4.0),
+            (bob, 0, "user", "quarterly bob own note", 5.0),
+            ("sess-op", 0, "user", "quarterly operator analysis", 6.0),
+        ],
+        parents={"task-alice-1": alice},
+        unregistered=frozenset({"task-alice-2", "s-orphan"}),
+    )
+    conn = sqlite3.connect(source)
+    try:
+        conn.execute(
+            "CREATE TABLE collaboration_runs (task_id TEXT PRIMARY KEY, "
+            "parent_session_id TEXT NOT NULL)"
+        )
+        conn.execute("INSERT INTO collaboration_runs VALUES ('task-alice-2', ?)", (alice,))
+        conn.commit()
+    finally:
+        conn.close()
+    db_path = tmp_path / "search" / "global.db"
+    monkeypatch.setattr("core.paths.GLOBAL_SEARCH_DB", db_path)
+    monkeypatch.setattr("core.memory.search_index.GLOBAL_SEARCH_DB", db_path)
+    with SearchIndex(db_path) as idx:
+        assert idx.rebuild(projects_root=tmp_path / "projects") == {"alpha": 6}
+
+    tool = SessionSearchTool()
+
+    def sessions(context: object, **kwargs: object) -> set[str]:
+        result = tool._execute_sync(
+            query="quarterly", scope=SCOPE_ALL, _tool_context=context, **kwargs
+        )
+        return {h["session_id"] for h in result["hits"]}
+
+    assert sessions(ToolContext(session_id=bob)) == {"sess-op", bob}
+    assert sessions(ToolContext(session_id=bob), session_id="task-alice-1") == set()
+    assert sessions(None) == {"sess-op"}
+    assert sessions(ToolContext(session_id="s-orphan")) == {"sess-op", "s-orphan"}
+    worker = ToolContext(
+        session_id="task-alice-3",
+        is_subagent=True,
+        agent_loop=SimpleNamespace(_parent_session_id=alice),
+    )
+    assert sessions(worker) == {"sess-op", alice, "task-alice-1", "task-alice-2"}
+
+    # A row whose owner was never recorded is not served even in a current index.
+    raw = sqlite3.connect(db_path)
+    try:
+        raw.execute(
+            "INSERT INTO indexed_messages (project_id, project_slug, session_id, "
+            "message_id, seq, role, content, timestamp) "
+            "VALUES ('alpha', 'alpha', 'task-x', 99, 0, 'user', 'quarterly unowned', 9.0)"
+        )
+        raw.commit()
+    finally:
+        raw.close()
+    assert "task-x" not in sessions(ToolContext(session_id=bob))
+
+
+def test_scope_all_refuses_an_index_built_without_ownership(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An index from an older ``geode reindex`` has worker rows of unknown
+    ownership; it is not served until it is rebuilt."""
+    from core.tools.base import ToolContext
+
+    db_path = tmp_path / "search" / "global.db"
+    db_path.parent.mkdir(parents=True)
+    legacy = sqlite3.connect(db_path)
+    try:
+        legacy.executescript(
+            """
+            CREATE TABLE indexed_messages (
+                rowid INTEGER PRIMARY KEY, project_id TEXT NOT NULL,
+                project_slug TEXT NOT NULL, session_id TEXT NOT NULL,
+                message_id INTEGER NOT NULL, seq INTEGER NOT NULL, role TEXT NOT NULL,
+                content TEXT, tool_name TEXT, tool_calls TEXT, timestamp REAL NOT NULL,
+                UNIQUE(project_id, session_id, message_id));
+            CREATE VIRTUAL TABLE indexed_messages_fts USING fts5(
+                content, tool_name, tool_calls, content='indexed_messages',
+                content_rowid='rowid', tokenize='unicode61');
+            CREATE TRIGGER indexed_messages_after_insert AFTER INSERT ON indexed_messages
+            BEGIN INSERT INTO indexed_messages_fts(rowid, content, tool_name, tool_calls)
+            VALUES (new.rowid, new.content, new.tool_name, new.tool_calls); END;
+            INSERT INTO indexed_messages (project_id, project_slug, session_id, message_id,
+                seq, role, content, timestamp)
+            VALUES ('alpha', 'alpha', 'task-alice-1', 1, 0, 'user',
+                    'quarterly alice worker draft', 1.0);
+            """
+        )
+        legacy.commit()
+    finally:
+        legacy.close()
+    monkeypatch.setattr("core.paths.GLOBAL_SEARCH_DB", db_path)
+    monkeypatch.setattr("core.memory.search_index.GLOBAL_SEARCH_DB", db_path)
+
+    result = SessionSearchTool()._execute_sync(
+        query="quarterly",
+        scope=SCOPE_ALL,
+        _tool_context=ToolContext(session_id="s-gw-bbbbbbbbbbbb"),
+    )
+    assert result["hits"] == [] and result["matched"] is False
+    assert "geode reindex" in result["reason"]
+    assert "alice" not in str(result)

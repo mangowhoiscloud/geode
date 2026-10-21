@@ -37,7 +37,7 @@ const projects = [
     scope: "팀 MVP → 단독 고도화 · 2025.10–2026.02",
     role: "백엔드·인프라 1개월, 이후 제품 고도화 3개월",
     body: "5인 팀의 재활용 서비스에서 백엔드와 인프라를 맡았습니다. 본선 이후에는 혼자 웹·앱을 고도화하며 LangGraph 기반 챗봇, 부하 테스트와 운영 관측을 다뤘습니다. 사용자 요청을 처리하는 서비스부터 배포·운영까지 책임진 경험이 GEODE 개발의 출발점이 됐습니다.",
-    links: [{ label: "프로젝트와 설계 기록", href: "https://mangowhoiscloud.github.io/eco2/" }],
+    links: [{ label: "프로젝트와 설계 기록", href: "https://mangowhois.ai/eco2/" }],
   },
   {
     name: "Seed Scenario Generation · SIL",

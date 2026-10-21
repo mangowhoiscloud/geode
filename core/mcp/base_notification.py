@@ -19,15 +19,41 @@ if TYPE_CHECKING:
     from core.mcp.manager import MCPServerManager
 
 
-def parse_mcp_result(raw: dict[str, Any]) -> dict[str, Any]:
-    """Parse MCP content wrapper: {"content":[{"text":"{...}"}]} -> inner dict."""
-    if "content" in raw and isinstance(raw["content"], list):
-        try:
-            text = raw["content"][0].get("text", "")
-            return json.loads(text) if text else raw
-        except (IndexError, json.JSONDecodeError, KeyError):
-            pass
-    return raw
+def parse_mcp_result(raw: Any) -> dict[str, Any]:
+    """Return one MCP tool result's payload, or ``{"error": ...}`` for a failure.
+
+    A transport failure arrives as a top-level ``error``; a tool-level failure
+    as ``isError: true`` with a text explanation in ``content``. Both become an
+    ``error`` so adapters never read a failure envelope as an acknowledgement.
+    Otherwise ``structuredContent``, then a JSON object in the first text
+    block, is the payload; plain text becomes ``{"text": ...}``. An already
+    unwrapped dict (no ``content``) passes through.
+    """
+    if not isinstance(raw, dict):
+        return {"error": f"MCP tool returned a non-object result ({type(raw).__name__})"}
+    if raw.get("error"):
+        return {"error": str(raw["error"])}
+    content = raw.get("content")
+    texts = (
+        [str(block.get("text", "")) for block in content if isinstance(block, dict)]
+        if isinstance(content, list)
+        else []
+    )
+    text = "\n".join(t for t in texts if t).strip()
+    if raw.get("isError") or raw.get("is_error"):
+        return {"error": text or "MCP tool reported an error"}
+    structured = raw.get("structuredContent", raw.get("structured_content"))
+    if isinstance(structured, dict):
+        return structured
+    if not isinstance(content, list):
+        return raw
+    try:
+        parsed = json.loads(texts[0]) if texts and texts[0] else None
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        return parsed
+    return {"text": text}
 
 
 class BaseNotificationAdapter:
@@ -88,8 +114,8 @@ class BaseNotificationAdapter:
                 args,
             )
             result = parse_mcp_result(raw)
-            if "error" in result:
-                return NotificationResult(success=False, channel=ch, error=result["error"])
+            if result.get("error"):
+                return NotificationResult(success=False, channel=ch, error=str(result["error"]))
             msg_id = result.get(self._message_id_key)
             return NotificationResult(
                 success=True,

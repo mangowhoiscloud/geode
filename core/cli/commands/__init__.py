@@ -86,7 +86,9 @@ from .session import (
     cmd_compact,
     cmd_compact_async,
     cmd_context,
+    cmd_fork,
     cmd_resume,
+    cmd_send,
 )
 from .skills import _skills_add, cmd_skill_invoke, cmd_skills
 from .tasks import cmd_tasks
@@ -124,6 +126,7 @@ __all__ = [
     "cmd_compact_async",
     "cmd_context",
     "cmd_cost",
+    "cmd_fork",
     "cmd_goal",
     "cmd_key",
     "cmd_login",
@@ -131,6 +134,7 @@ __all__ = [
     "cmd_model",
     "cmd_resume",
     "cmd_schedule",
+    "cmd_send",
     "cmd_skill_invoke",
     "cmd_skills",
     "cmd_tasks",

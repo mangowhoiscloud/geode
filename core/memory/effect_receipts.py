@@ -75,6 +75,9 @@ class EffectAdmissionKind(StrEnum):
 class EffectAdmission:
     kind: EffectAdmissionKind
     result: dict[str, Any] | None = None
+    # Set when an older step's prepared receipt, not this operation, blocks it.
+    blocking_operation_id: str = ""
+    blocking_tool_name: str = ""
 
 
 class EffectReceiptCapacityError(RuntimeError):
@@ -162,13 +165,17 @@ class EffectReceiptStore:
                 return EffectAdmission(EffectAdmissionKind.UNCERTAIN)
 
             prior_uncertain = conn.execute(
-                """SELECT 1 FROM effect_receipts
+                """SELECT operation_id, tool_name FROM effect_receipts
                    WHERE session_id = ? AND step_id != ? AND status = 'prepared'
-                   LIMIT 1""",
+                   ORDER BY created_at LIMIT 1""",
                 (session_id, step_id),
             ).fetchone()
             if prior_uncertain is not None:
-                return EffectAdmission(EffectAdmissionKind.UNCERTAIN)
+                return EffectAdmission(
+                    EffectAdmissionKind.UNCERTAIN,
+                    blocking_operation_id=str(prior_uncertain["operation_id"]),
+                    blocking_tool_name=str(prior_uncertain["tool_name"]),
+                )
 
             unresolved = conn.execute(
                 "SELECT COUNT(*) FROM effect_receipts WHERE status = 'prepared'"
