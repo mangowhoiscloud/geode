@@ -507,28 +507,47 @@ def _loads_json_object(raw: Any) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {"value": parsed}
 
 
-def _gateway_visibility_clause(column: str, callers: Collection[str]) -> tuple[str, list[Any]]:
-    """SQL form of ``gateway_session_visible`` for rows keyed by ``sessions.db`` ids.
+def session_owner_sql(column: str, *, sessions: bool = True, runs: bool = False) -> str:
+    """SQL expression naming who may read rows of the session in *column*.
 
-    A row is gateway-owned when its session is a gateway thread
-    (``build_gateway_checkpoint_session_id``) or a worker whose recorded parent
-    is one. It is kept only when that owning thread is among *callers*; every
-    other row is unaffected. *column* is a fixed ``alias.session_id`` literal.
+    ``''`` means any caller: an established non-gateway session. Otherwise it is
+    the one session id whose loop, or a worker under it, may read the row (the
+    ``gateway_session_visible`` rule): a gateway thread for its own rows and its
+    workers' (parent in ``collaboration_runs`` or ``sessions``), and the row's
+    own session when neither table records it. Messages commit before session
+    metadata and that write may fail, so unknown ownership is never public.
+    *sessions* / *runs* say which tables the database has; *column* is a fixed
+    ``alias.session_id`` literal.
     """
     from core.memory.session_key import GATEWAY_CHECKPOINT_PREFIX
 
-    pattern = f"{GATEWAY_CHECKPOINT_PREFIX}*"
-    owner = (
-        f"(CASE WHEN {column} GLOB ? THEN {column} ELSE COALESCE("  # noqa: S608  # nosec B608
-        f"(SELECT s.parent_session_id FROM sessions s WHERE s.session_id = {column}), '') END)"
-    )
-    clause = f" AND ({owner} NOT GLOB ?"
-    params: list[Any] = [pattern, pattern]
+    gateway = f"'{GATEWAY_CHECKPOINT_PREFIX}*'"  # a constant, not caller input
+    cases = [f"WHEN {column} GLOB {gateway} THEN {column}"]
+    known: list[str] = []
+    parents = []
+    if runs:
+        parents.append(
+            f"(SELECT r.parent_session_id FROM collaboration_runs r WHERE r.task_id = {column})"  # noqa: S608  # nosec B608
+        )
+    if sessions:
+        parents.append(
+            f"(SELECT s.parent_session_id FROM sessions s WHERE s.session_id = {column})"  # noqa: S608  # nosec B608
+        )
+    for parent in parents:
+        cases.append(f"WHEN {parent} GLOB {gateway} THEN {parent}")
+        known.append(f"{parent} IS NOT NULL")
+    if known:
+        cases.append(f"WHEN {' OR '.join(known)} THEN ''")
+    return f"(CASE {' '.join(cases)} ELSE {column} END)"
+
+
+def _gateway_visibility_clause(
+    column: str, callers: Collection[str], *, runs: bool
+) -> tuple[str, list[Any]]:
+    """Keep rows that are public or owned by one of *callers*."""
     ids = sorted(set(callers))
-    if ids:
-        clause += f" OR {owner} IN ({','.join('?' for _ in ids)})"
-        params += [pattern, *ids]
-    return clause + ")", params
+    placeholders = "".join(", ?" for _ in ids)
+    return f" AND {session_owner_sql(column, runs=runs)} IN (''{placeholders})", ids
 
 
 class SessionManager:
@@ -890,6 +909,13 @@ class SessionManager:
             self._conn.commit()
             return cursor.rowcount
 
+    def _has_table(self, name: str) -> bool:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+            ).fetchone()
+        return row is not None
+
     def search_messages(
         self,
         query: str,
@@ -914,8 +940,9 @@ class SessionManager:
                 Korean words, identifier fragments). Silently falls back
                 to unicode61 when trigram isn't supported.
             visible_to: The caller's own session ids (never tool arguments).
-                When given, gateway-owned rows are returned only to their
-                own thread or its workers; ``None`` applies no filter.
+                When given, rows are returned only when public or owned by
+                one of them (:func:`session_owner_sql`); ``None`` applies no
+                filter.
 
         Returns:
             Newest-first list of ``{seq, role, content, timestamp,
@@ -942,7 +969,9 @@ class SessionManager:
             sql += " AND m.session_id = ?"
             params.append(session_id)
         if visible_to is not None:
-            clause, extra = _gateway_visibility_clause("m.session_id", visible_to)
+            clause, extra = _gateway_visibility_clause(
+                "m.session_id", visible_to, runs=self._has_table("collaboration_runs")
+            )
             sql += clause
             params.extend(extra)
         sql += " ORDER BY m.timestamp DESC LIMIT ?"
@@ -1099,7 +1128,7 @@ class SessionManager:
     ) -> list[dict[str, Any]]:
         """FTS5 search over synthesized context artifacts.
 
-        ``visible_to`` filters gateway-owned rows as in :meth:`search_messages`.
+        ``visible_to`` filters rows by owner as in :meth:`search_messages`.
         """
         from core.memory.fts_query import sanitize_fts5_query
 
@@ -1121,7 +1150,9 @@ class SessionManager:
             sql += " AND a.session_id = ?"
             params.append(session_id)
         if visible_to is not None:
-            clause, extra = _gateway_visibility_clause("a.session_id", visible_to)
+            clause, extra = _gateway_visibility_clause(
+                "a.session_id", visible_to, runs=self._has_table("collaboration_runs")
+            )
             sql += clause
             params.extend(extra)
         if kinds:
