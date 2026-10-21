@@ -116,21 +116,27 @@ functional change.
   call names the unresolved operation and its `geode session resolve-effect`
   command.
 
-- **memory_search gateway isolation.** Session-store results now include a
-  gateway conversation only for the caller's own thread or its parent, resolved
-  from the tool context rather than arguments, so one channel or sender can no
-  longer read another's messages. Results are capped at 1,000 serialized
-  characters per match and 4,000 per result, with explicit truncation markers.
+- **Gateway conversation isolation in search tools.** `memory_search` and
+  `session_search` (both its default and `scope="all"` modes, including indexes
+  built before this change) return a gateway conversation only to that thread
+  or its workers, resolved from the tool context rather than arguments, so one
+  channel or sender can no longer read another's messages; `geode reindex` no
+  longer copies gateway rows into the global index. `memory_search` responses
+  are capped at 4,000 serialized characters in total (1,000 per match) and
+  `session_search` snippets at 1,000, with explicit truncation markers.
 - **Peer reads within the tool-result limit.** `read_session_messages` bounds
   the whole serialized result by min(8,000, the live tool-result limit), so a
   read is never offloaded or truncated into a redelivery loop; an oversized
-  message is delivered once as a marked prefix. Concurrent reads no longer
+  message is delivered once as a marked prefix, and a limit too small for any
+  message returns a short final error naming the setting to raise instead of
+  an empty batch. Concurrent reads no longer
   return the same message twice, and notified ids stay within the unread
   backlog.
 - **Session ownership and fork recovery.** Resuming a child session keeps its
   durable parent marker. Fork cleanup removes database rows before the
-  directory and `.fork-pending` marker, keeps the marker when row cleanup
-  fails, and bounds the swept-directory set.
+  directory and `.fork-pending` marker, keeps or restores the marker when row
+  cleanup or directory removal fails so a later sweep retries, and bounds the
+  swept-directory set.
 - **Scheduler claims under write failures.** A failing dispatch callback no
   longer releases a running turn's claim; claim and settlement writes that fail
   restore the job, its pending command, and its run id, so one-shot jobs are not
