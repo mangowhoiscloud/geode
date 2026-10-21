@@ -23,6 +23,7 @@ from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
 from core.memory.project import MemoryWrite, ProjectMemory
 from core.memory.session import InMemorySessionStore
+from core.memory.session_key import gateway_session_visible
 from core.tools.base import ToolErrorType, tool_error
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,21 @@ def _get_session_store(store: SessionStorePort | None) -> tuple[SessionStorePort
         "InMemorySessionStore — data will NOT survive this call"
     )
     return InMemorySessionStore(), True
+
+
+def _caller_session_ids(context: Any) -> frozenset[str]:
+    """The executing loop's session and parent ids, never tool arguments.
+
+    Mirrors ``core.cli.tool_handlers.session.tool_principal``.
+    """
+    from core.agent.cognitive_state_ctx import get_parent_session_id, get_session_id
+
+    loop = getattr(context, "agent_loop", None)
+    ids = (
+        str(getattr(context, "session_id", "") or get_session_id()),
+        get_parent_session_id() or str(getattr(loop, "_parent_session_id", "") or ""),
+    )
+    return frozenset(session_id for session_id in ids if session_id)
 
 
 class _AsyncExecuteMixin:
@@ -129,9 +145,13 @@ class MemorySearchTool(_AsyncExecuteMixin):
         matches: list[dict[str, Any]] = []
         query_lower = query.lower()
 
-        # Session tier
+        # Session tier: the store is shared by every gateway conversation, so a
+        # caller only sees gateway keys its own thread owns.
         if tier in ("session", "all"):
+            callers = _caller_session_ids(kwargs.get("_tool_context"))
             for session_id in store.list_sessions():
+                if not gateway_session_visible(session_id, callers):
+                    continue
                 data = store.get(session_id)
                 if data is None:
                     continue
