@@ -454,7 +454,8 @@ class ToolCallProcessor:
             ref_id = offload_store.offload(block_id, model_result)
             model_result = offload_reference(
                 model_result,
-                {"_offloaded": True, "_ref_id": ref_id, "_original_tokens": estimated_tokens},
+                ref_id=ref_id,
+                original_tokens=estimated_tokens,
                 summary=extract_result_summary(model_result, max_chars=400),
                 hint="Use recall_tool_result(ref_id) to retrieve the full output.",
                 max_chars=offload_store.threshold * TOKEN_ESTIMATE_CHARS_PER_TOKEN,

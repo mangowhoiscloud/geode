@@ -775,6 +775,34 @@ class TestGuardToolResultModelAware:
         assert guarded["_truncated"] is True
         assert len(json.dumps(guarded, ensure_ascii=False)) <= 32 * 4
 
+    @pytest.mark.parametrize("threshold", range(32, 65))
+    def test_offloaded_failure_reference_fits_and_keeps_the_stop_signal(self, threshold):
+        from core.agent.tool_executor.result_token_guard import offload_reference
+
+        limit = threshold * 4
+        result = {
+            "error": "tool result limit too small for peer messages; raise x" * 3,
+            "error_type": "rejected",
+            "recoverable": False,
+            "additional_context": "Keep this response concise.",
+        }
+        for id_length in (1, 8, 24, 30, 40, 64, 96, 200):
+            ref_id = "c" * id_length
+            reference = offload_reference(
+                result,
+                ref_id=ref_id,
+                original_tokens=10_000,
+                summary="s" * 400,
+                hint="Use recall_tool_result(ref_id) to retrieve the full output.",
+                max_chars=limit,
+            )
+            assert len(json.dumps(reference, ensure_ascii=False)) <= limit
+            assert reference["_offloaded"] is True
+            assert reference["error"] and reference["recoverable"] is False
+            minimal = {"_offloaded": True, "_ref_id": ref_id, "error": "t", "recoverable": False}
+            if len(json.dumps(minimal, ensure_ascii=False)) <= limit:
+                assert reference["_ref_id"] == ref_id  # recall stays possible
+
     @pytest.mark.parametrize("max_tokens", [1, 14, 32])
     def test_truncation_keeps_failure_control_fields(self, max_tokens):
         from core.agent.tool_executor import _guard_tool_result

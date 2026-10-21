@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -118,7 +119,10 @@ def _guard_tool_result(
     }
     base = keep_failure_control(base, result, max_chars)
     base = _with_fitting(
-        base, result, max_chars, ("task_id", "task_type", "status", "error_message", "tier")
+        base,
+        result,
+        max_chars,
+        ("_offloaded", "_ref_id", "task_id", "task_type", "status", "error_message", "tier"),
     )
 
     key = "summary" if "summary" in result else "preview"
@@ -148,19 +152,44 @@ def keep_failure_control(
 
 
 def offload_reference(
-    result: Any, reference: dict[str, Any], *, summary: str, hint: str, max_chars: int
+    result: Any,
+    *,
+    ref_id: str,
+    original_tokens: int,
+    summary: str,
+    hint: str,
+    max_chars: int,
 ) -> dict[str, Any]:
-    """Complete the in-context stand-in for an offloaded ``result``.
+    """Build the in-context stand-in for an offloaded ``result``.
 
-    A failure keeps its control fields and the whole stand-in stays within
-    ``max_chars`` (the threshold that offloaded it); any other result keeps
-    the plain summary and recall hint.
+    ``_digest`` identifies the full original content, so identical results
+    compare equal across calls while the per-call ``_ref_id`` differs. A
+    failure is fitted within ``max_chars`` (the threshold that offloaded it)
+    by priority: the stop signal (an error prefix and ``recoverable``), then
+    ``_ref_id`` for recall, the other control fields and the full error
+    prefix, and only then the remaining metadata, hint, and summary. Any
+    other result keeps the plain summary and recall hint.
     """
+    reference: dict[str, Any] = {
+        "_offloaded": True,
+        "_ref_id": ref_id,
+        "_original_tokens": original_tokens,
+        "_digest": hashlib.sha256(_dumps(result).encode("utf-8")).hexdigest()[:16],
+    }
     if not (isinstance(result, dict) and result.get("error")):
         return {**reference, "summary": summary, "hint": hint}
-    reference = keep_failure_control(reference, result, max_chars)
-    reference = _with_fitting(reference, {"hint": hint}, max_chars)
-    return _fit_prefix(reference, "summary", summary, max_chars) or reference
+    error = result["error"]
+    error_text = error if isinstance(error, str) else _dumps(error)
+    fitted = _with_fitting({"_offloaded": True}, {"error": error_text[:1]}, max_chars)
+    fitted = _with_fitting(fitted, result, max_chars, ("recoverable",))
+    fitted = _with_fitting(fitted, reference, max_chars, ("_ref_id",))
+    fitted = keep_failure_control(fitted, result, max_chars)
+    fitted = _with_fitting(fitted, reference, max_chars, ("_original_tokens", "_digest"))
+    fitted = _with_fitting(fitted, {"hint": hint}, max_chars)
+    fitted = _fit_prefix(fitted, "summary", summary, max_chars) or fitted
+    # Display order only; inclusion was decided by priority above.
+    order = ("_offloaded", "_ref_id", "error", *_ERROR_CONTROL_KEYS, *reference)
+    return {key: fitted[key] for key in dict.fromkeys((*order, *fitted)) if key in fitted}
 
 
 def _dumps(value: Any) -> str:
