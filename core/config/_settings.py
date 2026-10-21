@@ -384,10 +384,12 @@ class Settings(BaseSettings):
     subagent_max_tokens: int = 32768
 
     # Token Guard — tool result truncation threshold (0 = unlimited)
-    max_tool_result_tokens: int = 25000  # 0 = no limit; clear_tool_uses handles overflow
+    # 0 = no limit (clear_tool_uses handles overflow); positive values below
+    # context_budget.MIN_TOOL_RESULT_TOKENS (32) are raised to it by the guard.
+    max_tool_result_tokens: int = 25000
 
     # Tool Result Offloading — store large results to filesystem (P0 token optimization)
-    tool_offload_threshold: int = 15000  # tokens; 0 = disabled
+    tool_offload_threshold: int = 15000  # tokens; 0 = disabled; floor 32 (as above)
     tool_offload_ttl_hours: float = 4.0  # TTL for offloaded results
     observation_mask_keep_rounds: int = 3  # keep recent N rounds unmasked
 

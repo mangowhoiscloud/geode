@@ -511,24 +511,28 @@ class TestToolExecutor:
         assert hook_calls[0]["verify_attempt"] == 1
 
     def test_offload_threshold_uses_ceiling_token_estimate(self, tmp_path: Any) -> None:
+        from core.orchestration.context_budget import MIN_TOOL_RESULT_TOKENS
         from core.orchestration.tool_offload import ToolResultOffloadStore
 
         executor = MagicMock(spec=ToolExecutor)
         executor._contains_restricted_data.return_value = False
         store = ToolResultOffloadStore(
             session_id="offload-boundary",
-            threshold=1,
+            threshold=1,  # raised to the supported floor
             base_dir=tmp_path / "offload",
         )
+        assert store.threshold == MIN_TOOL_RESULT_TOKENS
         processor = ToolCallProcessor(
             executor=executor,
             op_logger=MagicMock(),
             error_recovery=MagicMock(),
             offload_store=store,
         )
-        result = asyncio.run(processor._serialize_tool_result("xxx", "toolu_boundary"))
+        # One character past 4 * threshold: the floor estimate would not offload.
+        text = "x" * (4 * MIN_TOOL_RESULT_TOKENS - 1)  # serialized with its quotes
+        result = asyncio.run(processor._serialize_tool_result(text, "toolu_boundary"))
 
-        assert store.recall("toolu_boundary") == "xxx"
+        assert store.recall("toolu_boundary") == text
         assert json.loads(result["content"])["_offloaded"] is True
 
     def test_safe_tools_classification(self) -> None:
