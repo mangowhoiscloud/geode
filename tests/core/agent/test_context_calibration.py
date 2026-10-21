@@ -37,7 +37,7 @@ from core.orchestration.context_budget import (
     observed_prompt_tokens,
     resolve_request_context_budget,
 )
-from core.orchestration.context_monitor import CHARS_PER_TOKEN, estimate_tool_tokens
+from core.orchestration.context_monitor import CHARS_PER_TOKEN, check_context, estimate_tool_tokens
 from openai import BadRequestError
 
 # Hex digest lines tokenize at ~1.85 chars/token (57,000 chars -> ~30,900).
@@ -507,3 +507,115 @@ def test_provider_rejection_of_the_latest_batch_recovers_by_bounding_it(
     assert len(adapter.rejected) == 1 and adapter.rejected[0] > _WINDOW
     assert adapter.sent[-1] <= policy.effective_prompt_budget_tokens
     _assert_bounded_batch(messages)
+
+
+def test_remeasurement_raises_provisional_ratios_of_retained_dense_payloads() -> None:
+    """A mixed first request prices dense text at its average until re-measured."""
+    # 100K prose (1.0) + 80K dense (2.15) heuristic tokens share one request.
+    mixed = next_prompt_calibration(
+        None,
+        observed_tokens=100_000 + 172_000,
+        raw_tokens=180_000,
+        payloads=[(1, 400_000), (2, 320_000)],
+    )
+    assert mixed is not None and dict(mixed.payload_ratios)[2] == pytest.approx(272 / 180)
+    # The prose is pruned; the dense payload returns with a 10K new batch.
+    observed = round(2.1535 * 90_000)
+    remeasured = next_prompt_calibration(
+        mixed, observed_tokens=observed, raw_tokens=90_000, payloads=[(2, 320_000), (3, 40_000)]
+    )
+    assert remeasured is not None and remeasured.request_ratio == pytest.approx(2.1535)
+    ratios = dict(remeasured.payload_ratios)
+    assert ratios[2] > 2.1 and ratios[3] == DENSE_TOKEN_RATIO_FLOOR
+    policy = replace(_codex_policy(), calibration=remeasured)
+    assert policy.estimate_prompt_tokens(90_000, [(2, 320_000), (3, 40_000)]) >= observed
+
+
+def _hex_batch(tag: str, count: int, chars: int) -> list[dict[str, Any]]:
+    calls, results = [], []
+    for index in range(count):
+        call_id = f"{tag}-{index}"
+        text = " ".join(
+            hashlib.sha256(f"{tag}{index}:{line}".encode()).hexdigest()[:40]
+            for line in range(chars // 41 + 1)
+        )[:chars]
+        calls.append({"type": "tool_use", "id": call_id, "name": "read_document", "input": {}})
+        results.append(
+            {
+                "type": "tool_result",
+                "tool_use_id": call_id,
+                "content": json.dumps({"file_path": call_id, "content": text}),
+            }
+        )
+    return [{"role": "assistant", "content": calls}, {"role": "user", "content": results}]
+
+
+def test_pruned_prose_scenario_rejects_at_most_once_then_estimates_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After a prune the first request may be rejected once; estimates then hold."""
+    loop, adapter = _windowed_loop(monkeypatch)
+    policy = _codex_policy()
+    prose = (_prose_prompt() * 2)[:460_000]
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "Summarize the files."},
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "p", "name": "read_document", "input": {}}],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "p",
+                    "content": json.dumps({"content": prose}),
+                }
+            ],
+        },
+        *_hex_batch("d", 14, 19_700),
+    ]
+
+    def estimate() -> int:
+        return check_context(
+            messages,
+            "gpt-6-sol",
+            system_prompt=_SYSTEM,
+            tools_tokens=0,
+            policy=loop._ctx_mgr.calibrated(policy),
+        ).estimated_tokens
+
+    async def drive() -> None:
+        assert await loop._call_llm(_SYSTEM, messages) is not None
+        calibration = loop._ctx_mgr._calibration
+        assert calibration is not None and calibration.request_ratio < 1.6
+        await loop._ctx_mgr.compact(messages, "gpt-6-sol", "openai", prune=True, keep_recent=2)
+        assert len(messages) == 3  # task + the dense batch; the prose is gone
+        messages.extend(_hex_batch("e", 11, 20_600))
+        try:
+            await loop._call_llm(_SYSTEM, messages)
+        except _ContextExhaustedError as exc:
+            assert exc.provider_rejected
+            outcome = await _context.aggressive_context_recovery(
+                loop,
+                exc.system_prompt or _SYSTEM,
+                messages,
+                provider_rejected=True,
+                policy=exc.policy,
+                tools_tokens=exc.tools_tokens,
+            )
+            assert outcome.status == "changed"
+            assert await loop._call_llm(_SYSTEM, messages) is not None
+        retained = {hash(block["content"]) for block in messages[2]["content"]}
+        ratios = dict(loop._ctx_mgr._calibration.payload_ratios)
+        assert retained <= set(ratios) and min(ratios[key] for key in retained) > 2.0
+        for round_index in range(4):
+            messages.extend(_hex_batch(f"f{round_index}", 2, 19_700))
+            predicted = estimate()
+            assert await loop._call_llm(_SYSTEM, messages) is not None
+            # Maintenance before sending only lowers the request further.
+            assert predicted >= adapter.sent[-1]
+
+    asyncio.run(drive())
+    assert len(adapter.rejected) <= 1
+    assert adapter.sent[-1] <= policy.effective_prompt_budget_tokens
