@@ -96,6 +96,14 @@ def admit_collaboration_messages(
     except Exception:
         log.warning("Collaboration mailbox read failed", exc_info=True)
         return 0
+    notified = getattr(loop, "_notified_peer_ids", None)
+    if not isinstance(notified, set):
+        notified = set()
+        loop._notified_peer_ids = notified
+    # A notice is owed only for rows still unread here: acknowledged, foreign
+    # (a reused loop), or vanished IDs leave, so the set stays within the
+    # recipient's unread-peer cap instead of growing with lifetime traffic.
+    notified.intersection_update(item.id for item in peers)
     if not children and not peers:
         return 0
 
@@ -106,10 +114,6 @@ def admit_collaboration_messages(
     if not isinstance(admitted, set):
         admitted = set()
         loop._admitted_mailbox_ids = admitted
-    notified = getattr(loop, "_notified_peer_ids", None)
-    if not isinstance(notified, set):
-        notified = set()
-        loop._notified_peer_ids = notified
 
     # Every read call of the previous round has a result (or was repaired as
     # interrupted) by this boundary, so an admitted peer ID that no persisted
@@ -160,6 +164,7 @@ def admit_collaboration_messages(
         persisted += [item.id for item in peers if item.id in admitted and item.id in delivered]
         store.ack_mailbox(loop._session_id, persisted)
         admitted.difference_update(persisted)
+        notified.difference_update(persisted)
     except Exception:
         log.warning("Collaboration mailbox acknowledgement failed", exc_info=True)
     return injected

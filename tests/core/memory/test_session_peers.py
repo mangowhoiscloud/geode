@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -547,3 +548,131 @@ def test_acknowledgement_uses_a_strict_checkpoint(project: Path) -> None:
     admit_collaboration_messages(loop, messages)
     assert calls and all(call.get("strict_messages") is True for call in calls)
     assert peer_message_status(receipt.message_id)["status"] == "queued"
+
+
+# Context-safety review follow-ups: parallel reads, notice ids, full-result bound.
+
+
+def test_parallel_reads_never_return_the_same_message_twice(project: Path) -> None:
+    """Two read calls of one response run in executor threads; each row goes to one."""
+    receipt = send_peer_message(OPERATOR, "s-root-b", "once")
+    barrier = threading.Barrier(2, timeout=0.5)
+
+    class InterleavedReceipt(set[int]):
+        def update(self, *others: Any) -> None:
+            with contextlib.suppress(threading.BrokenBarrierError):
+                barrier.wait()  # both readers filtered before either reserves
+            super().update(*others)
+
+    loop = _loop("s-root-b", [])
+    loop._admitted_mailbox_ids = InterleavedReceipt()
+    results: list[dict[str, Any]] = []
+    threads = [
+        threading.Thread(target=lambda: results.append(_read_tool(project, loop))) for _ in range(2)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(results) == 2
+    delivered = [entry["message_id"] for result in results for entry in result["messages"]]
+    assert delivered == [receipt.message_id]
+
+
+def test_notified_ids_stay_within_the_unread_backlog(project: Path) -> None:
+    """Acknowledged rows leave the notice set: it never grows with lifetime traffic."""
+    loop = _loop("s-root-b", [True] * 100)
+    loop._admitted_mailbox_ids = set()
+    loop._notified_peer_ids = set()
+    messages: list[dict[str, Any]] = []
+    for n in range(30):
+        send_peer_message(OPERATOR, "s-root-b", f"note {n}")
+        admit_collaboration_messages(loop, messages)  # announces the row
+        _record_read(messages, _read_tool(project, loop), f"toolu_{n}")
+        admit_collaboration_messages(loop, messages)  # acknowledges it
+        assert _unread(project, "s-root-b") == []
+        assert loop._notified_peer_ids == set() and loop._admitted_mailbox_ids == set()
+    # A mailbox emptied elsewhere also clears stale notices.
+    loop._notified_peer_ids.update({10_001, 10_002})
+    admit_collaboration_messages(loop, messages)
+    assert loop._notified_peer_ids == set()
+
+
+def _serialized(result: dict[str, Any]) -> int:
+    import json
+
+    return len(json.dumps(result, ensure_ascii=False, default=str))
+
+
+def test_full_read_result_stays_within_the_budget_including_the_first_item(
+    project: Path,
+) -> None:
+    oversized = send_peer_message(OPERATOR, "s-root-b", '"' * 4000)  # 8,002 escaped chars
+    for _ in range(20):
+        send_peer_message(OPERATOR, "s-root-b", "z" * 398)
+    loop = _loop("s-root-b", [])
+    loop._admitted_mailbox_ids = set()
+
+    first = _read_tool(project, loop, limit=20)
+    assert _serialized(first) <= 8_000
+    [entry] = first["messages"]
+    assert entry["message_id"] == oversized.message_id
+    assert entry["truncated"] is True and entry["original_chars"] == 4000
+    assert entry["text"] and set(entry["text"]) == {'"'}
+
+    # Bodies totalling 8,000 chars no longer push the envelope past the bound.
+    second = _read_tool(project, loop, limit=20)
+    assert _serialized(second) <= 8_000
+    assert 0 < len(second["messages"]) < 20 and second["remaining"] > 0
+    assert all("truncated" not in entry for entry in second["messages"])
+    returned = {entry["message_id"] for entry in [*first["messages"], *second["messages"]]}
+    assert len(returned) == 1 + len(second["messages"])
+
+
+def test_read_fits_the_effective_tool_result_limit_and_delivers_once(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A low offload threshold neither offloads the read nor strands its rows."""
+    import json
+    from unittest.mock import MagicMock
+
+    from core.agent.tool_executor.processor import ToolCallProcessor
+    from core.config import settings
+    from core.orchestration.tool_offload import ToolResultOffloadStore
+
+    monkeypatch.setattr(settings, "tool_offload_threshold", 15_000)  # stale global value
+    offload = ToolResultOffloadStore(
+        session_id="s-root-b", threshold=1_000, base_dir=project / "offload"
+    )
+    executor = MagicMock()
+    executor._contains_restricted_data.return_value = False
+    processor = ToolCallProcessor(
+        executor=executor, op_logger=MagicMock(), error_recovery=MagicMock(), offload_store=offload
+    )
+    oversized = send_peer_message(OPERATOR, "s-root-b", '"' * 4000)
+    short = send_peer_message(OPERATOR, "s-root-b", "short")
+    loop = _loop("s-root-b", [True] * 4)
+    loop._admitted_mailbox_ids = set()
+    loop._tool_processor = processor
+    messages: list[dict[str, Any]] = []
+    admit_collaboration_messages(loop, messages)
+
+    for call_id, expected in (("toolu_big", oversized), ("toolu_small", short)):
+        result = _read_tool(project, loop, limit=20)
+        block = asyncio.run(
+            processor._serialize_tool_result(result, call_id, "read_session_messages")
+        )
+        content = json.loads(block["content"])
+        assert "_offloaded" not in content and "_truncated" not in content
+        assert len(block["content"]) <= 4 * offload.threshold
+        assert [entry["message_id"] for entry in content["messages"]] == [expected.message_id]
+        messages.append(
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": call_id, "name": "read_session_messages"}],
+            }
+        )
+        messages.append({"role": "user", "content": [block]})
+        admit_collaboration_messages(loop, messages)
+        assert peer_message_status(expected.message_id)["status"] == "applied"
+    assert _read_tool(project, loop)["messages"] == [] and _unread(project, "s-root-b") == []

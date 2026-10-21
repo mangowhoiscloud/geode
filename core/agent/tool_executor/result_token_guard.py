@@ -57,6 +57,25 @@ def _compute_model_tool_limit(model: str) -> int | None:
     return min(global_limit, policy.per_tool_result_limit_tokens)
 
 
+def tool_result_char_limit(model: str = "", *, offload_threshold: int | None = None) -> int | None:
+    """Largest serialized result the processor passes through unchanged.
+
+    Mirrors ``ToolCallProcessor._serialize_tool_result``: a result is offloaded
+    once its estimated tokens exceed the offload threshold (``None`` reads the
+    configured one; non-positive disables it) and truncated past the
+    model-aware guard limit. Returns None when neither bounds the result.
+    """
+    from core.config import settings as _settings
+    from core.orchestration.context_budget import TOKEN_ESTIMATE_CHARS_PER_TOKEN
+
+    threshold = _settings.tool_offload_threshold if offload_threshold is None else offload_threshold
+    guard = _compute_model_tool_limit(model) if model else None
+    if guard is None:
+        guard = _settings.max_tool_result_tokens
+    limits = [tokens for tokens in (threshold, guard) if tokens > 0]
+    return min(limits) * TOKEN_ESTIMATE_CHARS_PER_TOKEN if limits else None
+
+
 def _guard_tool_result(
     result: dict[str, Any],
     max_tokens: int | None = None,

@@ -424,7 +424,7 @@
   "coordinators": {
     "AgenticLoop": {
       "constructor_arg_count": 12,
-      "file_loc": 1186,
+      "file_loc": 1189,
       "method_count": 39,
       "path": "core/agent/loop/agent_loop.py"
     },
@@ -543,7 +543,7 @@
   "packages": {
     "core": {
       "python_files": 418,
-      "python_loc": 131878
+      "python_loc": 131997
     },
     "evals": {
       "python_files": 110,
@@ -555,7 +555,7 @@
     },
     "tests": {
       "python_files": 781,
-      "python_loc": 245357
+      "python_loc": 245605
     }
   },
   "schema_version": 6,
