@@ -44,7 +44,11 @@ def _build_memory_handlers(
 ) -> UniqueEntries[str, Any]:
     """Build memory-related tool handlers."""
     from core.memory.project import MemoryWrite, ProjectMemory
-    from core.tools.memory_tools import MemorySearchTool, MemoryToolServices
+    from core.tools.memory_tools import (
+        SEARCH_RESPONSE_ENVELOPE,
+        MemorySearchTool,
+        MemoryToolServices,
+    )
 
     services = memory_services or MemoryToolServices()
     memory = services.project_memory or ProjectMemory()
@@ -65,7 +69,7 @@ def _build_memory_handlers(
         result = MemorySearchTool(services=services)._execute_sync(
             query=query, tier=tier, _tool_context=kwargs.get("_tool_context")
         )
-        return {"status": "ok", "action": "memory_search", **result["result"]}
+        return {**SEARCH_RESPONSE_ENVELOPE, **result["result"]}
 
     def handle_memory_save(**kwargs: Any) -> dict[str, Any]:
         key = str(kwargs.get("key") or "").strip()
