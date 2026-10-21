@@ -112,7 +112,9 @@ functional change.
   272K route, past its 176K warning and 227K critical levels, before any
   maintenance ran. Each action request now records its provider-reported
   input and attributes it to the text it sent: strings already measured keep
-  their own ratio, and text added since the last response (a new tool batch)
+  their own ratio, raised whenever a later measurement shows they were
+  under-priced (a first request mixing prose and dense text prices both at
+  its average), and text added since the last response (a new tool batch)
   is estimated at no less than the hex density (2.2x the 4 chars/token
   guess). The pressure check, the pre-send budget guard and recovery use these
   estimates, so compaction starts at the warning level and pruning at

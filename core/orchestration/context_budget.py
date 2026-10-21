@@ -307,11 +307,16 @@ def next_prompt_calibration(
 ) -> PromptCalibration | None:
     """Attribute one measured request's reported size to its payloads.
 
-    Payloads measured before keep their ratio and the shared remainder keeps
-    its ratio; the residual goes to the payloads this request sent first. So
-    removing part of the history later never re-prices what remains at an
-    average. ``other_keys`` are the same history sent in another shape (for
-    example tool inputs) and take the whole-request ratio.
+    A first measurement gives every payload the whole-request ratio, which
+    under-prices dense text that shared the request with prose. Every later
+    measurement re-checks that provisional attribution: text sent for the
+    first time is priced at the dense floor, and when the reported total
+    exceeds the attributed sum, the payloads measured before are scaled up
+    until it matches. Ratios therefore only rise for retained payloads, and
+    pruning the prose later cannot leave dense text at the mixed average.
+    Otherwise the new text takes the residual. ``other_keys`` are the same
+    history sent in another shape (for example tool inputs) and take the
+    whole-request ratio.
     """
     if raw_tokens < TOKEN_RATIO_MIN_SAMPLE_TOKENS or observed_tokens <= 0:
         return previous
@@ -325,18 +330,27 @@ def next_prompt_calibration(
         overhead_ratio = request_ratio
     else:
         known = dict(previous.payload_ratios)
-        measured = sum(tokens * known[key] for key, tokens in tokens_by_key.items() if key in known)
+        priced = sum(tokens * known[key] for key, tokens in tokens_by_key.items() if key in known)
         new_tokens = sum(tokens for key, tokens in tokens_by_key.items() if key not in known)
         overhead_ratio = previous.overhead_ratio
-        if new_tokens >= CALIBRATED_PAYLOAD_MIN_CHARS / TOKEN_ESTIMATE_CHARS_PER_TOKEN:
-            residual = observed_tokens - measured - overhead_tokens * overhead_ratio
-            new_ratio = _clamp_ratio(residual / new_tokens)
-        else:
-            new_ratio = request_ratio
-            if overhead_tokens > 0:
-                residual = observed_tokens - measured - new_tokens * new_ratio
-                overhead_ratio = _clamp_ratio(residual / overhead_tokens)
-        ratios = {key: known.get(key, new_ratio) for key in tokens_by_key}
+        payload_share = observed_tokens - overhead_tokens * overhead_ratio
+        floor_priced = new_tokens * DENSE_TOKEN_RATIO_FLOOR
+        scale, new_ratio = 1.0, DENSE_TOKEN_RATIO_FLOOR
+        if payload_share > priced + floor_priced:
+            if priced > 0:
+                scale = (payload_share - floor_priced) / priced
+            elif new_tokens > 0:
+                new_ratio = payload_share / new_tokens
+            elif overhead_tokens > 0:
+                overhead_ratio = _clamp_ratio(observed_tokens / overhead_tokens)
+        elif new_tokens > 0:
+            new_ratio = max(payload_share - priced, 0.0) / new_tokens
+        elif overhead_tokens > 0:
+            overhead_ratio = _clamp_ratio((observed_tokens - priced) / overhead_tokens)
+        ratios = {
+            key: _clamp_ratio(known[key] * scale if key in known else new_ratio)
+            for key in tokens_by_key
+        }
     for key in other_keys:
         ratios.setdefault(key, request_ratio)
     return PromptCalibration(request_ratio, overhead_ratio, tuple(ratios.items()))
