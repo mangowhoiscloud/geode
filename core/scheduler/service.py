@@ -58,7 +58,7 @@ _LOCK_FILENAME = "scheduled_tasks.lock"
 # owner identity this is the observed-termination authority for same-process
 # runs; it is process-wide because several service instances may share a store.
 _ACTIVE_RUNS: set[str] = set()
-# Fields a run claim writes, restored when a session-only claim's transaction fails.
+# Fields a run claim writes, restored when the claim's transaction fails.
 _CLAIM_FIELDS = (
     "running_since_ms",
     "run_id",
@@ -69,6 +69,8 @@ _CLAIM_FIELDS = (
     "last_scheduled_at_ms",
     "next_run_at_ms",
 )
+# Fields a settlement writes, restored when the settlement's transaction fails.
+_SETTLE_FIELDS = (*_CLAIM_FIELDS, "enabled", "last_duration_ms")
 _ACTIVE_RUNS_LOCK = threading.Lock()
 
 
@@ -584,57 +586,60 @@ class SchedulerService:
         registered = ""
         interrupted: dict[str, Any] | None = None
         claimed: ScheduledJob | None = None
-        # A failed transaction reloads durable rows from disk, but a session-only
-        # job is kept in memory as is, so its claim fields are restored here.
-        session_only: tuple[ScheduledJob, dict[str, Any]] | None = None
-        try:
-            with self._persisted_transaction():
-                job = self._jobs.get(job_id)
-                if job is not None and not job.durable:
-                    session_only = (job, {name: getattr(job, name) for name in _CLAIM_FIELDS})
-                if job is None:
-                    if not scheduled:
-                        raise KeyError(f"Job '{job_id}' not found")
-                elif not self._run_alive(job):
-                    if job.running_since_ms is not None:
-                        interrupted = {
-                            "job_id": job_id,
-                            "run_id": job.run_id,
-                            "status": "interrupted",
-                            "error": "run owner exited before reporting an outcome",
-                            "executed_at_ms": now,
-                        }
-                        job.running_since_ms, job.run_id = None, ""
-                        job.run_owner, job.run_kind, job.last_status = "", "", "interrupted"
-                    if self._eligible(job, now, mode):
-                        job.running_since_ms = now
-                        job.run_id = uuid.uuid4().hex
-                        job.run_owner = current_process_owner()
-                        job.run_kind = "scheduled" if scheduled else "manual"
-                        job.last_run_at_ms = now
-                        if scheduled:
-                            job.last_scheduled_at_ms = now
-                            # AT runs once; recurring kinds advance past this occurrence.
-                            at_once = job.schedule.kind == ScheduleKind.AT
-                            job.next_run_at_ms = (
-                                None if at_once else self.compute_next_run(job, now)
-                            )
-                        # Registered while the store lock is held, so no
-                        # same-process instance sees the claim on disk without
-                        # its owner record; withdrawn below if the write fails.
-                        registered = job.run_id
-                        with _ACTIVE_RUNS_LOCK:
-                            _ACTIVE_RUNS.add(registered)
-                        claimed = job
-        except BaseException:
-            if registered:
-                with _ACTIVE_RUNS_LOCK:
-                    _ACTIVE_RUNS.discard(registered)
-            if session_only is not None:
-                held, fields = session_only
-                for name, value in fields.items():
-                    setattr(held, name, value)
-            raise
+        # A failed transaction rebuilds persisted rows from disk, but keeps a
+        # session-only job, or a durable one not saved yet (pending add), in
+        # memory as is, so the claim fields are restored here. Restoring a row
+        # the reload already replaced is a no-op.
+        restore: tuple[ScheduledJob, dict[str, Any]] | None = None
+        with self._lock:  # no other thread sees the failed claim before the restore
+            try:
+                with self._persisted_transaction():
+                    job = self._jobs.get(job_id)
+                    if job is not None:
+                        restore = (job, {name: getattr(job, name) for name in _CLAIM_FIELDS})
+                    if job is None:
+                        if not scheduled:
+                            raise KeyError(f"Job '{job_id}' not found")
+                    elif not self._run_alive(job):
+                        if job.running_since_ms is not None:
+                            interrupted = {
+                                "job_id": job_id,
+                                "run_id": job.run_id,
+                                "status": "interrupted",
+                                "error": "run owner exited before reporting an outcome",
+                                "executed_at_ms": now,
+                            }
+                            job.running_since_ms, job.run_id = None, ""
+                            job.run_owner, job.run_kind, job.last_status = "", "", "interrupted"
+                        if self._eligible(job, now, mode):
+                            job.running_since_ms = now
+                            job.run_id = uuid.uuid4().hex
+                            job.run_owner = current_process_owner()
+                            job.run_kind = "scheduled" if scheduled else "manual"
+                            job.last_run_at_ms = now
+                            if scheduled:
+                                job.last_scheduled_at_ms = now
+                                # AT runs once; recurring kinds advance past this occurrence.
+                                at_once = job.schedule.kind == ScheduleKind.AT
+                                job.next_run_at_ms = (
+                                    None if at_once else self.compute_next_run(job, now)
+                                )
+                            # Registered while the store lock is held, so no
+                            # same-process instance sees the claim on disk without
+                            # its owner record; withdrawn below if the write fails.
+                            registered = job.run_id
+                            with _ACTIVE_RUNS_LOCK:
+                                _ACTIVE_RUNS.add(registered)
+                            claimed = job
+            except BaseException:
+                if registered:
+                    with _ACTIVE_RUNS_LOCK:
+                        _ACTIVE_RUNS.discard(registered)
+                if restore is not None:
+                    held, fields = restore
+                    for name, value in fields.items():
+                        setattr(held, name, value)
+                raise
         # Only reached once the transaction (if any) was written.
         if interrupted is not None:
             self._run_log.append(job_id, interrupted)
@@ -749,28 +754,55 @@ class SchedulerService:
         duration_ms: float | None = None,
     ) -> bool:
         now = time.time() * 1000
-        with self._persisted_transaction():
-            job = self._jobs.get(job_id)
-            if job is None or not run_id or job.run_id != run_id:
-                log.info("Ignoring stale outcome for job '%s' run %s", job_id, run_id[:8])
-                current = False
-            else:
-                current = True
-                manual = job.run_kind == "manual"
-                job.running_since_ms = None
-                job.run_id = ""
-                job.run_owner = ""
-                job.run_kind = ""
-                job.last_status = status
-                if duration_ms is not None:
-                    job.last_duration_ms = duration_ms
-                if job.schedule.kind == ScheduleKind.AT and not manual:
-                    if status == "ok" and job.delete_after_run:
-                        self.remove_job(job_id)
+        current: bool | None = None
+        # Job, fields and pending entry before this settlement. If it is not
+        # written the run stays claimed, but the failure reload re-applies the
+        # settlement's pending delete/disable and keeps an in-memory-only row as
+        # mutated, so the prior state is put back (still under the lock).
+        restore: tuple[ScheduledJob, dict[str, Any], tuple[str, dict[str, Any]] | None] | None
+        restore = None
+        with self._lock:
+            try:
+                with self._persisted_transaction():
+                    job = self._jobs.get(job_id)
+                    if job is None or not run_id or job.run_id != run_id:
+                        log.info("Ignoring stale outcome for job '%s' run %s", job_id, run_id[:8])
+                        current = False
                     else:
-                        # Disable AT job after execution (even if errored)
-                        self.update_job(job_id, enabled=False)
-                        job.next_run_at_ms = None
+                        current = True
+                        fields = {name: getattr(job, name) for name in _SETTLE_FIELDS}
+                        restore = (job, fields, self._pending.get(job_id))
+                        manual = job.run_kind == "manual"
+                        job.running_since_ms = None
+                        job.run_id = ""
+                        job.run_owner = ""
+                        job.run_kind = ""
+                        job.last_status = status
+                        if duration_ms is not None:
+                            job.last_duration_ms = duration_ms
+                        if job.schedule.kind == ScheduleKind.AT and not manual:
+                            if status == "ok" and job.delete_after_run:
+                                self.remove_job(job_id)
+                            else:
+                                # Disable AT job after execution (even if errored)
+                                self.update_job(job_id, enabled=False)
+                                job.next_run_at_ms = None
+            except BaseException:
+                if restore is not None:
+                    held, fields, pending = restore
+                    for name, value in fields.items():
+                        setattr(held, name, value)
+                    if pending is None:
+                        self._pending.pop(job_id, None)
+                    else:
+                        self._pending[job_id] = pending
+                    # As before the settlement; a stored row equals its unchanged disk row.
+                    self._jobs[job_id] = held
+                elif current is False:
+                    # A stale outcome holds no claim; its ID must not outlive it.
+                    with _ACTIVE_RUNS_LOCK:
+                        _ACTIVE_RUNS.discard(run_id)
+                raise
         # Persisted (or no longer ours): the in-process liveness record ends.
         with _ACTIVE_RUNS_LOCK:
             _ACTIVE_RUNS.discard(run_id)
