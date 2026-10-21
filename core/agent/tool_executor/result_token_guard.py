@@ -116,9 +116,26 @@ def _guard_tool_result(
         "_truncated": True,
         "_original_tokens": estimated_tokens,
     }
-    # A failure's control fields outrank metadata and preview: the error (as a
-    # bounded prefix), whether a retry can help, and whether an effect landed
-    # survive truncation, so the model and convergence tracking still see it.
+    base = keep_failure_control(base, result, max_chars)
+    base = _with_fitting(
+        base, result, max_chars, ("task_id", "task_type", "status", "error_message", "tier")
+    )
+
+    key = "summary" if "summary" in result else "preview"
+    text = str(result["summary"]) if key == "summary" else serialized
+    return _fit_prefix(base, key, text, max_chars) or base
+
+
+def keep_failure_control(
+    base: dict[str, Any], result: dict[str, Any], max_chars: int
+) -> dict[str, Any]:
+    """Add ``result``'s failure control fields to ``base`` within ``max_chars``.
+
+    The one rule for every lossy stand-in (guard truncation, offload): the
+    error (as a bounded prefix), whether a retry can help, and whether an
+    effect landed outrank metadata and previews, so the model and convergence
+    tracking still see a failure as one.
+    """
     error = result.get("error")
     error_text = "" if not error else error if isinstance(error, str) else _dumps(error)
     if error_text:
@@ -127,13 +144,23 @@ def _guard_tool_result(
     base = _with_fitting(base, result, max_chars, _ERROR_CONTROL_KEYS)
     if "error" in base:
         base = _fit_prefix(base, "error", error_text, max_chars) or base
-    base = _with_fitting(
-        base, result, max_chars, ("task_id", "task_type", "status", "error_message", "tier")
-    )
+    return base
 
-    key = "summary" if "summary" in result else "preview"
-    text = str(result["summary"]) if key == "summary" else serialized
-    return _fit_prefix(base, key, text, max_chars) or base
+
+def offload_reference(
+    result: Any, reference: dict[str, Any], *, summary: str, hint: str, max_chars: int
+) -> dict[str, Any]:
+    """Complete the in-context stand-in for an offloaded ``result``.
+
+    A failure keeps its control fields and the whole stand-in stays within
+    ``max_chars`` (the threshold that offloaded it); any other result keeps
+    the plain summary and recall hint.
+    """
+    if not (isinstance(result, dict) and result.get("error")):
+        return {**reference, "summary": summary, "hint": hint}
+    reference = keep_failure_control(reference, result, max_chars)
+    reference = _with_fitting(reference, {"hint": hint}, max_chars)
+    return _fit_prefix(reference, "summary", summary, max_chars) or reference
 
 
 def _dumps(value: Any) -> str:

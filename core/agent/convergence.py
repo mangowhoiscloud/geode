@@ -179,6 +179,9 @@ class ConvergenceDetector:
     def _success_fingerprint(self, parsed: Any, log_entry: dict[str, Any] | None) -> str:
         tool_name = self._tool_name(log_entry)
         tool_input = log_entry.get("input", {}) if log_entry else {}
+        if isinstance(parsed, dict) and parsed.get("_offloaded"):
+            # The offload reference id is per call, not part of the observation.
+            parsed = {key: value for key, value in parsed.items() if key != "_ref_id"}
         payload = {
             "tool": tool_name,
             "input": tool_input,
