@@ -198,12 +198,14 @@ dispatch; a SQLite message-SoT failure stops the batch. The provider call ID
 only pairs a tool use with its result and is never the restart recovery key. A
 committed duplicate replays its PostToolUse-final bounded result without another
 sink call; a conflicting request is rejected; an unfinished receipt returns
-`effect_outcome_uncertain` and is never automatically replayed. A handler that
-returns a pre-effect refusal (`validation`, `not_found`, `permission`,
-`authorization`, `dependency`, or a clarification request) commits that
-recoverable error as the operation's outcome. A timeout, abandoned worker,
-raised exception, or other returned error leaves the receipt prepared and
-returns `effect_outcome_uncertain` with a bounded, redacted cause. Restart closes
+`effect_outcome_uncertain` and is never automatically replayed. Only an error
+whose handler explicitly declares `effect_applied: false`
+(`core.tools.base.refused_before_effect`, used solely on paths that return
+before any effect I/O) commits as the operation's recoverable outcome; an error
+category alone is not evidence that nothing was applied. A timeout, abandoned
+worker, raised exception, or any other returned error leaves the receipt
+prepared and returns `effect_outcome_uncertain` with a bounded, redacted cause.
+Restart closes
 the anchored assistant call with the committed, uncertain, or interrupted
 result before another model request. The balanced call/result history is then
 strictly checkpointed before auxiliary reflection or the next main request.

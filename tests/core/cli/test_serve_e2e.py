@@ -215,6 +215,13 @@ class TestServeToolExecution:
                 context=step(1),
             )
         )
+        rejected = asyncio.run(
+            executor.aexecute(
+                "generate_report",
+                {"subject": "demo-subject", "analysis_data": {"final_score": "high"}},
+                context=step(2),
+            )
+        )
         report = asyncio.run(
             executor.aexecute(
                 "generate_report",
@@ -223,13 +230,16 @@ class TestServeToolExecution:
                     "format": "markdown",
                     "analysis_data": {"summary": "ok"},
                 },
-                context=step(2),
+                context=step(3),
             )
         )
 
         assert saved["error_type"] == "not_found"
+        assert saved["effect_applied"] is False
         assert "geode init" in saved["error"]
         assert "outcome_uncertain" not in saved
+        assert rejected["error_type"] == "validation"
+        assert rejected["effect_applied"] is False
         assert "error" not in report
         assert Path(report["result"]["artifact"]["path"]).is_file()
         assert receipts.list_uncertain(session_id="s-serve") == []

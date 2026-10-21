@@ -20,7 +20,7 @@ from core.memory.effect_receipts import (
 )
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 from core.memory.session_manager import SessionManager
-from core.tools.base import ToolContext
+from core.tools.base import ToolContext, refused_before_effect, tool_error
 from core.tools.plan import (
     ExecutionBinding,
     PersistenceRule,
@@ -309,13 +309,14 @@ def test_effect_handler_error_stays_uncertain_without_replay(tmp_path) -> None:
 @pytest.mark.parametrize(
     "failure",
     [
-        {"error": "Project memory file is missing.", "error_type": "not_found"},
-        {"error": "analysis_data must be an object", "error_type": "validation"},
-        {"error": "action requires: value", "clarification_needed": True},
+        refused_before_effect(
+            {"error": "Project memory file is missing.", "error_type": "not_found"}
+        ),
+        refused_before_effect({"error": "action requires: value", "clarification_needed": True}),
     ],
-    ids=["not_found", "validation", "clarification"],
+    ids=["not_found", "clarification"],
 )
-def test_definite_handler_failure_commits_without_quarantining_session(
+def test_declared_no_effect_failure_commits_without_quarantining_session(
     tmp_path, failure: dict[str, Any]
 ) -> None:
     calls: list[int] = []
@@ -343,6 +344,38 @@ def test_definite_handler_failure_commits_without_quarantining_session(
     assert store.list_uncertain(session_id="s-test") == []
 
 
+@pytest.mark.parametrize("error_type", ["authorization", "validation", "not_found"])
+def test_error_category_without_no_effect_declaration_stays_uncertain(
+    tmp_path, error_type: str
+) -> None:
+    """A Docs-style create that wrote, then failed a follow-up call, must not replay."""
+    created: list[str] = []
+
+    def create_document(**kwargs: Any) -> dict[str, Any]:
+        created.append(f"doc-{len(created) + 1}")  # the external create succeeded
+        return tool_error("token refresh failed during body insert", error_type=error_type)
+
+    store = EffectReceiptStore(tmp_path / "sessions.db")
+    executor = ToolExecutor(
+        bound_tool_plan=_bound(ToolEffect.MUTATE, create_document),
+        effect_receipts=store,
+    )
+    context = _context()
+    arguments = {"action": "create", "title": "Plan"}
+
+    first = asyncio.run(executor.aexecute("action", arguments, context=context))
+    duplicate = asyncio.run(executor.aexecute("action", arguments, context=_context(2)))
+
+    assert first["error_type"] == "effect_outcome_uncertain"
+    assert first["cause_error_type"] == error_type
+    assert "token refresh failed" in first["error"]
+    assert duplicate["blocking_operation_id"] == context.operation_id
+    assert created == ["doc-1"]
+    assert [row["operation_id"] for row in store.list_uncertain(session_id="s-test")] == [
+        context.operation_id
+    ]
+
+
 def test_raised_effect_exception_stays_uncertain_with_bounded_cause(tmp_path) -> None:
     def handler(**_kwargs: Any) -> dict[str, Any]:
         raise ValueError("sink rejected request after partial write " + "x" * 700)
@@ -368,7 +401,9 @@ def test_personal_effect_failure_cause_and_receipt_stay_redacted(tmp_path) -> No
     secret = "private recipient person@example.com"
     outcomes = iter(
         [
-            {"error": f"mailbox missing for {secret}", "error_type": "not_found"},
+            refused_before_effect(
+                {"error": f"mailbox missing for {secret}", "error_type": "not_found"}
+            ),
             {"error": f"connection reset after sending to {secret}"},
         ]
     )
@@ -398,6 +433,7 @@ def test_personal_effect_failure_cause_and_receipt_stay_redacted(tmp_path) -> No
     assert recovered is not None and recovered.kind is EffectAdmissionKind.REPLAY
     assert recovered.result is not None
     assert recovered.result["error_type"] == "not_found"
+    assert recovered.result["effect_applied"] is False
     assert secret not in json.dumps(recovered.result)
     assert uncertain["error_type"] == "effect_outcome_uncertain"
     assert secret not in uncertain["error"]

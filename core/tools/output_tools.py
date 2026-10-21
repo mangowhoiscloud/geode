@@ -167,21 +167,28 @@ class GenerateReportTool:
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         from core.memory.vault import Vault, _slugify
-        from core.tools.base import tool_error
+        from core.tools.base import refused_before_effect, tool_error
 
         subject = str(kwargs.get("subject") or kwargs.get("subject_id") or "Untitled")
         analysis_data = kwargs.get("analysis_data") or {}
         fmt = str(kwargs.get("format") or "markdown")
+        # Argument validation precedes rendering and the vault write.
         if fmt not in _REPORT_FORMATS:
-            return tool_error(
-                f"Unsupported report format '{fmt}'; use one of {sorted(_REPORT_FORMATS)}",
-                error_type="validation",
+            return refused_before_effect(
+                tool_error(
+                    f"Unsupported report format '{fmt}'; use one of {sorted(_REPORT_FORMATS)}",
+                    error_type="validation",
+                )
             )
         if not isinstance(analysis_data, dict):
-            return tool_error("analysis_data must be an object", error_type="validation")
+            return refused_before_effect(
+                tool_error("analysis_data must be an object", error_type="validation")
+            )
         score = analysis_data.get("final_score")
         if score is not None and (isinstance(score, bool) or not isinstance(score, int | float)):
-            return tool_error("final_score must be a number when provided", error_type="validation")
+            return refused_before_effect(
+                tool_error("final_score must be a number when provided", error_type="validation")
+            )
 
         report: dict[str, Any] = {
             "title": f"GEODE Analysis Report: {subject}",
