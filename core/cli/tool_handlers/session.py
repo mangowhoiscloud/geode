@@ -28,6 +28,22 @@ def tool_principal(context: Any = None) -> SessionPrincipal:
     )
 
 
+def _read_result_char_limit(context: Any = None) -> int | None:
+    """The executing processor's offload/guard bound on one serialized result."""
+    from core.agent.tool_executor.result_token_guard import tool_result_char_limit
+
+    model = getattr(context, "model", "")
+    processor = getattr(getattr(context, "agent_loop", None), "_tool_processor", None)
+    if processor is None:
+        return tool_result_char_limit(model if isinstance(model, str) else "")
+    processor_model = getattr(processor, "_model", "")
+    threshold = getattr(getattr(processor, "_offload_store", None), "threshold", 0)
+    return tool_result_char_limit(
+        processor_model if isinstance(processor_model, str) and processor_model else str(model),
+        offload_threshold=threshold if isinstance(threshold, int) else 0,
+    )
+
+
 def _build_session_handlers(sessions_dir: Path | None = None) -> UniqueEntries[str, Any]:
     """Build the model-facing peer message, read, and fork handlers."""
 
@@ -63,6 +79,7 @@ def _build_session_handlers(sessions_dir: Path | None = None) -> UniqueEntries[s
                 tool_principal(context),
                 admitted if isinstance(admitted, set) else None,
                 limit=int(kwargs.get("limit") or 5),
+                max_result_chars=_read_result_char_limit(context),
                 sessions_dir=sessions_dir,
             )
         except ValueError as exc:

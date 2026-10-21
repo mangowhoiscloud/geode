@@ -11,6 +11,7 @@ the existing owners: ``CollaborationStore``'s ``collaboration_mailbox`` and
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -19,11 +20,15 @@ from core.memory.collaboration import PEER_MESSAGE_KIND, CollaborationStore, Pee
 from core.memory.session_checkpoint import SessionCheckpoint, SessionForkError
 
 OPERATOR_SENDER = "operator"
-# A message must fit, whole, in one read_session_messages result well under the
-# default tool-result offload threshold (an offloaded read would never count as
-# delivered), so peer messages are short notes.
+# Peer messages are short notes. One read_session_messages result, measured as
+# the serialized tool result, stays within _READ_CHAR_BUDGET and the caller's
+# effective tool-result limit (an offloaded or truncated read never counts as
+# delivered); a message too long for that is delivered once as a prefix.
 MAX_PEER_MESSAGE_CHARS = 4_000
 _READ_CHAR_BUDGET = 8_000
+# Selecting unread rows and reserving them in the admission receipt is one
+# step: parallel read calls of one response run in executor threads.
+_READ_LOCK = threading.Lock()
 _GATEWAY_PREFIX = "s-gw-"  # build_gateway_checkpoint_session_id
 _TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "timeout", "interrupted"})
 _TERMINAL_CHECKPOINT_STATUSES = frozenset({"completed", "error"})
@@ -183,11 +188,62 @@ PEER_DATA_NOTE = (
 )
 
 
+def _peer_result(entries: list[dict[str, Any]], remaining: int) -> dict[str, Any]:
+    return {"note": PEER_DATA_NOTE, "messages": entries, "remaining": remaining}
+
+
+def _result_chars(result: dict[str, Any]) -> int:
+    # The serialization the tool-result processor offloads and guards on.
+    return len(json.dumps(result, ensure_ascii=False, default=str))
+
+
+def _truncated_entry(entry: dict[str, Any], remaining: int, budget: int) -> dict[str, Any] | None:
+    """Return the longest non-empty prefix of ``entry`` whose result fits, or None."""
+    text = str(entry["text"])
+    base = {**entry, "truncated": True, "original_chars": len(text)}
+    fitted: dict[str, Any] | None = None
+    low, high = 1, len(text)
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = {**base, "text": text[:middle]}
+        if _result_chars(_peer_result([candidate], remaining)) <= budget:
+            fitted, low = candidate, middle + 1
+        else:
+            high = middle - 1
+    return fitted
+
+
+def _fit_entries(items: list[Any], unread: int, budget: int) -> list[dict[str, Any]]:
+    """Take rows in order while the whole serialized result stays within budget."""
+    entries: list[dict[str, Any]] = []
+    for item in items:
+        entry = {
+            "message_id": item.id,
+            "sender_session_id": item.sender_session_id,
+            "queued_at": item.created_at,
+            "text": str(item.payload.get("message", "")),
+        }
+        remaining = unread - len(entries) - 1
+        if _result_chars(_peer_result([*entries, entry], remaining)) <= budget:
+            entries.append(entry)
+            continue
+        if not entries:
+            # Too long for any one result: deliver a bounded prefix once rather
+            # than return a result that is offloaded, never acknowledged, and
+            # read again forever.
+            truncated = _truncated_entry(entry, remaining, budget)
+            if truncated is not None:
+                entries.append(truncated)
+        break
+    return entries
+
+
 def read_peer_messages(
     principal: SessionPrincipal,
     admitted: set[int] | None,
     *,
     limit: int = 5,
+    max_result_chars: int | None = None,
     sessions_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Return this root session's unread peer messages as tool-result data.
@@ -197,7 +253,9 @@ def read_peer_messages(
     ``admitted`` is the calling loop's checkpointed admission receipt: each
     returned row joins it, a row already in it is never returned twice, and
     the loop acknowledges the row only after a checkpoint has persisted the
-    tool result that carries it.
+    tool result that carries it. The serialized result never exceeds
+    ``_READ_CHAR_BUDGET`` or ``max_result_chars`` (the caller's effective
+    tool-result limit).
     """
     checkpoint, store = _stores(sessions_dir)
     _require_root_caller(principal, checkpoint=checkpoint, store=store)
@@ -206,34 +264,18 @@ def read_peer_messages(
     if admitted is None:
         raise PeerMessageError("peer messages are read only inside an active session turn")
     bound = max(1, min(int(limit), 20))
-    unread = [
-        item
-        for item in store.read_mailbox(principal.session_id, limit=200, peer=True)
-        if item.kind == PEER_MESSAGE_KIND and item.id not in admitted
-    ]
-    batch: list[Any] = []
-    chars = 0
-    for item in unread[:bound]:
-        # Budget the serialized form the tool result actually carries.
-        size = len(json.dumps(str(item.payload.get("message", "")), ensure_ascii=False))
-        if batch and chars + size > _READ_CHAR_BUDGET:
-            break
-        batch.append(item)
-        chars += size
-    admitted.update(item.id for item in batch)
-    return {
-        "note": PEER_DATA_NOTE,
-        "messages": [
-            {
-                "message_id": item.id,
-                "sender_session_id": item.sender_session_id,
-                "queued_at": item.created_at,
-                "text": str(item.payload.get("message", "")),
-            }
-            for item in batch
-        ],
-        "remaining": len(unread) - len(batch),
-    }
+    budget = _READ_CHAR_BUDGET
+    if max_result_chars is not None:
+        budget = min(budget, int(max_result_chars))
+    with _READ_LOCK:
+        unread = [
+            item
+            for item in store.read_mailbox(principal.session_id, limit=200, peer=True)
+            if item.kind == PEER_MESSAGE_KIND and item.id not in admitted
+        ]
+        entries = _fit_entries(unread[:bound], len(unread), budget)
+        admitted.update(entry["message_id"] for entry in entries)
+    return _peer_result(entries, len(unread) - len(entries))
 
 
 def peer_message_status(message_id: int, *, sessions_dir: Path | None = None) -> dict[str, Any]:

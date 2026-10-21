@@ -803,7 +803,7 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 20,
-          "description": "Maximum messages to return (default 5); a result stays within 8,000 serialized characters."
+          "description": "Maximum messages to return (default 5); a result stays within 8,000 serialized characters and the tool-result limit, and a message too long for one result is returned once as a prefix marked truncated."
         }
       },
       "required": [],
