@@ -64,6 +64,28 @@ def _coerce_float(value: Any) -> float | None:
     return None
 
 
+def _is_nonfinite_score(value: Any) -> bool:
+    """A numeric score that is NaN or infinite (an unmeasured sample)."""
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and not math.isfinite(float(value))
+    )
+
+
+def _collect_dim_value(per_dim: dict[str, list[float]], dim: str, raw: Any) -> None:
+    """Append a finite score, or NaN for a non-finite one; skip non-scores.
+
+    The NaN keeps the unmeasured sample visible to the aggregate: dropping it
+    would let the remaining samples pass as a complete measurement.
+    """
+    coerced = _coerce_float(raw)
+    if coerced is not None:
+        per_dim.setdefault(dim, []).append(coerced)
+    elif _is_nonfinite_score(raw):
+        per_dim.setdefault(dim, []).append(math.nan)
+
+
 def _walk_dim_values(samples: Any) -> dict[str, list[float]]:
     """Iterate samples + per-sample scores, collecting numeric dim values.
 
@@ -75,7 +97,8 @@ def _walk_dim_values(samples: Any) -> dict[str, list[float]]:
       pattern).
 
     Both shapes are accepted; the dim key for the scalar case is the
-    outer scorer name.
+    outer scorer name. A non-finite score is collected as NaN (see
+    :func:`_collect_dim_value`), never dropped.
     """
     per_dim: dict[str, list[float]] = {}
     for sample in samples or []:
@@ -88,15 +111,9 @@ def _walk_dim_values(samples: Any) -> dict[str, list[float]]:
             value = getattr(score_obj, "value", None)
             if isinstance(value, dict):
                 for dim, raw in value.items():
-                    coerced = _coerce_float(raw)
-                    if coerced is None:
-                        continue
-                    per_dim.setdefault(str(dim), []).append(coerced)
+                    _collect_dim_value(per_dim, str(dim), raw)
             else:
-                coerced = _coerce_float(value)
-                if coerced is None:
-                    continue
-                per_dim.setdefault(str(scorer_name), []).append(coerced)
+                _collect_dim_value(per_dim, str(scorer_name), value)
     return per_dim
 
 
@@ -107,6 +124,8 @@ def _walk_dim_rows(samples: Any) -> list[dict[str, float]]:
     a dim). The autoresearch bootstrap resamples whole sample rows, so it needs
     this row shape, not the compact columns. A sample missing a dim simply
     omits that key from its row (the bootstrap averages over present values).
+    A non-finite score is omitted here too; the aggregate for that dim is NaN,
+    which the promotion gate rejects before any bootstrap margin is read.
     """
     rows: list[dict[str, float]] = []
     for sample in samples or []:
@@ -164,9 +183,11 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
       so "no stability signal"; (b) ``N > 1 and all values identical``
       — variance genuinely zero, so "perfect stability". Callers
       should treat (a) and (b) differently.
-    - ``"sample_count"``: ``{dim: int}`` — number of numeric values that
+    - ``"sample_count"``: ``{dim: int}`` — number of finite values that
       went into ``(mean, stderr)`` for this dim. The disambiguator
-      for the two ``stderr == 0.0`` cases above.
+      for the two ``stderr == 0.0`` cases above. If any sample scored the
+      dim NaN/±inf, its mean and stderr are both NaN (unscored), never an
+      aggregate of the remaining samples.
     - ``"measurement_modality"``: ``{dim: str}`` — provenance of the dim's
       score. Uniformly ``"judge_llm"`` — every dim is rubric-scored by the
       LLM judge (the two post-judge analytics dims were removed,
@@ -224,10 +245,16 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
     sample_count: dict[str, int] = {}
     measurement_modality: dict[str, str] = {}
     for dim, vals in per_dim.items():
-        mean, stderr = _aggregate(vals)
+        finite = [v for v in vals if math.isfinite(v)]
+        if len(finite) < len(vals):
+            # A non-finite sample leaves the dim unscored (NaN mean AND stderr),
+            # so the promotion gate reads it as unmeasured instead of complete.
+            mean, stderr = math.nan, math.nan
+        else:
+            mean, stderr = _aggregate(vals)
         dim_means[dim] = mean
         dim_stderr[dim] = stderr
-        sample_count[dim] = len(vals)
+        sample_count[dim] = len(finite)
         measurement_modality[dim] = DEFAULT_MODALITY
 
     log.info(

@@ -62,7 +62,9 @@ def _build_memory_handlers(
         if not query:
             return _clarify("memory_search", ["query"], "무엇을 검색할까요?")
         tier = kwargs.get("tier") or "all"
-        result = MemorySearchTool(services=services)._execute_sync(query=query, tier=tier)
+        result = MemorySearchTool(services=services)._execute_sync(
+            query=query, tier=tier, _tool_context=kwargs.get("_tool_context")
+        )
         return {"status": "ok", "action": "memory_search", **result["result"]}
 
     def handle_memory_save(**kwargs: Any) -> dict[str, Any]:

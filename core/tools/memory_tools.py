@@ -13,6 +13,7 @@ Layer 5 tools for memory access:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -23,6 +24,7 @@ from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
 from core.memory.project import MemoryWrite, ProjectMemory
 from core.memory.session import InMemorySessionStore
+from core.memory.session_key import gateway_session_visible
 from core.tools.base import ToolErrorType, tool_error
 
 log = logging.getLogger(__name__)
@@ -54,6 +56,66 @@ def _get_session_store(store: SessionStorePort | None) -> tuple[SessionStorePort
         "InMemorySessionStore — data will NOT survive this call"
     )
     return InMemorySessionStore(), True
+
+
+# Hard budgets for one memory_search result, in serialized characters as the
+# tool processor measures them. Stored session data and MEMORY.md lines have no
+# length limit, so neither one match nor the whole result may grow with them.
+SEARCH_MATCH_CHAR_CAP = 1_000
+SEARCH_RESULT_CHAR_CAP = 4_000
+_SEARCH_QUERY_ECHO_CHARS = 200
+
+
+def _json_len(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _bounded_match(match: dict[str, Any]) -> dict[str, Any]:
+    """Return *match*, or an explicitly marked excerpt within the per-match cap."""
+    text = json.dumps(match, ensure_ascii=False, default=str)
+    if len(text) <= SEARCH_MATCH_CHAR_CAP:
+        return match
+    keep = SEARCH_MATCH_CHAR_CAP
+    while True:
+        bounded = {
+            "tier": str(match.get("tier", ""))[:16],
+            "truncated": True,
+            "original_chars": len(text),
+            "excerpt": f"{text[:keep]}…[truncated {len(text) - keep} chars]",
+        }
+        overflow = _json_len(bounded) - SEARCH_MATCH_CHAR_CAP
+        if overflow <= 0 or keep == 0:
+            return bounded
+        keep = max(0, keep - overflow)
+
+
+def _bounded_matches(matches: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Cap every match, then stop before the result budget; returns (kept, omitted)."""
+    kept: list[dict[str, Any]] = []
+    used = 2  # the enclosing ``[]``
+    for index, match in enumerate(matches):
+        item = _bounded_match(match)
+        size = _json_len(item) + 2  # ``, `` separator
+        if used + size > SEARCH_RESULT_CHAR_CAP:
+            return kept, len(matches) - index
+        kept.append(item)
+        used += size
+    return kept, 0
+
+
+def _caller_session_ids(context: Any) -> frozenset[str]:
+    """The executing loop's session and parent ids, never tool arguments.
+
+    Mirrors ``core.cli.tool_handlers.session.tool_principal``.
+    """
+    from core.agent.cognitive_state_ctx import get_parent_session_id, get_session_id
+
+    loop = getattr(context, "agent_loop", None)
+    ids = (
+        str(getattr(context, "session_id", "") or get_session_id()),
+        get_parent_session_id() or str(getattr(loop, "_parent_session_id", "") or ""),
+    )
+    return frozenset(session_id for session_id in ids if session_id)
 
 
 class _AsyncExecuteMixin:
@@ -129,9 +191,13 @@ class MemorySearchTool(_AsyncExecuteMixin):
         matches: list[dict[str, Any]] = []
         query_lower = query.lower()
 
-        # Session tier
+        # Session tier: the store is shared by every gateway conversation, so a
+        # caller only sees gateway keys its own thread owns.
         if tier in ("session", "all"):
+            callers = _caller_session_ids(kwargs.get("_tool_context"))
             for session_id in store.list_sessions():
+                if not gateway_session_visible(session_id, callers):
+                    continue
                 data = store.get(session_id)
                 if data is None:
                     continue
@@ -199,15 +265,18 @@ class MemorySearchTool(_AsyncExecuteMixin):
                         }
                     )
 
-        return {
-            "result": {
-                "query": query,
-                "tier_searched": tier,
-                "matches": matches,
-                "total_found": len(matches),
-                "ephemeral": ephemeral,
-            }
+        bounded, omitted = _bounded_matches(matches)
+        result: dict[str, Any] = {
+            "query": query[:_SEARCH_QUERY_ECHO_CHARS],
+            "tier_searched": tier,
+            "matches": bounded,
+            "total_found": len(matches),
+            "ephemeral": ephemeral,
         }
+        if omitted:
+            result["truncated"] = True
+            result["omitted_matches"] = omitted
+        return {"result": result}
 
 
 class MemoryGetTool(_AsyncExecuteMixin):
