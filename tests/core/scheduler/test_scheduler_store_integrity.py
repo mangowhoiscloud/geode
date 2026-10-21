@@ -483,3 +483,111 @@ def test_stuck_report_survives_a_failure_later_in_the_same_tick(tmp_path: Path) 
     payloads.clear()
     assert "alive" in svc.detect_stuck_jobs()
     assert any("alive" in p.get("stuck_jobs", []) for p in payloads)
+
+
+def _at_job(job_id: str, at_ms: float, **kwargs: Any) -> ScheduledJob:
+    return _job(job_id, schedule=Schedule(kind=ScheduleKind.AT, at_ms=at_ms), **kwargs)
+
+
+def _is_active(run_id: str) -> bool:
+    from core.scheduler import service
+
+    with service._ACTIVE_RUNS_LOCK:
+        return run_id in service._ACTIVE_RUNS
+
+
+def test_failed_claim_write_restores_an_unsaved_durable_one_shot(tmp_path: Path) -> None:
+    """A durable job not yet saved (pending add) survives a failed claim write."""
+    fired: list[str] = []
+    svc = _svc(tmp_path, on_job_fired=lambda jid, *_args: fired.append(jid))
+    # A store exists (claims run in a transaction); this job is not due below.
+    svc.create_job(_job("durable", schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=3_600_000)))
+    at_ms = time.time() * 1000 + 60_000
+    svc.add_job(_at_job("once", at_ms))  # e.g. a calendar pull; not saved yet
+    with (
+        mock.patch.object(svc, "_write_locked", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.check_due_jobs(now_ms=at_ms + 1)
+    assert fired == []
+    job = svc.get_job("once")
+    assert job is not None and job.next_run_at_ms == at_ms
+    assert job.run_id == "" and job.running_since_ms is None
+    assert job.last_scheduled_at_ms is None
+    assert [r["job_id"] for r in svc.check_due_jobs(now_ms=at_ms + 1)] == ["once"]
+    assert fired == ["once"]
+
+
+def test_failed_completion_write_keeps_a_deleting_one_shot_claimed(tmp_path: Path) -> None:
+    """A failed terminal write neither deletes the job nor leaks its run ID."""
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None)
+    at_ms = time.time() * 1000 + 60_000
+    svc.create_job(_at_job("once", at_ms, delete_after_run=True))
+    [result] = svc.check_due_jobs(now_ms=at_ms + 1)
+    run_id = result["run_id"]
+    with (
+        mock.patch.object(svc, "_write_locked", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.record_run_outcome("once", run_id, "ok")
+    job = svc.get_job("once")
+    assert job is not None and job.run_id == run_id and job.running_since_ms is not None
+    assert _is_active(run_id)
+    svc.save()  # a later successful write must not apply the failed deletion
+    assert _disk(tmp_path)["once"]["run_id"] == run_id
+    assert svc.record_run_outcome("once", run_id, "ok") is True
+    assert "once" not in _disk(tmp_path) and svc.get_job("once") is None
+    assert not _is_active(run_id)
+
+
+def test_failed_completion_write_keeps_a_disabling_one_shot_claimed(tmp_path: Path) -> None:
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None)
+    at_ms = time.time() * 1000 + 60_000
+    svc.create_job(_at_job("once", at_ms))
+    [result] = svc.check_due_jobs(now_ms=at_ms + 1)
+    run_id = result["run_id"]
+    with (
+        mock.patch.object(svc, "_write_locked", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.record_run_outcome("once", run_id, "error", error="boom")
+    job = svc.get_job("once")
+    assert job is not None and job.run_id == run_id and job.enabled
+    assert _is_active(run_id)
+    svc.save()
+    assert _disk(tmp_path)["once"]["run_id"] == run_id
+    assert _disk(tmp_path)["once"]["enabled"] is True
+    assert svc.record_run_outcome("once", run_id, "error", error="boom") is True
+    assert _disk(tmp_path)["once"]["enabled"] is False
+    assert not _is_active(run_id)
+
+
+def test_failed_completion_write_keeps_a_session_only_run_claimed(tmp_path: Path) -> None:
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None)
+    svc.create_job(_job("durable"))  # a store exists, so settles run in a transaction
+    svc.create_job(_job("session", durable=False))
+    run_id = svc.run_now("session")["run_id"]
+    with (
+        mock.patch.object(svc, "_write_locked", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.record_run_outcome("session", run_id, "ok")
+    job = svc.get_job("session")
+    assert job is not None and job.run_id == run_id and job.running_since_ms is not None
+    assert _is_active(run_id)
+    assert svc.run_now("session")["reason"] == "already_running"
+    assert svc.record_run_outcome("session", run_id, "ok") is True
+    assert not _is_active(run_id)
+
+
+def test_failed_write_of_a_stale_outcome_does_not_leak_its_run_id(tmp_path: Path) -> None:
+    svc = _svc(tmp_path, on_job_fired=lambda *_args: None)
+    svc.create_job(_job("gone"))
+    run_id = svc.run_now("gone")["run_id"]
+    assert _svc(tmp_path).delete_job("gone")  # deleted by another instance
+    with (
+        mock.patch.object(svc, "_write_locked", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        svc.record_run_outcome("gone", run_id, "ok")
+    assert not _is_active(run_id)
