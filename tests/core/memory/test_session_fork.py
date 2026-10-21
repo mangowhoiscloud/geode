@@ -850,3 +850,30 @@ def test_a_failed_discard_keeps_the_directory_out_of_the_swept_set(
         patch.setattr(SessionCheckpoint, "_discard_fork_locked", lost_marker_discard)
         assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
     assert str(project.resolve()) not in session_checkpoint._ORPHAN_SWEPT_DIRS
+
+
+def test_failed_final_rmdir_restores_the_marker(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The marker goes last but one: if the empty directory stays, so does the marker."""
+    import errno
+
+    orphan = project / "s-orphan0005"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src", encoding="utf-8")
+    session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
+    original_rmdir = Path.rmdir
+
+    def busy_rmdir(self: Path) -> None:
+        if self == orphan:
+            raise OSError(errno.EBUSY, "Device or resource busy")
+        original_rmdir(self)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "rmdir", busy_rmdir)
+        assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
+    assert (orphan / ".fork-pending").is_file()
+    assert str(project.resolve()) not in session_checkpoint._ORPHAN_SWEPT_DIRS
+    session_checkpoint._ORPHAN_SWEPT_DIRS.clear()  # a restarted process
+    assert SessionCheckpoint(project).sweep_orphan_forks_once() == 1
+    assert not orphan.exists()
