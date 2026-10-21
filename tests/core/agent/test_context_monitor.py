@@ -775,6 +775,24 @@ class TestGuardToolResultModelAware:
         assert guarded["_truncated"] is True
         assert len(json.dumps(guarded, ensure_ascii=False)) <= 32 * 4
 
+    @pytest.mark.parametrize("max_tokens", [1, 14, 32])
+    def test_truncation_keeps_failure_control_fields(self, max_tokens):
+        from core.agent.tool_executor import _guard_tool_result
+
+        result = {
+            "error": "Effect completed but its durable outcome is uncertain. " * 20,
+            "error_type": "effect_outcome_uncertain",
+            "recoverable": False,
+            "effect_applied": True,
+            "additional_context": "Keep this response concise. " * 50,
+        }
+        guarded = _guard_tool_result(result, max_tokens=max_tokens)
+
+        assert guarded["_truncated"] is True
+        assert len(json.dumps(guarded, ensure_ascii=False)) <= 32 * 4  # the floor
+        assert guarded["error"] and result["error"].startswith(guarded["error"])
+        assert guarded["recoverable"] is False and guarded["effect_applied"] is True
+
 
 @pytest.mark.parametrize("native_sidecar", [True, False])
 def test_anthropic_compaction_counts_last_valid_block_without_history_mutation(native_sidecar):

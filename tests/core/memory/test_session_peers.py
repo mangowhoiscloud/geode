@@ -740,3 +740,62 @@ def test_a_limit_too_small_for_any_message_is_a_final_error(
         assert names in content["error"]
     assert loop._admitted_mailbox_ids == set()
     assert peer_message_status(receipt.message_id)["status"] == "queued"
+
+
+@pytest.mark.parametrize("guard_tokens", [1, 14])
+def test_limit_error_survives_post_tool_context_and_the_guard(
+    project: Path, monkeypatch: pytest.MonkeyPatch, guard_tokens: int
+) -> None:
+    """Hook context added after the handler's budget never strips the stop signal."""
+    import contextvars
+    import json
+    from unittest.mock import MagicMock
+
+    from core.agent.cognitive_state_ctx import set_session_id
+    from core.agent.convergence import ConvergenceDetector
+    from core.agent.tool_executor import ToolExecutor
+    from core.agent.tool_executor.processor import ToolCallProcessor
+    from core.cli.tool_handlers.session import _build_session_handlers
+    from core.config import settings
+    from core.hooks import HookAction, HookDecision, HookName, HookRegistry
+    from core.tools.plan import ExecutionBinding, ToolSpec, bind_tool_plan, compile_tool_plan
+
+    monkeypatch.setattr(settings, "max_tool_result_tokens", guard_tokens)
+    name = "read_session_messages"
+    plan = compile_tool_plan(
+        ((ToolSpec(name, "read", {"type": "object"}), "test"),),
+        (ExecutionBinding(name, "test"),),
+    )
+    bound = bind_tool_plan(plan, {name: _build_session_handlers(project)[name]})
+    hooks = HookRegistry()
+    hooks.register(
+        HookName.POST_TOOL_USE,
+        lambda _invocation: HookDecision(
+            action=HookAction.ADD_CONTEXT, instruction="Keep this response concise."
+        ),
+    )
+    loop = _loop("s-root-b", [])
+    loop._admitted_mailbox_ids = set()
+    processor = ToolCallProcessor(
+        executor=ToolExecutor(bound_tool_plan=bound, auto_approve=True, hook_registry=hooks),
+        op_logger=MagicMock(log_tool_call=MagicMock(return_value=True)),
+        error_recovery=MagicMock(),
+        agent_loop=loop,
+    )
+    loop._tool_processor = processor
+    receipt = send_peer_message(OPERATOR, "s-root-b", "hello")
+    block = SimpleNamespace(type="tool_use", name=name, input={}, id="toolu_read")
+
+    def read() -> dict[str, Any]:
+        set_session_id("s-root-b")
+        return asyncio.run(processor._execute_single(block))
+
+    output = contextvars.copy_context().run(read)
+    assert len(output["content"]) <= 4 * 32  # the supported floor
+    content = json.loads(output["content"])
+    assert content["error"] and content["recoverable"] is False
+    detector = ConvergenceDetector()
+    detector.update_tool_error_tracking([output], processor.tool_log)
+    assert detector.total_consecutive_tool_errors == 1
+    assert loop._admitted_mailbox_ids == set()
+    assert peer_message_status(receipt.message_id)["status"] == "queued"
