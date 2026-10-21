@@ -80,6 +80,7 @@ class TestConvergenceDetector:
         from unittest.mock import MagicMock
 
         from core.agent.tool_executor.processor import ToolCallProcessor
+        from core.config import settings
         from core.orchestration.tool_offload import ToolResultOffloadStore
 
         det = ConvergenceDetector()
@@ -95,11 +96,14 @@ class TestConvergenceDetector:
                 ),
             )
             for i, output in enumerate(outputs):
-                call_id = f"toolu_{i:03d}"
+                call_id = f"toolu_{i:024d}"  # provider-sized call id
                 block = asyncio.run(
                     processor._serialize_tool_result({"output": output}, call_id, "read_file")
                 )
-                assert json.loads(block["content"])["_offloaded"] is True
+                content = json.loads(block["content"])
+                assert content["_offloaded"] is True
+                limit = 4 * max(32, settings.max_tool_result_tokens)
+                assert len(block["content"]) <= limit
                 det.update_tool_error_tracking(
                     [block],
                     [{"tool": "read_file", "input": {"path": "a"}, "tool_use_id": call_id}],
@@ -115,6 +119,18 @@ class TestConvergenceDetector:
         det = self._offloaded_rounds([("same " * 200) + str(i) for i in range(5)])
         assert det.repeated_success_streak == 1
         assert det.check_repeated_success_no_progress() is False
+
+    @pytest.mark.parametrize("guard_tokens", [128, 64, 32])
+    def test_guard_truncated_offload_references_keep_their_digest(
+        self, monkeypatch: pytest.MonkeyPatch, guard_tokens: int
+    ) -> None:
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "max_tool_result_tokens", guard_tokens)
+        same = self._offloaded_rounds(["same " * 200] * 6)
+        assert same.check_repeated_success_no_progress() is True
+        different = self._offloaded_rounds([("same " * 200) + str(i) for i in range(6)])
+        assert different.repeated_success_streak == 1
 
     def test_repeated_success_resets_when_input_changes(self) -> None:
         det = ConvergenceDetector()
