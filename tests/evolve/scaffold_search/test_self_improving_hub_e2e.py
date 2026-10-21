@@ -655,6 +655,62 @@ def test_refresh_presentation_keeps_published_evidence(tmp_path: Path) -> None:
     assert page.read_text(encoding="utf-8") == html, "refresh is not idempotent"
 
 
+# Region labels come from headings and have no length cap; entity escapes
+# (``&amp;``) make the start tag longer than the visible title.
+_LONG_TABLE_TITLES = (
+    "Mutation ledger " + "very long heading " * 40,
+    "R&amp;D " * 110,
+    'Pilot "dims" &gt; threshold',
+    "Short",
+)
+_REGION_OPEN_RE = re.compile(r'<div class="table-scroll"(?:\s+[\w-]+="[^"]*")*>')
+
+
+def _assert_each_table_wrapped_once(html: str) -> None:
+    assert html.count("<table") == len(_REGION_OPEN_RE.findall(html)), "bare or doubled table"
+    assert html.count("</table>") == html.count("</table></div>"), "open region"
+    assert not re.search(r'class="table-scroll"[^<]*>\s*<div class="table-scroll"', html)
+
+
+def test_finalize_hub_page_is_idempotent_for_long_table_labels() -> None:
+    """A second ``finalize_hub_page`` pass is a byte-for-byte no-op, even when a
+    region's start tag runs far beyond any fixed look-back window."""
+    from scripts.build_self_improving_hub import finalize_hub_page
+
+    sections = "".join(
+        f'<h2 class="section">{title}</h2>\n'
+        f'<table class="records"><tbody><tr><td>{i}</td></tr></tbody></table>\n'
+        for i, title in enumerate(_LONG_TABLE_TITLES)
+    )
+    fold = (
+        '<details class="section-fold"><summary>' + "Folded &amp; long " * 60 + "</summary>\n"
+        "<table><tbody><tr><td>fold</td></tr></tbody></table></details>\n"
+    )
+    page = f'<main class="content" id="main">\n{sections}{fold}</main>\n'
+
+    once = finalize_hub_page(page)
+    assert max(len(tag) for tag in _REGION_OPEN_RE.findall(once)) > 1000
+    _assert_each_table_wrapped_once(once)
+    twice = finalize_hub_page(once)
+    assert twice == once, "finalize_hub_page is not idempotent"
+    assert finalize_hub_page(twice) == once
+
+
+def test_refresh_presentation_is_idempotent_for_long_table_labels() -> None:
+    """The refresh path re-runs the same finalizer over published pages, so a
+    long section title before a table must not grow the page on each rerun."""
+    from scripts.build_self_improving_hub import refresh_page_presentation
+
+    title = "Lineage c1 — run-a</h1>"
+    legacy = _LEGACY_PAGE.replace(
+        title, f'{title}\n    <h2 class="section">{_LONG_TABLE_TITLES[1]}</h2>', 1
+    )
+    parts = ("seed-generation", "run-a", "lineage", "c1")
+    once = refresh_page_presentation(legacy, parts)
+    _assert_each_table_wrapped_once(once)
+    assert refresh_page_presentation(once, parts) == once, "refresh grows the page"
+
+
 # ---------------------------------------------------------------------------
 # 11. Seed-generation surface (index + per-run detail)
 # ---------------------------------------------------------------------------
@@ -809,6 +865,28 @@ def test_hub_css_has_no_slop_patterns() -> None:
     assert ".subview-card" not in css, "box-card sub-view nav (.subview-card) is slop"
     assert ".run-subviews" not in css, "box-card sub-view grid (.run-subviews) is slop"
     assert ".subview-nav" in css, "expected the dense inline .subview-nav replacement"
+
+
+def _relative_luminance(hex_color: str) -> float:
+    channels = [int(hex_color[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    r, g, b = (c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def test_filter_input_frame_meets_non_text_contrast() -> None:
+    """WCAG 1.4.11: an empty filter input is found only by its frame, so the
+    cascade's last ``border`` for ``.table-filter input`` keeps 3:1 against
+    the ``--paper`` field inside and around it."""
+    css = (REPO_ROOT / "docs/self-improving/assets/hub.css").read_text(encoding="utf-8")
+    tokens = dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})\s*;", css))
+    frames = re.findall(
+        r"\.table-filter input\s*\{[^}]*?\bborder:\s*1px solid var\((--[\w-]+)\)", css
+    )
+    assert frames, "no .table-filter input border rule"
+    assert frames[-1] in tokens, f"{frames[-1]} is not an opaque hex token"
+    frame, paper = _relative_luminance(tokens[frames[-1]]), _relative_luminance(tokens["--paper"])
+    ratio = (max(frame, paper) + 0.05) / (min(frame, paper) + 0.05)
+    assert ratio >= 3, f"filter frame {frames[-1]} is {ratio:.2f}:1 on --paper"
 
 
 def test_seedgen_pilot_heatmap_renders(built_seedgen_pages: dict[str, str]) -> None:

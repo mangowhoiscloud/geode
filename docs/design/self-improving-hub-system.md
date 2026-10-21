@@ -2,7 +2,7 @@
 title: GEODE Self-Improving Hub Design System
 geode_version: 0.99.65
 schema_version: 3
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 applies_to_geode: ">=0.99.65"
 sibling_pages:
   - self-improving-hub.md
@@ -64,8 +64,8 @@ reading model.
 | `--paper-tint` | `#171b19` | Sidebar and raised panels (`STAGE.night2`) |
 | `--ink` | `#f3f0e6` | Primary text (paper) |
 | `--ink-soft` | `#c9c7bd` | Secondary text |
-| `--ink-faint` | `#969589` | Captions, metadata, section labels (6.3:1 on `--paper`, 5.7:1 on `--paper-tint`) |
-| `--rule` / `--rule-soft` / `--rule-strong` | paper at 16% / 7% / 32% | Hairlines, row dividers, header and control frames |
+| `--ink-faint` | `#969589` | Captions, metadata, section labels, the row-filter input frame (6.3:1 on `--paper`, 5.7:1 on `--paper-tint`) |
+| `--rule` / `--rule-soft` / `--rule-strong` | paper at 16% / 7% / 32% | Hairlines, row dividers, header frames (decorative; never the only cue to a control) |
 | `--accent` | `#e8542f` | Signal vermilion: current place, hover line, focus outline — never a fill for content |
 | `--accent-faint` | vermilion at 12% | Current nav item ground |
 
@@ -306,6 +306,7 @@ Borrowed from CLAUDE.md DONT table:
 - Disclosures are native `<details>/<summary>`: keyboard operable with Enter/Space and exposing expanded/collapsed (the `aria-expanded` state) through the browser, so no ARIA is duplicated on them. On narrow screens Escape inside the open nav closes it and returns focus to Contents. Focus moves in document order; nothing traps it.
 - Targets: nav rows, breadcrumb, page-map, sub-view links, summaries and the filter input are at least 44 CSS px tall (`--tap`), except nav rows on a fine pointer at the wide layout (36px, above the 24px WCAG 2.5.8 minimum).
 - Focus: a 2px `--accent` outline at 2px offset on every focusable element, including scroll regions.
+- Control boundaries (WCAG 1.4.11): the empty row-filter input is identified only by its frame, so the frame is `--ink-faint` (6.3:1 on `--paper`), never a translucent `--rule*` hairline (`--rule-strong` composites to 2.7:1).
 - Scroll regions: each `.table-scroll` is `role="region"` with an `aria-label` from the nearest preceding heading and `tabindex="0"` so keyboard users can scroll it; `hub.js` drops the tab stop while a region does not overflow. Native wheel and touch scrolling only: no `preventDefault`, no `overscroll-behavior` overrides.
 - Motion: none beyond the Active runs pulse, which runs only under `prefers-reduced-motion: no-preference`. No hover transitions.
 
