@@ -170,3 +170,38 @@ def test_memory_search_gateway_scope_for_operator_and_subagent(tmp_path: Path) -
     found = {m["session_id"] for m in child["matches"]}
     assert alice in found and bob not in found
     assert "bob own note" not in json.dumps(child, default=str)
+
+
+def test_memory_search_result_has_hard_item_and_batch_caps(tmp_path: Path) -> None:
+    import json
+
+    from core.memory.session import InMemorySessionStore
+    from core.tools.memory_tools import SEARCH_MATCH_CHAR_CAP, SEARCH_RESULT_CHAR_CAP
+
+    memory = ProjectMemory(tmp_path)
+    memory.ensure_structure()
+    memory.memory_file.write_text(
+        "# Memory\n" + "\n".join(f"needle {i} " + '"x' * 6_500 for i in range(5)) + "\n",
+        encoding="utf-8",
+    )
+    store = InMemorySessionStore()
+    for i in range(12):
+        store.set(f"sess-{i}", {"note": f"needle {i} " + "y" * 13_000})
+
+    result = _search(memory, store, None, query="needle", tier="all")
+    size = len(json.dumps(result, ensure_ascii=False, default=str))
+    matches = result["matches"]
+    assert matches, result
+    assert all(
+        len(json.dumps(m, ensure_ascii=False, default=str)) <= SEARCH_MATCH_CHAR_CAP
+        for m in matches
+    )
+    assert len(json.dumps(matches, ensure_ascii=False, default=str)) <= SEARCH_RESULT_CHAR_CAP
+    assert size <= SEARCH_RESULT_CHAR_CAP + 1_000, size
+    assert matches[0]["truncated"] is True and "[truncated" in matches[0]["excerpt"]
+    assert result["truncated"] is True and result["omitted_matches"] > 0
+
+    project = _search(memory, None, None, query="needle", tier="project")
+    (line_match,) = project["matches"]
+    assert len(json.dumps(line_match, ensure_ascii=False, default=str)) <= SEARCH_MATCH_CHAR_CAP
+    assert line_match["truncated"] is True
