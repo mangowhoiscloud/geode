@@ -793,3 +793,32 @@ def test_swept_directory_set_stays_bounded(tmp_path: Path, monkeypatch: pytest.M
         sessions.mkdir()
         SessionCheckpoint(sessions).sweep_orphan_forks_once()
     assert len(session_checkpoint._ORPHAN_SWEPT_DIRS) <= session_checkpoint._ORPHAN_SWEPT_MAX_DIRS
+
+
+def test_partially_removed_orphan_directory_is_retried(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A discard counts only once the directory is gone; the marker is kept for retry."""
+    _save(project, "s-src", _turn(1))
+    orphan = project / "s-orphan0003"
+    orphan.mkdir()
+    (orphan / ".fork-pending").write_text("s-src", encoding="utf-8")
+    (orphan / "messages.json").write_text("[]", encoding="utf-8")
+    SessionManager(project / "sessions.db").upsert_messages("s-orphan0003", _turn(9))
+    session_checkpoint._ORPHAN_SWEPT_DIRS.discard(str(project.resolve()))
+    original = session_checkpoint.shutil.rmtree
+
+    def partial_rmtree(path: Any, *args: Any, **kwargs: Any) -> None:
+        if Path(path) != orphan:
+            return original(path, *args, **kwargs)
+        (orphan / ".fork-pending").unlink()  # removed before the entry that fails
+        return None
+
+    with monkeypatch.context() as patch:
+        patch.setattr(session_checkpoint.shutil, "rmtree", partial_rmtree)
+        assert SessionCheckpoint(project).sweep_orphan_forks_once() == 0
+    assert (orphan / ".fork-pending").is_file() and (orphan / "messages.json").exists()
+    assert str(project.resolve()) not in session_checkpoint._ORPHAN_SWEPT_DIRS
+
+    assert SessionCheckpoint(project).sweep_orphan_forks_once() == 1
+    assert not orphan.exists()

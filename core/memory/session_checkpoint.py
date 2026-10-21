@@ -20,7 +20,7 @@ import shutil
 import time
 import uuid
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
@@ -627,6 +627,17 @@ class SessionCheckpoint:
             return False
         if destination.is_dir() and not destination.is_symlink():
             shutil.rmtree(destination, ignore_errors=True)
+            if destination.exists():
+                # A partial removal may have taken the marker with it: put it
+                # back so a later sweep retries the leftover files.
+                with suppress(OSError):
+                    (destination / _FORK_PENDING_MARKER).touch()
+                log.warning(
+                    "Unpublished fork directory was not fully removed; marker kept for retry "
+                    "(fork=%s)",
+                    fork_id,
+                )
+                return False
         return True
 
     def load(self, session_id: str) -> SessionState | None:

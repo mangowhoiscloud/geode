@@ -213,6 +213,25 @@ def _truncated_entry(entry: dict[str, Any], remaining: int, budget: int) -> dict
     return fitted
 
 
+def _limit_error(budget: int, setting: str) -> dict[str, Any]:
+    """A final refusal small enough for the limit that rules out every message.
+
+    Returning an empty batch with unread rows would invite rereads that can
+    never make progress; this tells the model to stop instead.
+    """
+    hint = f"; raise {setting}" if setting else ""
+    error: dict[str, Any] = {}
+    for message in (
+        f"tool result limit too small for peer messages{hint}",
+        f"result limit too small{hint}",
+        "result limit too small",
+    ):
+        error = {"error": message, "recoverable": False}
+        if _result_chars(error) <= budget:
+            break
+    return error
+
+
 def _fit_entries(items: list[Any], unread: int, budget: int) -> list[dict[str, Any]]:
     """Take rows in order while the whole serialized result stays within budget."""
     entries: list[dict[str, Any]] = []
@@ -244,6 +263,7 @@ def read_peer_messages(
     *,
     limit: int = 5,
     max_result_chars: int | None = None,
+    limit_setting: str = "",
     sessions_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Return this root session's unread peer messages as tool-result data.
@@ -255,7 +275,8 @@ def read_peer_messages(
     the loop acknowledges the row only after a checkpoint has persisted the
     tool result that carries it. The serialized result never exceeds
     ``_READ_CHAR_BUDGET`` or ``max_result_chars`` (the caller's effective
-    tool-result limit).
+    tool-result limit); a limit too small for any unread message yields a
+    non-recoverable error naming ``limit_setting`` instead of an empty batch.
     """
     checkpoint, store = _stores(sessions_dir)
     _require_root_caller(principal, checkpoint=checkpoint, store=store)
@@ -275,6 +296,8 @@ def read_peer_messages(
         ]
         entries = _fit_entries(unread[:bound], len(unread), budget)
         admitted.update(entry["message_id"] for entry in entries)
+    if unread and not entries:
+        return _limit_error(budget, limit_setting)
     return _peer_result(entries, len(unread) - len(entries))
 
 
