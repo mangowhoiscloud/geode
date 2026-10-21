@@ -23,12 +23,16 @@ from core.hooks import (
 from core.orchestration.context_budget import (
     ABSOLUTE_TOKEN_CEILING,
     ContextBudgetPolicy,
-    calibrate_token_ratio,
+    PromptCalibration,
+    next_prompt_calibration,
     observed_prompt_tokens,
     resolve_context_budget_policy,
 )
 
 log = logging.getLogger(__name__)
+
+# Smallest serialized tool result that context recovery bounds a result to.
+_FIT_MIN_TOOL_RESULT_CHARS = 512
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -67,22 +71,31 @@ class ContextWindowManager:
         self._effort_provider = effort_provider
         self._source_provider = source_provider
         self._compacting = False
-        # Provider-reported prompt tokens per heuristic token for this
-        # conversation's latest calibrating request; 0 means unobserved.
-        self._observed_token_ratio = 0.0
+        # Provider-reported density of this conversation's latest measured
+        # request; None until a large enough action request reports usage.
+        self._calibration: PromptCalibration | None = None
 
     def calibrated(self, policy: ContextBudgetPolicy) -> ContextBudgetPolicy:
         """Measure pressure in provider tokens, not only the chars/token guess."""
-        if self._observed_token_ratio <= policy.observed_token_ratio:
+        if self._calibration is None or policy.calibration is self._calibration:
             return policy
-        return dataclasses.replace(policy, observed_token_ratio=self._observed_token_ratio)
+        return dataclasses.replace(policy, calibration=self._calibration)
 
-    def record_prompt_usage(self, result: Any, *, raw_estimated_tokens: int, provider: str) -> None:
+    def record_prompt_usage(
+        self,
+        result: Any,
+        *,
+        raw_estimated_tokens: int,
+        provider: str,
+        payloads: list[tuple[int, int]],
+        other_payload_keys: frozenset[int] = frozenset(),
+    ) -> None:
         """Calibrate later estimates from one sent request's reported input size.
 
-        The newest sample replaces older ones, so compaction of dense history
-        lowers the ratio on the next response. Native Anthropic compaction sums
-        its iterations' usage, which is not one request's prompt size.
+        ``payloads`` are the request's large text strings; text sent later has
+        no measurement and stays at the dense floor until a response covers it.
+        Native Anthropic compaction sums its iterations' usage, which is not
+        one request's prompt size.
         """
         from core.llm.adapters.base import UsageSummary
 
@@ -93,9 +106,56 @@ class ContextWindowManager:
         if any(isinstance(block, dict) and block.get("type") == "compaction" for block in native):
             return
         observed = observed_prompt_tokens(usage, provider=provider)
-        ratio = None if observed is None else calibrate_token_ratio(observed, raw_estimated_tokens)
-        if ratio is not None:
-            self._observed_token_ratio = ratio
+        if observed is None:
+            return
+        self._calibration = next_prompt_calibration(
+            self._calibration,
+            observed_tokens=observed,
+            raw_tokens=raw_estimated_tokens,
+            payloads=payloads,
+            other_keys=other_payload_keys,
+        )
+
+    @staticmethod
+    def _fit_tool_results(
+        messages: list[dict[str, Any]],
+        measure: Callable[[], Any],
+        target_tokens: int,
+    ) -> int:
+        """Bound serialized tool results, largest first, until ``measure`` fits.
+
+        Compaction and pruning keep the latest tool batch by design, so a batch
+        that alone exceeds the route would otherwise be sent or exhaust the
+        turn. Each bounded result keeps its failure control fields. Returns
+        how many results were bounded.
+        """
+        from core.agent.tool_executor.result_token_guard import bound_tool_result_text
+
+        slots: list[tuple[dict[str, Any], str]] = []
+        for message in messages:
+            content = message.get("content")
+            if message.get("role") == "tool" and isinstance(content, str):
+                slots.append((message, content))
+            elif message.get("role") == "user" and isinstance(content, list):
+                slots.extend(
+                    (block, block["content"])
+                    for block in content
+                    if isinstance(block, dict)
+                    and block.get("type") == "tool_result"
+                    and isinstance(block.get("content"), str)
+                )
+        limit = max((len(text) for _holder, text in slots), default=0)
+        bounded = 0
+        while limit > _FIT_MIN_TOOL_RESULT_CHARS and measure().estimated_tokens > target_tokens:
+            limit = max(limit // 2, _FIT_MIN_TOOL_RESULT_CHARS)
+            bounded = 0
+            for holder, original in slots:
+                if len(original) > limit:
+                    holder["content"] = bound_tool_result_text(original, limit)
+                    bounded += 1
+        if bounded:
+            log.warning("Context recovery bounded %d tool results to %d chars", bounded, limit)
+        return bounded
 
     async def compact(
         self,
@@ -195,9 +255,13 @@ class ContextWindowManager:
                     metrics.context_window,
                 )
                 if self._hooks:
+                    # Observers get the route policy, not per-payload calibration.
+                    observed = dataclasses.replace(
+                        metrics, policy=dataclasses.replace(policy, calibration=None)
+                    )
                     await self._hooks.trigger_async(
                         RuntimeEvent.CONTEXT_CRITICAL,
-                        {"metrics": dataclasses.asdict(metrics), "model": model},
+                        {"metrics": dataclasses.asdict(observed), "model": model},
                     )
 
                 from core.orchestration.context_monitor import (
@@ -228,6 +292,13 @@ class ContextWindowManager:
 
                     messages.clear()
                     messages.extend(repair_tool_pairs(pruned))
+                    post = measure()
+
+                if (
+                    post.is_critical
+                    and outcome.status != "deferred"
+                    and self._fit_tool_results(messages, measure, policy.warning_tokens)
+                ):
                     post = measure()
 
                 if post.is_critical:
@@ -546,9 +617,21 @@ class ContextWindowManager:
         if provider_rejected or strategy.get("strategy") == "none":
             strategy["strategy"] = "compact"
         outcome = await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
-        if outcome.status != "changed":
-            return outcome
-        if measure().estimated_tokens < before.estimated_tokens:
+        after = measure()
+        reduced = outcome.status == "changed" and after.estimated_tokens < before.estimated_tokens
+        if (not reduced or after.is_critical) and outcome.status != "deferred":
+            # A rejected request was larger than estimated: halve the estimate.
+            target = policy.warning_tokens
+            if provider_rejected:
+                target = min(target, before.estimated_tokens // 2)
+            if (
+                self._fit_tool_results(messages, measure, target)
+                and measure().estimated_tokens < before.estimated_tokens
+            ):
+                if reduced:
+                    return outcome
+                return ContextOperationResult("none", "changed", original_count, len(messages))
+        if outcome.status != "changed" or reduced:
             return outcome
         return ContextOperationResult(outcome.action, "unchanged", original_count, len(messages))
 

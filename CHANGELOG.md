@@ -111,13 +111,18 @@ functional change.
   `gpt-6-sol` turn reading eighteen 57 KB files sent 259,201 input tokens on a
   272K route, past its 176K warning and 227K critical levels, before any
   maintenance ran. Each action request now records its provider-reported
-  input against the estimate; when that ratio exceeds the static margin it
-  scales the pressure check, the pre-send budget guard and recovery, so
-  compaction starts at the warning level and pruning at critical on every
-  route. Adaptive prune now targets the warning level as measured instead of
-  up to 1.2x above it. Requests below 8,000 estimated tokens, planner and
-  judge prompts, and Anthropic responses that compacted on the server do not
-  change the ratio.
+  input and attributes it to the text it sent: strings already measured keep
+  their own ratio, and text added since the last response (a new tool batch)
+  is estimated at no less than the hex density (2.2x the 4 chars/token
+  guess). The pressure check, the pre-send budget guard and recovery use these
+  estimates, so compaction starts at the warning level and pruning at
+  critical on every route. When a tool batch that compaction and pruning must
+  keep still exceeds the budget, or the provider rejects the request, the
+  largest tool results are bounded through the result guard, keeping their
+  failure fields, instead of sending the request or ending the turn.
+  Adaptive prune targets the warning level as measured instead of up to 1.2x
+  above it. Requests below 8,000 estimated tokens, planner and judge prompts,
+  and Anthropic responses that compacted on the server do not recalibrate.
 - **Effect failures no longer freeze a session.** When a write tool such as
   `memory_save` refused a request before acting (for example, project memory
   not initialized), its error was replaced by a generic "Effect outcome is

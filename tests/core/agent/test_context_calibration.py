@@ -11,14 +11,17 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from dataclasses import replace
 from math import ceil
 from typing import Any
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from core.agent.context_manager import ContextWindowManager
 from core.agent.conversation import ConversationContext
-from core.agent.loop import AgenticLoop, AgenticLoopConfig
+from core.agent.loop import AgenticLoop, AgenticLoopConfig, _context
+from core.agent.loop.models import _ContextExhaustedError
 from core.agent.tool_executor import ToolExecutor
 from core.config import settings
 from core.hooks import HookDecision, HookName, HookRegistry
@@ -27,13 +30,15 @@ from core.llm.adapters.base import AdapterCallRequest, AdapterCallResult, UsageS
 from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 from core.llm.model_catalog import get_model_catalog_spec
 from core.orchestration.context_budget import (
+    DENSE_TOKEN_RATIO_FLOOR,
     MAX_OBSERVED_TOKEN_RATIO,
     TOKEN_RATIO_MIN_SAMPLE_TOKENS,
-    calibrate_token_ratio,
+    next_prompt_calibration,
     observed_prompt_tokens,
     resolve_request_context_budget,
 )
 from core.orchestration.context_monitor import CHARS_PER_TOKEN, estimate_tool_tokens
+from openai import BadRequestError
 
 # Hex digest lines tokenize at ~1.85 chars/token (57,000 chars -> ~30,900).
 _CHARS_PER_PROVIDER_TOKEN = 1.85
@@ -72,21 +77,60 @@ def test_gpt_6_sol_codex_oauth_window_is_the_client_default() -> None:
     assert (platform.context_window, platform.max_input_tokens) == (1_050_000, 922_000)
 
 
-def test_observed_ratio_raises_estimates_and_shrinks_the_prune_budget() -> None:
+def test_calibration_prices_measured_payloads_and_floors_unmeasured_text() -> None:
     policy = _codex_policy()
     assert policy.apply_safety_margin(100_000) == 120_000
-    calibrated = ContextWindowManager(hooks=None, quiet=True)
-    calibrated._observed_token_ratio = 2.4
-    dense = calibrated.calibrated(policy)
-    assert dense.apply_safety_margin(100_000) == 240_000
-    assert dense.prune_budget_tokens == int(policy.warning_tokens / 2.4)
+    first = next_prompt_calibration(
+        None, observed_tokens=40_000, raw_tokens=20_000, payloads=[(1, 40_000)]
+    )
+    assert first is not None and first.request_ratio == first.overhead_ratio == 2.0
+    dense = replace(policy, calibration=first)
+    assert dense.prune_budget_tokens == int(policy.warning_tokens / 2.0)
     assert policy.prune_budget_tokens == int(policy.warning_tokens / policy.safety_margin)
-    # A ratio below the static margin never lowers the estimate.
-    calibrated._observed_token_ratio = 0.5
-    assert calibrated.calibrated(policy).apply_safety_margin(100_000) == 120_000
+    # The measured payload keeps its ratio; unmeasured text never drops
+    # below the dense floor; the remainder uses the shared ratio.
+    estimate = dense.estimate_prompt_tokens(30_000, [(1, 40_000), (2, 40_000)])
+    assert estimate == ceil(10_000 * 2.0 + 10_000 * DENSE_TOKEN_RATIO_FLOOR + 10_000 * 2.0)
+    prose = next_prompt_calibration(
+        None, observed_tokens=10_000, raw_tokens=10_000, payloads=[(1, 30_000)]
+    )
+    assert prose is not None
+    light = replace(policy, calibration=prose)
+    assert light.estimate_prompt_tokens(10_000, [(1, 30_000)]) == 12_000
+    assert light.estimate_prompt_tokens(10_000, [(9, 30_000)]) == ceil(
+        2_500 * 1.2 + 7_500 * DENSE_TOKEN_RATIO_FLOOR
+    )
 
 
-def test_usage_calibration_counts_cache_and_ignores_small_or_compacted_samples() -> None:
+def test_attribution_keeps_each_payload_ratio_after_history_shrinks() -> None:
+    prose = next_prompt_calibration(
+        None, observed_tokens=100_000, raw_tokens=100_000, payloads=[(1, 360_000)]
+    )
+    # 40K heuristic tokens of dense text cost 86K provider tokens.
+    mixed = next_prompt_calibration(
+        prose,
+        observed_tokens=186_000,
+        raw_tokens=140_000,
+        payloads=[(1, 360_000), (2, 160_000)],
+        other_keys=[3],
+    )
+    assert mixed is not None
+    ratios = dict(mixed.payload_ratios)
+    assert ratios[1] == 1.0 and ratios[2] == pytest.approx(86_000 / 40_000)
+    assert ratios[3] == mixed.request_ratio
+    # Compacting the prose away leaves the dense payload at its own price,
+    # not at the 1.33 whole-request average.
+    policy = replace(_codex_policy(), calibration=mixed)
+    assert policy.estimate_prompt_tokens(40_000, [(2, 160_000)]) >= 86_000
+    assert (
+        next_prompt_calibration(
+            mixed, observed_tokens=9_000, raw_tokens=TOKEN_RATIO_MIN_SAMPLE_TOKENS - 1, payloads=[]
+        )
+        is mixed
+    )
+
+
+def test_usage_calibration_counts_cache_and_ignores_compacted_samples() -> None:
     anthropic = UsageSummary(
         input_tokens=1_000, cached_input_tokens=40_000, cache_write_tokens=9_000
     )
@@ -94,8 +138,10 @@ def test_usage_calibration_counts_cache_and_ignores_small_or_compacted_samples()
     openai = UsageSummary(input_tokens=50_000, cached_input_tokens=40_000)
     assert observed_prompt_tokens(openai, provider="openai-codex") == 50_000
     assert observed_prompt_tokens(UsageSummary(), provider="openai") is None
-    assert calibrate_token_ratio(50_000, TOKEN_RATIO_MIN_SAMPLE_TOKENS - 1) is None
-    assert calibrate_token_ratio(10**9, TOKEN_RATIO_MIN_SAMPLE_TOKENS) == MAX_OBSERVED_TOKEN_RATIO
+    huge = next_prompt_calibration(
+        None, observed_tokens=10**9, raw_tokens=TOKEN_RATIO_MIN_SAMPLE_TOKENS, payloads=[]
+    )
+    assert huge is not None and huge.request_ratio == MAX_OBSERVED_TOKEN_RATIO
 
     manager = ContextWindowManager(hooks=None, quiet=True)
     compacted = AdapterCallResult(
@@ -104,15 +150,17 @@ def test_usage_calibration_counts_cache_and_ignores_small_or_compacted_samples()
         stop_reason="end_turn",
         anthropic_content=({"type": "compaction", "content": "summary"},),
     )
-    manager.record_prompt_usage(compacted, raw_estimated_tokens=10_000, provider="anthropic")
-    assert manager._observed_token_ratio == 0.0
+    manager.record_prompt_usage(
+        compacted, raw_estimated_tokens=10_000, provider="anthropic", payloads=[]
+    )
+    assert manager._calibration is None
     plain = AdapterCallResult(text="", usage=anthropic, stop_reason="end_turn")
-    manager.record_prompt_usage(plain, raw_estimated_tokens=10_000, provider="anthropic")
-    assert manager._observed_token_ratio == 5.0
-    # The newest sample replaces the older one after dense history is compacted.
-    lighter = AdapterCallResult(text="", usage=openai, stop_reason="end_turn")
-    manager.record_prompt_usage(lighter, raw_estimated_tokens=40_000, provider="openai")
-    assert manager._observed_token_ratio == 1.25
+    manager.record_prompt_usage(
+        plain, raw_estimated_tokens=10_000, provider="anthropic", payloads=[]
+    )
+    assert manager._calibration is not None and manager._calibration.request_ratio == 5.0
+    policy = _codex_policy()
+    assert manager.calibrated(policy).calibration is manager._calibration
 
 
 def _hex_document(index: int) -> str:
@@ -277,3 +325,185 @@ def test_dense_tool_rounds_on_codex_gpt_6_sol_stay_under_the_route_limit(
     if scenario == "compact":
         assert summary.await_count >= 1
         assert compactions[0]["trigger"] == "warning" and compactions[0]["hard"] is False
+
+
+_HEX = set("0123456789abcdef")
+_WINDOW = 272_000
+
+
+def _leaf_tokens(text: str) -> float:
+    """Hex-heavy text costs ~1.85 chars/token; prose ~4."""
+    hex_share = sum(char in _HEX for char in text) / max(len(text), 1)
+    return len(text) / (_CHARS_PER_PROVIDER_TOKEN if hex_share > 0.6 else CHARS_PER_TOKEN)
+
+
+def _mixed_provider_tokens(request: AdapterCallRequest) -> int:
+    leaves: list[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            leaves.append(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list | tuple):
+            for item in value:
+                walk(item)
+
+    for message in request.messages:
+        walk(message.content)
+    chars = len(request.system_prompt) + estimate_tool_tokens(request.tools) * CHARS_PER_TOKEN
+    chars += sum(len(json.dumps(message.content, default=str)) for message in request.messages)
+    framing = chars - sum(len(leaf) for leaf in leaves)
+    return ceil(framing / CHARS_PER_TOKEN + sum(_leaf_tokens(leaf) for leaf in leaves))
+
+
+class _WindowedAdapter:
+    """codex-oauth stand-in that rejects requests over the 272K window."""
+
+    name = "codex-oauth"
+    provider = CodexOAuthAdapter.provider
+    source = CodexOAuthAdapter.source
+
+    def __init__(self) -> None:
+        self.sent: list[int] = []
+        self.rejected: list[int] = []
+
+    async def acomplete(self, request: AdapterCallRequest) -> AdapterCallResult:
+        tokens = _mixed_provider_tokens(request)
+        if tokens > _WINDOW:
+            self.rejected.append(tokens)
+            raise BadRequestError(
+                "maximum context length exceeded",
+                response=httpx.Response(
+                    400, request=httpx.Request("POST", "https://offline.invalid")
+                ),
+                body={"error": {"code": "context_length_exceeded"}},
+            )
+        self.sent.append(tokens)
+        return AdapterCallResult(
+            text="Next.",
+            usage=UsageSummary(input_tokens=tokens, output_tokens=40),
+            stop_reason="end_turn",
+        )
+
+
+def _windowed_loop(monkeypatch: pytest.MonkeyPatch) -> tuple[AgenticLoop, _WindowedAdapter]:
+    bootstrap_builtins()
+    monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "1")
+    summary = AsyncMock(side_effect=AssertionError("a 3-message history has nothing to compact"))
+    monkeypatch.setattr("core.orchestration.compaction._call_summarize", summary)
+    loop = AgenticLoop(
+        ConversationContext(),
+        ToolExecutor(action_handlers={}),
+        config=AgenticLoopConfig(
+            source="subscription", allowed_tool_names=set(), system_prompt_override=_SYSTEM
+        ),
+        model="gpt-6-sol",
+        provider="openai",
+        quiet=True,
+    )
+    adapter = _WindowedAdapter()
+    loop._new_adapter = adapter
+    return loop, adapter
+
+
+def _prose_prompt() -> str:
+    """About 100K provider tokens of ordinary text (ratio ~1.0)."""
+    words = "the quarterly review covers planning, staffing and travel for every region "
+    return (words * (400_000 // len(words) + 1))[:400_000]
+
+
+def _dense_batch(policy: Any) -> list[dict[str, Any]]:
+    """Seventeen hex results, each just under the summary and offload limits."""
+    calls, results = [], []
+    for index in range(17):
+        call_id = f"call-{index}"
+        lines = " ".join(
+            hashlib.sha256(f"{index}:{line}".encode()).hexdigest()[:40] for line in range(600)
+        )
+        result: dict[str, Any] = {"file_path": f"part{index}.txt"}
+        if index == 3:
+            result |= {
+                "error": "read stopped after partial output",
+                "recoverable": True,
+                "effect_applied": False,
+                "error_type": "io",
+            }
+        result["content"] = lines
+        content = json.dumps(result)
+        content = json.dumps({**result, "content": lines[: len(lines) - (len(content) - 19_700)]})
+        block = {"type": "tool_result", "tool_use_id": call_id, "content": content}
+        assert len(content) <= 19_754
+        assert len(json.dumps(block)) // CHARS_PER_TOKEN <= policy.tool_summary_threshold_tokens
+        calls.append({"type": "tool_use", "id": call_id, "name": "read_document", "input": {}})
+        results.append(block)
+    return [{"role": "assistant", "content": calls}, {"role": "user", "content": results}]
+
+
+def _assert_bounded_batch(messages: list[dict[str, Any]]) -> None:
+    assert len(messages) == 3
+    results = [json.loads(block["content"]) for block in messages[2]["content"]]
+    assert all(result.get("_truncated") for result in results)
+    failed = [result for result in results if "error" in result]
+    assert len(failed) == 1 and failed[0]["error"].startswith("read stopped")
+    assert (failed[0]["recoverable"], failed[0]["effect_applied"], failed[0]["error_type"]) == (
+        True,
+        False,
+        "io",
+    )
+
+
+def test_unmeasured_dense_batch_after_prose_is_bounded_before_sending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ratio of ~1.0 never prices a new dense batch; the batch itself is bounded."""
+    loop, adapter = _windowed_loop(monkeypatch)
+    policy = _codex_policy()
+    messages: list[dict[str, Any]] = [{"role": "user", "content": _prose_prompt()}]
+
+    async def drive() -> None:
+        assert await loop._call_llm(_SYSTEM, messages) is not None
+        calibration = loop._ctx_mgr._calibration
+        assert calibration is not None and 0.9 < calibration.request_ratio < 1.1
+        messages.extend(_dense_batch(policy))
+        # Unbounded, this request would cost more than the 272K window.
+        assert await loop._call_llm(_SYSTEM, messages) is not None
+
+    asyncio.run(drive())
+    assert adapter.rejected == [] and len(adapter.sent) == 2
+    assert adapter.sent[-1] <= policy.effective_prompt_budget_tokens
+    _assert_bounded_batch(messages)
+
+
+def test_provider_rejection_of_the_latest_batch_recovers_by_bounding_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Recovery shrinks the batch compaction and pruning must keep."""
+    loop, adapter = _windowed_loop(monkeypatch)
+    policy = _codex_policy()
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": _prose_prompt()},
+        *_dense_batch(policy),
+    ]
+
+    async def drive() -> None:
+        with pytest.raises(_ContextExhaustedError) as caught:
+            await loop._call_llm(_SYSTEM, messages)
+        exc = caught.value
+        assert exc.provider_rejected and exc.can_recover_history
+        outcome = await _context.aggressive_context_recovery(
+            loop,
+            exc.system_prompt or _SYSTEM,
+            messages,
+            provider_rejected=True,
+            policy=exc.policy,
+            tools_tokens=exc.tools_tokens,
+        )
+        assert outcome.status == "changed"
+        assert await loop._call_llm(_SYSTEM, messages) is not None
+
+    asyncio.run(drive())
+    assert len(adapter.rejected) == 1 and adapter.rejected[0] > _WINDOW
+    assert adapter.sent[-1] <= policy.effective_prompt_budget_tokens
+    _assert_bounded_batch(messages)

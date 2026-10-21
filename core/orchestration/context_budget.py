@@ -7,6 +7,7 @@ percentage or token ceilings.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil
 from typing import TYPE_CHECKING, Literal
@@ -34,6 +35,13 @@ SAFETY_MARGIN_MULTIPLIER = 1.20
 # calibrate; the cap bounds malformed usage.
 TOKEN_RATIO_MIN_SAMPLE_TOKENS = 8_000
 MAX_OBSERVED_TOKEN_RATIO = 8.0
+# Text added since the last measured request has no observed density. It is
+# estimated at least at the hex-digest density (4 / 1.85 chars per token),
+# never at the density of whatever happened to be measured before it.
+DENSE_TOKEN_RATIO_FLOOR = 2.2
+# Text strings at least this long are tracked as individual payloads; the
+# rest of a request (system prompt, schemas, framing) shares one ratio.
+CALIBRATED_PAYLOAD_MIN_CHARS = 256
 DEFAULT_OUTPUT_RESERVE_TOKENS = 20_000
 MIN_PROMPT_BUDGET_TOKENS = 8_000
 
@@ -109,6 +117,20 @@ CONTEXT_BUDGET_TIERS: tuple[ContextBudgetTier, ...] = (
 
 
 @dataclass(frozen=True, slots=True)
+class PromptCalibration:
+    """Provider tokens per heuristic token from the latest measured request.
+
+    ``payload_ratios`` pairs each large text payload already sent (keyed by
+    ``hash`` of its text) with its attributed ratio; all other request content
+    shares ``overhead_ratio``. A payload missing from it is unmeasured.
+    """
+
+    request_ratio: float
+    overhead_ratio: float
+    payload_ratios: tuple[tuple[int, float], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ContextBudgetPolicy:
     """Resolved context budget for one model/window."""
 
@@ -125,13 +147,22 @@ class ContextBudgetPolicy:
     context_origin: Literal["provider_catalog", "client_default", "fallback", "override"] = (
         "fallback"
     )
-    observed_token_ratio: float = 0.0
-    """Latest provider-reported prompt tokens per heuristic token; 0 is unobserved."""
+    calibration: PromptCalibration | None = None
+
+    @property
+    def observed_token_ratio(self) -> float:
+        """Latest whole-request provider/heuristic ratio; 0 is unobserved."""
+        return self.calibration.request_ratio if self.calibration is not None else 0.0
 
     @property
     def estimate_multiplier(self) -> float:
         """Static safety margin, raised to the observed provider/heuristic ratio."""
         return max(self.safety_margin, self.observed_token_ratio)
+
+    @property
+    def unmeasured_multiplier(self) -> float:
+        """Multiplier for text the provider has not measured since calibration."""
+        return max(self.estimate_multiplier, DENSE_TOKEN_RATIO_FLOOR)
 
     @property
     def effective_prompt_budget_tokens(self) -> int:
@@ -214,6 +245,28 @@ class ContextBudgetPolicy:
     def apply_safety_margin(self, raw_tokens: int) -> int:
         return ceil(raw_tokens * self.estimate_multiplier)
 
+    def estimate_prompt_tokens(self, raw_tokens: int, payloads: Iterable[tuple[int, int]]) -> int:
+        """Estimate ``raw_tokens`` of heuristic tokens in provider tokens.
+
+        ``payloads`` lists ``(key, chars)`` for the large text strings inside
+        ``raw_tokens``. Before any calibration the static margin covers all.
+        """
+        calibration = self.calibration
+        if calibration is None:
+            return self.apply_safety_margin(raw_tokens)
+        ratios = dict(calibration.payload_ratios)
+        total = 0.0
+        payload_tokens = 0.0
+        for key, chars in payloads:
+            tokens = chars / TOKEN_ESTIMATE_CHARS_PER_TOKEN
+            payload_tokens += tokens
+            ratio = ratios.get(key)
+            total += tokens * (
+                self.unmeasured_multiplier if ratio is None else max(self.safety_margin, ratio)
+            )
+        overhead = max(raw_tokens - payload_tokens, 0.0)
+        return ceil(total + overhead * max(self.safety_margin, calibration.overhead_ratio))
+
     def resolve_keep_recent(self, requested: int) -> int:
         cap = self.tier.keep_recent_cap
         if cap is None:
@@ -240,11 +293,53 @@ def observed_prompt_tokens(usage: UsageSummary, *, provider: str) -> int | None:
     return tokens
 
 
-def calibrate_token_ratio(observed_tokens: int, raw_estimated_tokens: int) -> float | None:
-    """Calibrate the heuristic from one request large enough to measure."""
-    if raw_estimated_tokens < TOKEN_RATIO_MIN_SAMPLE_TOKENS or observed_tokens <= 0:
-        return None
-    return min(observed_tokens / raw_estimated_tokens, MAX_OBSERVED_TOKEN_RATIO)
+def _clamp_ratio(value: float) -> float:
+    return min(max(value, 0.0), MAX_OBSERVED_TOKEN_RATIO)
+
+
+def next_prompt_calibration(
+    previous: PromptCalibration | None,
+    *,
+    observed_tokens: int,
+    raw_tokens: int,
+    payloads: Iterable[tuple[int, int]],
+    other_keys: Iterable[int] = (),
+) -> PromptCalibration | None:
+    """Attribute one measured request's reported size to its payloads.
+
+    Payloads measured before keep their ratio and the shared remainder keeps
+    its ratio; the residual goes to the payloads this request sent first. So
+    removing part of the history later never re-prices what remains at an
+    average. ``other_keys`` are the same history sent in another shape (for
+    example tool inputs) and take the whole-request ratio.
+    """
+    if raw_tokens < TOKEN_RATIO_MIN_SAMPLE_TOKENS or observed_tokens <= 0:
+        return previous
+    request_ratio = _clamp_ratio(observed_tokens / raw_tokens)
+    tokens_by_key: dict[int, float] = {}
+    for key, chars in payloads:
+        tokens_by_key[key] = tokens_by_key.get(key, 0.0) + chars / TOKEN_ESTIMATE_CHARS_PER_TOKEN
+    overhead_tokens = max(raw_tokens - sum(tokens_by_key.values()), 0.0)
+    if previous is None:
+        ratios = dict.fromkeys(tokens_by_key, request_ratio)
+        overhead_ratio = request_ratio
+    else:
+        known = dict(previous.payload_ratios)
+        measured = sum(tokens * known[key] for key, tokens in tokens_by_key.items() if key in known)
+        new_tokens = sum(tokens for key, tokens in tokens_by_key.items() if key not in known)
+        overhead_ratio = previous.overhead_ratio
+        if new_tokens >= CALIBRATED_PAYLOAD_MIN_CHARS / TOKEN_ESTIMATE_CHARS_PER_TOKEN:
+            residual = observed_tokens - measured - overhead_tokens * overhead_ratio
+            new_ratio = _clamp_ratio(residual / new_tokens)
+        else:
+            new_ratio = request_ratio
+            if overhead_tokens > 0:
+                residual = observed_tokens - measured - new_tokens * new_ratio
+                overhead_ratio = _clamp_ratio(residual / overhead_tokens)
+        ratios = {key: known.get(key, new_ratio) for key in tokens_by_key}
+    for key in other_keys:
+        ratios.setdefault(key, request_ratio)
+    return PromptCalibration(request_ratio, overhead_ratio, tuple(ratios.items()))
 
 
 def _resolve_tier(context_window: int) -> ContextBudgetTier:
