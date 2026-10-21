@@ -415,3 +415,53 @@ def test_search_hit_and_artifact_snippets_are_bounded(patched_session_manager: P
         assert item["truncated"] is True
         assert "…[truncated " in item["snippet"]
         assert item["snippet"].count("z") >= 500  # a real excerpt, not an empty marker
+
+
+def test_search_session_without_ownership_record_is_private(
+    patched_session_manager: Path,
+) -> None:
+    """Messages commit before session metadata (and that write may fail), so a
+    session with no ``sessions`` row is visible only to itself, and a worker
+    known only from ``collaboration_runs`` stays with its gateway thread."""
+    from core.tools.base import ToolContext
+
+    alice, bob = _seed_gateway_threads(patched_session_manager)
+    conn = sqlite3.connect(str(patched_session_manager))
+    try:
+        for session_id, text in (
+            ("task-alice-3", "quarterly alice unsynced worker"),
+            ("task-alice-4", "quarterly alice run-only worker"),
+            ("s-orphan", "quarterly orphan transcript"),
+        ):
+            conn.execute(
+                "INSERT INTO messages (session_id, seq, role, content, timestamp) "
+                "VALUES (?, 0, 'user', ?, 1.0)",
+                (session_id, json.dumps(text)),
+            )
+        conn.execute(  # the durable R6.5 run record, written before the worker starts
+            "INSERT INTO collaboration_runs (task_id, parent_session_id, status, "
+            "owner_id, created_at, updated_at) VALUES ('task-alice-4', ?, 'running', 'o', 1, 1)",
+            (alice,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    bob_view = _search_as(ToolContext(session_id=bob), query="quarterly")
+    assert _sessions(bob_view) == {bob, "s-operator"}
+    assert "unsynced" not in json.dumps(bob_view, ensure_ascii=False)
+    assert _sessions(_search_as(None, query="quarterly")) == {"s-operator"}
+    assert _sessions(_search_as(ToolContext(session_id=alice), query="quarterly")) == {
+        alice,
+        "task-alice-1",
+        "task-alice-4",
+        "s-operator",
+    }
+    assert _sessions(_search_as(ToolContext(session_id="task-alice-3"), query="quarterly")) == {
+        "task-alice-3",
+        "s-operator",
+    }
+    assert (
+        _sessions(_search_as(ToolContext(session_id=bob), query="quarterly", session_id="s-orphan"))
+        == set()
+    )

@@ -26,9 +26,11 @@ search itself.
 
 **Visibility**: the gateway checkpoints every channel/sender/thread
 conversation into the same ``sessions.db``. Both scopes return a gateway
-thread's rows (and its workers') only to that thread or its workers, judged
-from the executing loop's session ids (``caller_session_ids``), never from
-``session_id`` or any other tool argument. Other rows are unaffected.
+thread's rows (and its workers') only to that thread or its workers, and a
+session whose ownership is not recorded only to itself, judged from the
+executing loop's session ids (``caller_session_ids``), never from
+``session_id`` or any other tool argument. Other rows are unaffected. A
+global index rebuilt before rows carried their owner is not served.
 
 **Bounded**: ``limit`` is clamped to 100, and one snippet longer than
 ``SNIPPET_CHAR_CAP`` serialized characters becomes a marked prefix.
@@ -358,6 +360,18 @@ class SessionSearchTool:
 
         try:
             with SearchIndex() as index:
+                if not index.has_ownership():
+                    # Built by an older ``geode reindex``: row owners unknown.
+                    return {
+                        "matched": False,
+                        "count": 0,
+                        "scope": SCOPE_ALL,
+                        "hits": [],
+                        "reason": (
+                            "global_index_outdated — run 'geode reindex' to rebuild "
+                            "it with session ownership"
+                        ),
+                    }
                 hits = index.search(
                     query,
                     project_id=project_id,
