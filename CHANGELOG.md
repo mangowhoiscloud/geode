@@ -105,6 +105,31 @@ functional change.
 
 ### Fixed
 
+- **memory_search gateway isolation.** Session-store results now include a
+  gateway conversation only for the caller's own thread or its parent, resolved
+  from the tool context rather than arguments, so one channel or sender can no
+  longer read another's messages. Results are capped at 1,000 serialized
+  characters per match and 4,000 per result, with explicit truncation markers.
+- **Peer reads within the tool-result limit.** `read_session_messages` bounds
+  the whole serialized result by min(8,000, the live tool-result limit), so a
+  read is never offloaded or truncated into a redelivery loop; an oversized
+  message is delivered once as a marked prefix. Concurrent reads no longer
+  return the same message twice, and notified ids stay within the unread
+  backlog.
+- **Session ownership and fork recovery.** Resuming a child session keeps its
+  durable parent marker. Fork cleanup removes database rows before the
+  directory and `.fork-pending` marker, keeps the marker when row cleanup
+  fails, and bounds the swept-directory set.
+- **Scheduler claims under write failures.** A failing dispatch callback no
+  longer releases a running turn's claim; claim and settlement writes that fail
+  restore the job, its pending command, and its run id, so one-shot jobs are not
+  lost and `_ACTIVE_RUNS` does not leak.
+- **Non-finite audit samples.** A dimension with any NaN or infinite sample is
+  unscored (NaN mean and stderr), so the promotion gate rejects instead of
+  promoting on the remaining samples.
+- **Self-improving hub post-processing.** Table wrapping is idempotent for any
+  label length, and the row filter's border meets 3:1 contrast.
+
 - **Eco² links.** The about page and RSI roadmap link to the moved Eco²
   case page at `mangowhois.ai/eco2/`; the retired GitHub Pages address
   returned 404.
