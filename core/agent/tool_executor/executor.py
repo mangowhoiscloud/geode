@@ -40,6 +40,7 @@ from core.hooks.public import (
     HookName,
     HookRegistry,
 )
+from core.tools.base import EFFECT_APPLIED_FIELD
 from core.tools.bash_tool import BashTool
 from core.tools.personal_data import (
     PERSONAL_DATA_ERROR_OMITTED,
@@ -202,21 +203,17 @@ def _tool_spinner(label: str) -> Any:
 
 _EFFECT_UNCERTAIN_ERROR = "Effect outcome is uncertain; reconcile it before retrying."
 _EFFECT_CAUSE_MAX_CHARS = 500
-# ToolErrorType categories a handler returns when it refused before attempting
-# its effect, so the operation's outcome is a definite failure.
-_PRE_EFFECT_ERROR_TYPES = frozenset(
-    {"validation", "not_found", "permission", "authorization", "dependency"}
-)
 
 
 def _effect_failure_is_definite(result: dict[str, Any]) -> bool:
-    """Whether a handler-returned effect error proves nothing was applied."""
+    """Whether a handler-returned effect error explicitly declares no effect.
+
+    Error categories are not evidence: an ``authorization`` failure can follow
+    a partially applied write. Only the handler's explicit opt-in counts.
+    """
     if result.get("timeout") or result.get("outcome_uncertain"):
         return False
-    error_type = result.get("error_type")
-    return result.get("clarification_needed") is True or (
-        isinstance(error_type, str) and error_type in _PRE_EFFECT_ERROR_TYPES
-    )
+    return result.get(EFFECT_APPLIED_FIELD) is False
 
 
 def _uncertain_effect_result(cause: dict[str, Any], *, personal_data: bool) -> dict[str, Any]:
@@ -275,6 +272,7 @@ def _durable_effect_result(
     if failed:
         durable["error"] = PERSONAL_DATA_ERROR_OMITTED
         durable["error_type"] = str(result.get("error_type") or "validation")
+        durable[EFFECT_APPLIED_FIELD] = False
     return durable
 
 
@@ -1205,9 +1203,9 @@ class ToolExecutor:
                     bound_tool_plan=bound_tool_plan,
                 )
                 if receipt_store is not None:
-                    # Only a returned pre-effect refusal is a definite failure;
-                    # an abandoned, raised, or otherwise failed effect may have
-                    # applied, so its receipt stays prepared for reconciliation.
+                    # Only a returned, explicitly no-effect refusal is a definite
+                    # failure; an abandoned, raised, or otherwise failed effect may
+                    # have applied, so its receipt stays prepared for reconciliation.
                     receipt_failed = bool(result.get("error"))
                     if release_deferred or (
                         receipt_failed

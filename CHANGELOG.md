@@ -109,12 +109,16 @@ functional change.
   `memory_save` refused a request before acting (for example, project memory
   not initialized), its error was replaced by a generic "Effect outcome is
   uncertain" and every later write in the session, such as `generate_report`,
-  was refused until an operator reconciled it. Such refusals now reach the model
-  as their own recoverable error and are recorded as the operation's outcome.
-  Effects that may have applied (timeouts, exceptions, other errors) stay
-  quarantined but now state their bounded, redacted cause, and a blocked later
-  call names the unresolved operation and its `geode session resolve-effect`
-  command.
+  was refused until an operator reconciled it. A tool can now declare that it
+  refused before doing anything (`effect_applied: false`; set for
+  `memory_save`'s missing-argument, missing-memory, and invalid-insight paths
+  and the argument checks of `manage_rule` and `generate_report`), and that
+  error reaches the model as a
+  recoverable result recorded as the operation's outcome. Every other effect
+  error, even one labelled `validation` or `authorization`, may have partly
+  applied and stays quarantined, but now states its bounded, redacted cause, and
+  a blocked later call names the unresolved operation and its
+  `geode session resolve-effect` command.
 
 - **Gateway conversation isolation in search tools.** `memory_search` and
   `session_search` (both its default and `scope="all"` modes, including indexes
