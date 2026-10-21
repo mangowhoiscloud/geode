@@ -60,10 +60,14 @@ def _get_session_store(store: SessionStorePort | None) -> tuple[SessionStorePort
 
 # Hard budgets for one memory_search result, in serialized characters as the
 # tool processor measures them. Stored session data and MEMORY.md lines have no
-# length limit, so neither one match nor the whole result may grow with them.
+# length limit, so neither one match nor the whole response may grow with them.
 SEARCH_MATCH_CHAR_CAP = 1_000
 SEARCH_RESULT_CHAR_CAP = 4_000
 _SEARCH_QUERY_ECHO_CHARS = 200
+_SEARCH_TIER_ECHO_CHARS = 32
+# The CLI handler flattens the result under these keys; the registry tool
+# wraps it as ``{"result": ...}``. The result cap bounds both forms.
+SEARCH_RESPONSE_ENVELOPE: dict[str, str] = {"status": "ok", "action": "memory_search"}
 
 
 def _json_len(value: Any) -> int:
@@ -75,38 +79,59 @@ def _bounded_match(match: dict[str, Any]) -> dict[str, Any]:
     text = json.dumps(match, ensure_ascii=False, default=str)
     if len(text) <= SEARCH_MATCH_CHAR_CAP:
         return match
-    keep = SEARCH_MATCH_CHAR_CAP
-    while True:
-        bounded = {
+
+    def excerpt(keep: int) -> dict[str, Any]:
+        return {
             "tier": str(match.get("tier", ""))[:16],
             "truncated": True,
             "original_chars": len(text),
             "excerpt": f"{text[:keep]}…[truncated {len(text) - keep} chars]",
         }
-        overflow = _json_len(bounded) - SEARCH_MATCH_CHAR_CAP
-        if overflow <= 0 or keep == 0:
-            return bounded
-        keep = max(0, keep - overflow)
+
+    # Escapes grow on re-serialization, so search for the longest prefix that
+    # fits rather than subtracting serialized overflow from a raw length.
+    fitted = excerpt(0)
+    low, high = 1, min(len(text), SEARCH_MATCH_CHAR_CAP)
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = excerpt(middle)
+        if _json_len(candidate) <= SEARCH_MATCH_CHAR_CAP:
+            fitted, low = candidate, middle + 1
+        else:
+            high = middle - 1
+    return fitted
 
 
-def _bounded_matches(matches: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
-    """Cap every match, then stop before the result budget; returns (kept, omitted)."""
+def _bounded_matches(
+    matches: list[dict[str, Any]], budget: int = SEARCH_RESULT_CHAR_CAP
+) -> tuple[list[dict[str, Any]], int]:
+    """Cap every match, then stop before *budget* for the serialized list.
+
+    Returns (kept, omitted).
+    """
     kept: list[dict[str, Any]] = []
     used = 2  # the enclosing ``[]``
     for index, match in enumerate(matches):
         item = _bounded_match(match)
         size = _json_len(item) + 2  # ``, `` separator
-        if used + size > SEARCH_RESULT_CHAR_CAP:
+        if used + size > budget:
             return kept, len(matches) - index
         kept.append(item)
         used += size
     return kept, 0
 
 
-def _caller_session_ids(context: Any) -> frozenset[str]:
+def _search_response_chars(result: dict[str, Any]) -> int:
+    """The larger serialized form of *result*: registry tool or CLI handler."""
+    return max(_json_len({"result": result}), _json_len({**SEARCH_RESPONSE_ENVELOPE, **result}))
+
+
+def caller_session_ids(context: Any) -> frozenset[str]:
     """The executing loop's session and parent ids, never tool arguments.
 
-    Mirrors ``core.cli.tool_handlers.session.tool_principal``.
+    Mirrors ``core.cli.tool_handlers.session.tool_principal``; every reader of
+    the shared session stores (memory_search, session_search) passes these to
+    the gateway visibility rule.
     """
     from core.agent.cognitive_state_ctx import get_parent_session_id, get_session_id
 
@@ -194,7 +219,7 @@ class MemorySearchTool(_AsyncExecuteMixin):
         # Session tier: the store is shared by every gateway conversation, so a
         # caller only sees gateway keys its own thread owns.
         if tier in ("session", "all"):
-            callers = _caller_session_ids(kwargs.get("_tool_context"))
+            callers = caller_session_ids(kwargs.get("_tool_context"))
             for session_id in store.list_sessions():
                 if not gateway_session_visible(session_id, callers):
                     continue
@@ -265,17 +290,24 @@ class MemorySearchTool(_AsyncExecuteMixin):
                         }
                     )
 
-        bounded, omitted = _bounded_matches(matches)
+        # Reserve the envelope at its largest (truncation fields included)
+        # so the whole response the model receives stays within the cap.
         result: dict[str, Any] = {
             "query": query[:_SEARCH_QUERY_ECHO_CHARS],
-            "tier_searched": tier,
-            "matches": bounded,
+            "tier_searched": str(tier)[:_SEARCH_TIER_ECHO_CHARS],
+            "matches": [],
             "total_found": len(matches),
             "ephemeral": ephemeral,
+            "truncated": True,
+            "omitted_matches": len(matches),
         }
+        budget = SEARCH_RESULT_CHAR_CAP - _search_response_chars(result) + 2  # ``[]``
+        bounded, omitted = _bounded_matches(matches, budget)
+        result["matches"] = bounded
         if omitted:
-            result["truncated"] = True
             result["omitted_matches"] = omitted
+        else:
+            del result["truncated"], result["omitted_matches"]
         return {"result": result}
 
 

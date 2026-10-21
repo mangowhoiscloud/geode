@@ -168,3 +168,73 @@ def test_scope_all_empty_query_via_sanitiser(index_with_two_projects: Path):
     assert result["matched"] is False
     assert result["count"] == 0
     assert result["scope"] == SCOPE_ALL
+
+
+def test_scope_all_never_crosses_gateway_principals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gateway-owned rows (``s-gw-*`` threads and their workers) stay out of
+    a rebuilt global index, and an index built before that rule still only
+    returns a thread's rows to that thread."""
+    from types import SimpleNamespace
+
+    from core.memory.search_index import SearchIndex
+    from core.tools.base import ToolContext
+
+    alice, bob = "s-gw-aaaaaaaaaaaa", "s-gw-bbbbbbbbbbbb"
+    source = tmp_path / "projects" / "alpha" / "sessions" / "sessions.db"
+    _seed_db(
+        source,
+        [
+            (alice, 0, "user", "quarterly alice payroll", 1.0),
+            ("task-alice-1", 0, "user", "quarterly alice worker draft", 2.0),
+            ("sess-op", 0, "user", "quarterly operator analysis", 3.0),
+        ],
+    )
+    conn = sqlite3.connect(source)
+    try:
+        conn.execute(
+            "CREATE TABLE sessions (session_id TEXT PRIMARY KEY, "
+            "parent_session_id TEXT NOT NULL DEFAULT '')"
+        )
+        conn.execute("INSERT INTO sessions VALUES (?, ''), ('task-alice-1', ?)", (alice, alice))
+        conn.commit()
+    finally:
+        conn.close()
+    db_path = tmp_path / "search" / "global.db"
+    monkeypatch.setattr("core.paths.GLOBAL_SEARCH_DB", db_path)
+    monkeypatch.setattr("core.memory.search_index.GLOBAL_SEARCH_DB", db_path)
+    with SearchIndex(db_path) as idx:
+        assert idx.rebuild(projects_root=tmp_path / "projects") == {"alpha": 1}
+
+    # An index rebuilt before gateway rows were excluded.
+    stale = sqlite3.connect(db_path)
+    try:
+        for message_id, session_id in ((10, alice), (11, bob)):
+            stale.execute(
+                "INSERT INTO indexed_messages (project_id, project_slug, session_id, "
+                "message_id, seq, role, content, timestamp) "
+                "VALUES ('alpha', 'alpha', ?, ?, 0, 'user', ?, 5.0)",
+                (session_id, message_id, f"quarterly {session_id} stale"),
+            )
+        stale.commit()
+    finally:
+        stale.close()
+
+    tool = SessionSearchTool()
+
+    def sessions(context: object, **kwargs: object) -> set[str]:
+        result = tool._execute_sync(
+            query="quarterly", scope=SCOPE_ALL, _tool_context=context, **kwargs
+        )
+        return {h["session_id"] for h in result["hits"]}
+
+    assert sessions(ToolContext(session_id=bob)) == {"sess-op", bob}
+    assert sessions(ToolContext(session_id=bob), session_id=alice) == set()
+    assert sessions(None) == {"sess-op"}
+    worker = ToolContext(
+        session_id="task-alice-2",
+        is_subagent=True,
+        agent_loop=SimpleNamespace(_parent_session_id=alice),
+    )
+    assert sessions(worker) == {"sess-op", alice}

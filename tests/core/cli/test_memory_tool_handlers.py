@@ -205,3 +205,74 @@ def test_memory_search_result_has_hard_item_and_batch_caps(tmp_path: Path) -> No
     (line_match,) = project["matches"]
     assert len(json.dumps(line_match, ensure_ascii=False, default=str)) <= SEARCH_MATCH_CHAR_CAP
     assert line_match["truncated"] is True
+
+
+def test_memory_search_excerpt_is_longest_fitting_prefix_for_escape_heavy_text(
+    tmp_path: Path,
+) -> None:
+    """Escapes grow on serialization; the excerpt must not collapse to a marker."""
+    import json
+
+    from core.memory.session import InMemorySessionStore
+    from core.tools.memory_tools import SEARCH_MATCH_CHAR_CAP
+
+    store = InMemorySessionStore()
+    store.set("sess-backslash", {"note": "needle " + "\\" * 6_000})
+    store.set("sess-json", {"note": "needle " + json.dumps(json.dumps({"k": "v" * 80})) * 60})
+
+    result = _search(ProjectMemory(tmp_path), store, None, query="needle", tier="session")
+    matches = result["matches"]
+    assert len(matches) == 2, result
+    for match in matches:
+        size = len(json.dumps(match, ensure_ascii=False, default=str))
+        kept, marker, _ = match["excerpt"].partition("…[truncated ")
+        assert match["truncated"] is True and marker
+        assert size <= SEARCH_MATCH_CHAR_CAP
+        assert len(kept) >= SEARCH_MATCH_CHAR_CAP // 3, (len(kept), size)
+        assert size >= SEARCH_MATCH_CHAR_CAP - 8  # no shorter prefix than fits
+
+
+def test_memory_search_whole_response_stays_within_result_cap(tmp_path: Path) -> None:
+    """The cap bounds every serialized form the model receives, envelope included."""
+    import json
+
+    from core.memory.session import InMemorySessionStore
+    from core.tools.memory_tools import (
+        SEARCH_RESULT_CHAR_CAP,
+        MemorySearchTool,
+        MemoryToolServices,
+    )
+
+    query = "needle-" + "q" * 400  # echoed (capped) in the envelope
+    memory = ProjectMemory(tmp_path)
+    memory.ensure_structure()
+    memory.memory_file.write_text(
+        "# Memory\n" + "\n".join(f"{query} {i} " + '"x' * 3_000 for i in range(5)) + "\n",
+        encoding="utf-8",
+    )
+    store = InMemorySessionStore()
+    for i in range(12):
+        store.set(f"sess-{i}", {"note": f"{query} {i} " + "y" * 13_000})
+    # Untruncated matches just under the per-match cap pack the batch budget.
+    packed = InMemorySessionStore()
+    for i in range(6):
+        empty = {"session_id": f"pack-{i}", "tier": "session", "data": {"note": ""}}
+        pad = 990 - len(json.dumps(empty, ensure_ascii=False)) - len(query)
+        packed.set(f"pack-{i}", {"note": query + "p" * pad})
+
+    for case_store, tier in (
+        (store, "all"),
+        (store, "project"),
+        (packed, "session"),
+        (packed, "all"),
+        (packed, "t" * 5_000),
+    ):
+        handler_result = _search(memory, case_store, None, query=query, tier=tier)
+        size = len(json.dumps(handler_result, ensure_ascii=False, default=str))
+        assert size <= SEARCH_RESULT_CHAR_CAP, (tier[:8], size)
+
+    services = MemoryToolServices(session_store=packed, project_memory=memory)
+    tool = MemorySearchTool(services=services)
+    tool_result = asyncio.run(tool.aexecute(query=query, tier="session"))
+    assert tool_result["result"]["matches"]
+    assert len(json.dumps(tool_result, ensure_ascii=False, default=str)) <= SEARCH_RESULT_CHAR_CAP

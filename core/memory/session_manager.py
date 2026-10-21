@@ -16,6 +16,7 @@ import logging
 import sqlite3
 import threading
 import time
+from collections.abc import Collection
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -506,6 +507,30 @@ def _loads_json_object(raw: Any) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {"value": parsed}
 
 
+def _gateway_visibility_clause(column: str, callers: Collection[str]) -> tuple[str, list[Any]]:
+    """SQL form of ``gateway_session_visible`` for rows keyed by ``sessions.db`` ids.
+
+    A row is gateway-owned when its session is a gateway thread
+    (``build_gateway_checkpoint_session_id``) or a worker whose recorded parent
+    is one. It is kept only when that owning thread is among *callers*; every
+    other row is unaffected. *column* is a fixed ``alias.session_id`` literal.
+    """
+    from core.memory.session_key import GATEWAY_CHECKPOINT_PREFIX
+
+    pattern = f"{GATEWAY_CHECKPOINT_PREFIX}*"
+    owner = (
+        f"(CASE WHEN {column} GLOB ? THEN {column} ELSE COALESCE("  # noqa: S608  # nosec B608
+        f"(SELECT s.parent_session_id FROM sessions s WHERE s.session_id = {column}), '') END)"
+    )
+    clause = f" AND ({owner} NOT GLOB ?"
+    params: list[Any] = [pattern, pattern]
+    ids = sorted(set(callers))
+    if ids:
+        clause += f" OR {owner} IN ({','.join('?' for _ in ids)})"
+        params += [pattern, *ids]
+    return clause + ")", params
+
+
 class SessionManager:
     """SQLite-backed session index.
 
@@ -872,6 +897,7 @@ class SessionManager:
         session_id: str | None = None,
         limit: int = 20,
         prefer_trigram: bool = False,
+        visible_to: Collection[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Full-text search across mirrored messages. Returns row dicts.
 
@@ -887,6 +913,9 @@ class SessionManager:
                 index. Useful for substring-recall scenarios (partial
                 Korean words, identifier fragments). Silently falls back
                 to unicode61 when trigram isn't supported.
+            visible_to: The caller's own session ids (never tool arguments).
+                When given, gateway-owned rows are returned only to their
+                own thread or its workers; ``None`` applies no filter.
 
         Returns:
             Newest-first list of ``{seq, role, content, timestamp,
@@ -912,6 +941,10 @@ class SessionManager:
         if session_id is not None:
             sql += " AND m.session_id = ?"
             params.append(session_id)
+        if visible_to is not None:
+            clause, extra = _gateway_visibility_clause("m.session_id", visible_to)
+            sql += clause
+            params.extend(extra)
         sql += " ORDER BY m.timestamp DESC LIMIT ?"
         params.append(limit)
         try:
@@ -1062,8 +1095,12 @@ class SessionManager:
         session_id: str | None = None,
         kinds: list[str] | tuple[str, ...] | None = None,
         limit: int = 20,
+        visible_to: Collection[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """FTS5 search over synthesized context artifacts."""
+        """FTS5 search over synthesized context artifacts.
+
+        ``visible_to`` filters gateway-owned rows as in :meth:`search_messages`.
+        """
         from core.memory.fts_query import sanitize_fts5_query
 
         clean = sanitize_fts5_query(query)
@@ -1083,6 +1120,10 @@ class SessionManager:
         if session_id is not None:
             sql += " AND a.session_id = ?"
             params.append(session_id)
+        if visible_to is not None:
+            clause, extra = _gateway_visibility_clause("a.session_id", visible_to)
+            sql += clause
+            params.extend(extra)
         if kinds:
             placeholders = ",".join("?" for _ in kinds)
             sql += f" AND a.kind IN ({placeholders})"
