@@ -136,7 +136,9 @@ functional change.
   message is delivered once as a marked prefix, and a limit too small for any
   message returns a short final error naming the setting to raise instead of
   an empty batch. Positive tool-result guard and offload limits below 32
-  tokens are raised to 32 so that error always fits. Concurrent reads no longer
+  tokens are raised to 32 so that error always fits, and a truncated tool
+  result of any tool keeps its `error`, `error_type`, `recoverable`, and effect
+  flags even after hooks add context. Concurrent reads no longer
   return the same message twice, and notified ids stay within the unread
   backlog.
 - **Session ownership and fork recovery.** Resuming a child session keeps its
