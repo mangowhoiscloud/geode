@@ -416,7 +416,7 @@ geode config trust PATH --revoke`}</pre>
               <code>[projects.&quot;path&quot;]</code>, and a project&apos;s own
               config.toml is never consulted, so a repository cannot trust itself.
               <code>hitl.dangerously_skip_permissions</code> and
-              <code>computer_use.helper_path</code> are never read from project
+              <code>computer_use.helper_path</code>, and LLM credential-source settings are never read from project
               config, even in a trusted folder. Ignored entries appear in a
               warning log and in <code>geode config explain</code>.
             </p>
@@ -428,7 +428,7 @@ geode config trust PATH --revoke`}</pre>
             </p>
             <pre>{`1. os.environ            shell exports. session-scoped manual override
 2. global .env           ~/.geode/.env (authoritative secrets)
-3. project .env          .env in the cwd (trusted folders only; fills only keys global lacks)
+3. project .env          trusted project tuning; no LLM credentials, endpoints or credential sources
 4. project config.toml   .geode/config.toml (capability keys: trusted folders only)
 5. global config.toml    ~/.geode/config.toml
 6. code default`}</pre>
@@ -549,8 +549,8 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                 </tr>
                 <tr>
                   <td>A secret set in the project <code>.env</code> is ignored and the global value wins</td>
-                  <td>The global <code>~/.geode/.env</code> holds the same key, and global is authoritative (Hermes, 2026-06-15)</td>
-                  <td>This is intended. Keep secrets in the global file; the project file only fills keys global lacks. Run <code>geode config explain &lt;KEY&gt;</code> to see the WINNER layer.</td>
+                  <td>LLM credentials belong to the user-global layer; other integration variables follow global precedence</td>
+                  <td>Keep LLM credentials in user-global auth.toml or .env. A trusted project cannot supply LLM keys, endpoints, credential sources, or authentication roots. Run <code>geode config explain &lt;KEY&gt;</code> to see the WINNER layer.</td>
                 </tr>
                 <tr>
                   <td>The project <code>.env</code>, MCP servers or sandbox setting do not apply</td>

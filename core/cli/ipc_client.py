@@ -40,88 +40,84 @@ DEFAULT_SOCKET_PATH: Path = CLI_SOCKET_PATH
 
 
 def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10.0) -> bool:
-    """Start serve in background if not running. Returns True when ready.
-
-    Uses a pidfile lock to prevent TOCTOU race when multiple thin clients
-    attempt to start serve simultaneously.
-    """
+    """Start this installation's local daemon in the caller's workspace."""
     import fcntl
-    import subprocess  # nosec B404 — used for controlled serve daemon spawn
-    import sys
-    import time
+    import subprocess  # nosec B404 — controlled local daemon spawn
 
-    if is_serve_running(socket_path):
+    path = (socket_path or DEFAULT_SOCKET_PATH).resolve()
+    if is_serve_running(path):
         return True
-
-    # Pidfile lock prevents duplicate serve spawn (TOCTOU fix)
-    lock_path = (socket_path or DEFAULT_SOCKET_PATH).with_suffix(".startup.lock")
+    deadline = time.monotonic() + timeout_s
+    lock_path = path.with_suffix(".startup.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        lock_fd = open(lock_path, "w")  # noqa: SIM115
-        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        # Another client is already starting serve — just wait
-        log.debug("Another client is starting serve, waiting...")
-        for _ in range(int(timeout_s * 10)):
-            if is_serve_running(socket_path):
+    with lock_path.open("a") as lock_fd:
+        while True:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if is_serve_running(path):
+                    return True
+                if time.monotonic() >= deadline:
+                    return False
+                time.sleep(0.1)
+        try:
+            if is_serve_running(path):
                 return True
-            time.sleep(0.1)
-        return False
+            from core.paths import get_project_root
 
-    try:
-        # Re-check after acquiring lock (serve may have started while waiting)
-        if is_serve_running(socket_path):
-            return True
-
-        log.info("Starting geode serve in background...")
-        import shutil
-
-        geode_bin = shutil.which("geode")
-        cmd = [geode_bin, "serve"] if geode_bin else [sys.executable, "-m", "geode.cli", "serve"]
-
-        # Resolve serve working directory: the PROJECT root holding
-        # ``.geode/config.toml``. Uses ``GEODE_PROJECT_DIR`` — NOT ``GEODE_HOME``,
-        # which now means the user-global ``~/.geode`` tree (frontier
-        # ``{APP}_HOME`` parity, core/paths.py). The two are different tiers;
-        # the old ``GEODE_HOME`` name here was a misnomer (PR-PATH-MODERNIZE).
-        _project_dir_env = os.environ.get("GEODE_PROJECT_DIR")
-        serve_cwd = str(Path(_project_dir_env).expanduser()) if _project_dir_env else None
-        if not serve_cwd:
-            # Find project root via this file's location (core/cli/ipc_client.py → ../../)
-            pkg_dir = Path(__file__).resolve().parent.parent.parent
-            if (pkg_dir / ".geode" / "config.toml").exists():
-                serve_cwd = str(pkg_dir)
-
-        subprocess.Popen(  # noqa: S603  # nosec B603 — fixed args, no untrusted input
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            cwd=serve_cwd,
-        )
-
-        for _ in range(int(timeout_s * 10)):
-            if is_serve_running(socket_path):
-                return True
-            time.sleep(0.1)
-        return False
-    finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        lock_fd.close()
+            env = {
+                **os.environ,
+                "GEODE_CLI_SOCKET": str(path),
+                "GEODE_GATEWAY_ENABLED": "false",
+            }
+            # The CLI's cwd owns the workspace; package location and an inherited
+            # project hint must never redirect its tools, configuration or memory.
+            env.pop("GEODE_PROJECT_DIR", None)
+            package_root = str(Path(__file__).resolve().parents[2])
+            entrypoint = (
+                f"import sys; sys.path.insert(0, {package_root!r}); from core.cli import app; app()"
+            )
+            process = subprocess.Popen(  # noqa: S603  # nosec B603
+                [sys.executable, "-P", "-c", entrypoint, "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                cwd=get_project_root(),
+                env=env,
+            )
+            ready = False
+            try:
+                while time.monotonic() < deadline and process.poll() is None:
+                    if is_serve_running(path):
+                        ready = True
+                        return True
+                    time.sleep(0.1)
+                return False
+            finally:
+                if not ready:
+                    if process.poll() is None:
+                        process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
 
 
 def is_serve_running(socket_path: Path | None = None) -> bool:
-    """Check if geode serve is running by probing the socket."""
+    """Check the current workspace's endpoint without leaking probe sockets."""
     path = socket_path or DEFAULT_SOCKET_PATH
     if not path.exists():
         return False
     try:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(1.0)
-        sock.connect(str(path))
-        sock.close()
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1.0)
+            sock.connect(str(path))
         return True
-    except (ConnectionRefusedError, OSError):
+    except OSError:
         return False
 
 

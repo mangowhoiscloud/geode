@@ -76,9 +76,21 @@ class Settings(BaseSettings):
         if isinstance(
             dotenv_settings, DotEnvSettingsSource
         ) and dotenv_settings.env_file == settings_cls.model_config.get("env_file"):
+            from core.config.env_io import project_env_allowed
             from core.config.project_trust import dotenv_files
 
-            dotenv_settings = DotEnvSettingsSource(settings_cls, env_file=dotenv_files())
+            files = dotenv_files()
+            dotenv_settings = DotEnvSettingsSource(settings_cls, env_file=files[-1])
+            if len(files) > 1:
+                project = DotEnvSettingsSource(settings_cls, env_file=files[0])
+                dotenv_settings.env_vars = {
+                    **{
+                        key: value
+                        for key, value in project.env_vars.items()
+                        if project_env_allowed(key)
+                    },
+                    **dotenv_settings.env_vars,
+                }
         return init_settings, env_settings, dotenv_settings, file_secret_settings
 
     # repr=False keeps plain-str keys out of repr()/str() (pytest assertion

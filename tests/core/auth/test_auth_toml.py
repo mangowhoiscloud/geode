@@ -40,6 +40,19 @@ def _reset_state() -> None:
     reset_plan_registry()
 
 
+def test_reload_missing_alias_removes_its_credentials(tmp_path: Path) -> None:
+    target, alias = tmp_path / "real.toml", tmp_path / "alias.toml"
+    target.write_text('[[profiles]]\nname="one"\nprovider="openai"\nkey="test-key"\n')
+    alias.symlink_to(target)
+    registry, store = PlanRegistry(), ProfileStore()
+    assert load_auth_toml(registry=registry, store=store, path=alias)
+    assert store.get("one") is not None
+    alias.unlink()
+    assert load_auth_toml(registry=registry, store=store, path=alias, clear_missing=True)
+    assert store.get("one") is None
+    assert target.exists()
+
+
 class TestRoundtrsubject:
     @pytest.mark.parametrize(
         "quota", [None, Quota(window_s=18_000, max_calls=80, model_weights={"glm-5.1": 3.0})]

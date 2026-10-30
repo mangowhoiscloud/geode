@@ -26,7 +26,7 @@ def _poller() -> CLIPoller:
     ("args", "status", "text"),
     [
         ("remove ghost-plan", "error", "Plan not found: ghost-plan"),
-        ("refresh", "ok", "nothing to reload"),
+        ("refresh", "ok", "Credential sources refreshed"),
         ("help", "ok", "credentials & subscription plans"),
     ],
 )

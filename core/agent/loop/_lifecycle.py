@@ -1133,9 +1133,27 @@ def inject_credential_breadcrumb(loop: AgenticLoop) -> None:
     """
     try:
         from core.auth.credential_breadcrumb import format as fmt_breadcrumb
-        from core.auth.rotation import get_last_eligibility_verdicts
+        from core.llm.registry import provider_specs_for
+        from core.wiring.container import get_profile_store
 
-        verdicts = get_last_eligibility_verdicts(loop._provider)
+        source = getattr(loop, "_source", "")
+        spec = next(
+            (
+                item
+                for item in provider_specs_for(loop._provider)
+                if item.credential.source == source
+            ),
+            None,
+        )
+        store = get_profile_store()
+        if spec is None or store is None:
+            return  # Unknown request diagnostics are not evidence of missing credentials.
+        account_provider = spec.credential.account_provider
+        verdicts = [
+            verdict
+            for verdict in store.evaluate_eligibility(account_provider)
+            if verdict.provider == account_provider
+        ]
         note = fmt_breadcrumb(
             verdicts,
             attempted_provider=loop._provider,

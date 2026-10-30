@@ -246,6 +246,18 @@ class SearchIndex:
         with contextlib.suppress(sqlite3.Error):
             self._conn.close()
 
+    def relocate_project(self, previous: str, current: str, *, workspace: str) -> None:
+        """Update the derived index after an ownership-verified directory move.
+
+        The caller retains its migration marker until commit. Retrying an
+        already committed move is harmless; competing rows fail atomically.
+        """
+        with self._conn:
+            self._conn.execute(
+                "UPDATE indexed_messages SET project_id = ?, project_slug = ? WHERE project_id = ?",
+                (current, workspace, previous),
+            )
+
     def __enter__(self) -> SearchIndex:
         return self
 
@@ -255,6 +267,14 @@ class SearchIndex:
     # ── Rebuild ───────────────────────────────────────────────────
 
     def rebuild(self, projects_root: Path | None = None) -> dict[str, int]:
+        """Reindex a stable workspace layout (file lock precedes SQLite lock)."""
+        from core.memory.atomic_write import exclusive_file_lock
+
+        root = projects_root if projects_root is not None else GLOBAL_PROJECTS_DIR
+        with exclusive_file_lock(root / ".workspace-layout.lock"):
+            return self._rebuild(root)
+
+    def _rebuild(self, projects_root: Path) -> dict[str, int]:
         """Walk every project DB and (re)populate the index.
 
         Returns a ``{project_id: rows_indexed}`` map so callers (the
@@ -313,9 +333,19 @@ class SearchIndex:
         Reads via a separate connection so the source DB's locking
         doesn't interact with the index DB's write transaction.
         """
-        project_slug = project_id  # Same value today; kept as a separate
-        # column so a future ``~/.geode/projects/<id>/slug`` lookup can
-        # carry the human-readable label without a schema migration.
+        project_slug = project_id  # Old indexes use the legacy directory label.
+        owner_file = db_path.parent.parent / ".workspace.json"
+        if owner_file.is_file() and not owner_file.is_symlink():
+            import json
+
+            from core.paths import encode_project_id
+
+            try:
+                workspace = json.loads(owner_file.read_text()).get("workspace")
+                if isinstance(workspace, str) and encode_project_id(workspace) == project_id:
+                    project_slug = workspace
+            except (OSError, ValueError, AttributeError):
+                pass  # A derived display label never grants visibility.
         src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         src.row_factory = sqlite3.Row
         try:

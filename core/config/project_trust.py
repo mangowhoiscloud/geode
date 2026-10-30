@@ -59,7 +59,12 @@ TRUST_REQUIRED_KEYS: frozenset[str] = frozenset(
 #: Never read from a project, trusted or not: a repository must not turn off
 #: permission prompts or choose a local executable.
 PROJECT_DENIED_KEYS: frozenset[str] = frozenset(
-    {"computer_use.helper_path", "hitl.dangerously_skip_permissions"}
+    {
+        "computer_use.helper_path",
+        "hitl.dangerously_skip_permissions",
+        "llm.openai_credential_source",
+        "llm.anthropic_credential_source",
+    }
 )
 
 _warned: set[str] = set()

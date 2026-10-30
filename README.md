@@ -13,7 +13,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.32 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.33 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE is a Python agent runtime for research, file work, and scheduled tasks.
 Its agentic loop calls tools, reads their results, and continues the task.
@@ -135,6 +135,12 @@ Cost guards use observed usage and configured tariffs. They are not a provider
 billing cap: an in-flight call can exceed a threshold, and missing usage is not
 zero cost. See [usage accounting](docs/architecture/usage-accounting.md).
 
+`geode` starts in the directory where you invoke it; no repository or project
+configuration is required. Each resolved directory has its own local daemon,
+reused by later CLI sessions there. Automatic startup does not activate external
+messaging gateways. `geode serve` explicitly starts the configured gateway for
+that workspace; stop its local daemon first if it is already running.
+
 ### If something fails
 
 - **Command not found:** check `uv tool dir --bin` and your shell's PATH.
@@ -143,7 +149,7 @@ zero cost. See [usage accounting](docs/architecture/usage-accounting.md).
 - **Unexpected model or setting:** inspect `geode about`, `/model`, and
   `geode config explain model`; running sessions retain admitted settings.
 - **Daemon connection failure:** run `geode doctor` and check the configured
-  Unix socket and `~/.geode/logs/serve.log`. Identify the owning process before
+  workspace socket and its adjacent `serve.log` under `~/.geode/run/`. Identify the owning process before
   stopping it; another session may be using it.
 
 ## Integrations

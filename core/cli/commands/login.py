@@ -185,7 +185,7 @@ def reload_auth_state() -> str:
     there is nothing to adopt.
     """
     from core.auth.auth_toml import auth_toml_path, load_auth_toml
-    from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
+    from core.auth.codex_cli_oauth import sync_codex_cli_profile
     from core.llm.strategies.plan_registry import get_plan_registry
     from core.mcp.google_workspace_client import reset_google_workspace_client
     from core.wiring.container import ensure_profile_store
@@ -194,13 +194,12 @@ def reload_auth_state() -> str:
     store = ensure_profile_store()
     plans_before = {p.id for p in registry.list_all()}
     profiles_before = {p.name for p in store.list_all()}
-    if auth_toml_path().exists() and not load_auth_toml():
+    if not load_auth_toml(clear_missing=True):
         raise ValueError(
             f"auth.toml reload failed ({auth_toml_path()}); the previous credentials remain active"
         )
-    # Imported Codex and Google credentials live outside auth.toml; drop their
-    # caches even when there is no file to adopt, but not after a rejection.
-    invalidate_codex_cli_cache()
+    # Publish the external owner's current snapshot before reporting refresh.
+    sync_codex_cli_profile(store, force_refresh=True)
     reset_google_workspace_client()
     plans_after = {p.id for p in registry.list_all()}
     profiles_after = {p.name for p in store.list_all()}
@@ -219,7 +218,7 @@ def reload_auth_state() -> str:
     )
     if not auth_toml_path().exists():
         return (
-            f"  [muted]No auth.toml; nothing to reload "
+            f"  [muted]Credential sources refreshed; no user auth.toml "
             f"({len(plans_after)} plans, {len(profiles_after)} profiles in use)[/muted]\n"
         )
     lines = [

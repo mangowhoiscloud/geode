@@ -278,12 +278,13 @@ def test_cmd_login_refresh_without_auth_toml_still_resets_imported_caches(
     auth_path = tmp_path / "does-not-exist.toml"
     monkeypatch.setenv("GEODE_AUTH_TOML", str(auth_path))
     codex, google = Mock(), Mock()
-    monkeypatch.setattr("core.auth.codex_cli_oauth.invalidate_cache", codex)
+    monkeypatch.setattr("core.auth.codex_cli_oauth.sync_codex_cli_profile", codex)
     monkeypatch.setattr("core.mcp.google_workspace_client.reset_google_workspace_client", google)
 
     assert cmd_login("refresh") is True
 
-    codex.assert_called_once_with()
+    codex.assert_called_once()
+    assert codex.call_args.kwargs == {"force_refresh": True}
     google.assert_called_once_with()
     assert not auth_path.exists()
 

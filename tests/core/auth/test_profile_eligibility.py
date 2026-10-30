@@ -9,7 +9,6 @@ from core.auth.credential_breadcrumb import format as fmt_breadcrumb
 from core.auth.profiles import (
     AuthProfile,
     CredentialType,
-    EligibilityResult,
     ProfileRejectReason,
     ProfileStore,
 )
@@ -127,30 +126,7 @@ class TestEvaluateEligibility:
         assert names == {"a:1", "b:1", "a:2"}
 
 
-class TestRotatorLoggingAndCache:
-    def test_resolve_caches_verdicts_for_breadcrumb(self) -> None:
-        from core.auth.rotation import (
-            ProfileRotator,
-            get_last_eligibility_verdicts,
-        )
-
-        s = _store_with(
-            AuthProfile(
-                name="openai:work",
-                provider="openai",
-                credential_type=CredentialType.API_KEY,
-                key="sk-x",
-                cooldown_until=time.time() + 60,
-                error_count=2,
-            )
-        )
-        rotator = ProfileRotator(s)
-        assert rotator.resolve("openai") is None
-
-        cached = get_last_eligibility_verdicts("openai")
-        assert len(cached) == 1
-        assert cached[0].reason is ProfileRejectReason.COOLING_DOWN
-
+class TestRotatorLogging:
     def test_resolve_logs_rejection_breakdown(self, caplog) -> None:
         from core.auth.rotation import ProfileRotator
 
@@ -229,6 +205,7 @@ class TestAgenticLoopBreadcrumbInjection:
 
         loop = AgenticLoop.__new__(AgenticLoop)
         loop._provider = "openai"  # type: ignore[attr-defined]
+        loop._source = "subscription"  # type: ignore[attr-defined]
         loop.model = "gpt-5.4"  # type: ignore[attr-defined]
 
         class _FakeContext:
@@ -241,24 +218,16 @@ class TestAgenticLoopBreadcrumbInjection:
 
         loop.context = _FakeContext()  # type: ignore[attr-defined]
 
-        # Simulate a cached cooldown verdict for openai
-        with patch(
-            "core.auth.rotation._LAST_VERDICTS",
-            {
-                "openai": [
-                    EligibilityResult(
-                        profile_name="openai:work",
-                        provider="openai",
-                        credential_type=CredentialType.API_KEY,
-                        eligible=False,
-                        reason=ProfileRejectReason.COOLING_DOWN,
-                        detail="60s remaining (error_count=3)",
-                        cooldown_until=time.time() + 60,
-                        error_count=3,
-                    )
-                ]
-            },
-        ):
+        store = _store_with(
+            AuthProfile(
+                "openai-codex:work",
+                "openai-codex",
+                CredentialType.OAUTH,
+                key="opaque-test-token",
+                cooldown_until=time.time() + 60,
+            )
+        )
+        with patch("core.wiring.container.get_profile_store", return_value=store):
             _lifecycle.inject_credential_breadcrumb(loop)
 
         injected = [m for m in loop.context.messages if "credential note" in m["content"]]

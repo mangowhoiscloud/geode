@@ -198,6 +198,7 @@ def resolve_routing(
     source: str | None = None,
     sources: PolicySourcePaths | None = None,
     base_url: str | None = None,
+    allow_refreshable: bool = False,
 ) -> RoutingTarget | None:
     """Select an account without escaping the chosen source or explicit plan chain.
 
@@ -221,6 +222,21 @@ def resolve_routing(
         order = [pinned.name]
     ranks = {name: rank for rank, name in enumerate(order)}
     candidates: list[tuple[int, AuthProfile, Plan]] = []
+
+    def available(profile: AuthProfile) -> bool:
+        from core.auth.auth_toml import auth_toml_path
+
+        return profile.is_available or (
+            allow_refreshable
+            and spec.credential.source == "subscription"
+            and profile.credential_type is CredentialType.OAUTH
+            and not profile.managed_by
+            and bool(profile.refresh_token.strip())
+            and not profile.disabled
+            and not profile.is_cooling_down
+            and store.file_profiles(str(auth_toml_path().absolute())).get(profile.name) is profile
+        )
+
     for index, plan in enumerate(plans):
         expected = {
             PlanKind.PAYG: SOURCE_PAYG,
@@ -237,7 +253,7 @@ def resolve_routing(
             for profile in store.list_by_provider(spec.credential.account_provider)
             if profile.plan_id == plan.id
             and profile.key
-            and profile.is_available
+            and available(profile)
             and (
                 spec.credential.source != SOURCE_PAYG
                 or (profile.credential_type is CredentialType.API_KEY and not profile.managed_by)
@@ -249,6 +265,28 @@ def resolve_routing(
             )
         ]
         candidates.extend((index if explicit else 0, profile, plan) for profile in profiles)
+    if not explicit and spec.credential.source == "subscription":
+        # Imported/native OAuth can predate plans; admission still belongs here.
+        for profile in store.list_by_provider(spec.credential.account_provider):
+            if (
+                profile.plan_id
+                or not profile.key
+                or profile.credential_type is not CredentialType.OAUTH
+                or not available(profile)
+            ):
+                continue
+            endpoint = profile.base_url_override or spec.default_base_url
+            if base_url is not None and endpoint.rstrip("/") != base_url.rstrip("/"):
+                continue
+            plan = Plan(
+                id=f"{spec.id}:implicit",
+                provider=spec.id,
+                kind=PlanKind.OAUTH_BORROWED if profile.managed_by else PlanKind.SUBSCRIPTION,
+                display_name=spec.display_name,
+                base_url=endpoint,
+                auth_type=spec.auth_type,
+            )
+            candidates.append((0, profile, plan))
     selected = min(
         candidates,
         key=lambda item: (

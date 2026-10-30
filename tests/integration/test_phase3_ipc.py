@@ -1247,3 +1247,23 @@ class TestCLIChannelIntegration:
             client.close()
         finally:
             poller.stop()
+
+
+def test_duplicate_poller_cannot_replace_or_remove_live_endpoint() -> None:
+    from core.server.ipc_server.poller import CLIPoller
+
+    first = CLIPoller(MagicMock(), socket_path=_test_sock())
+    duplicate = CLIPoller(MagicMock(), socket_path=first.socket_path)
+    first.start()
+    inode = first.socket_path.stat().st_ino
+    try:
+        with pytest.raises(RuntimeError, match="already serving"):
+            duplicate.start()
+        duplicate.stop()
+        assert first.socket_path.stat().st_ino == inode
+        from core.cli.ipc_client import is_serve_running
+
+        assert is_serve_running(first.socket_path)
+    finally:
+        first.stop()
+    assert not first.socket_path.exists()

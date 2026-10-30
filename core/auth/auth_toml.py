@@ -38,7 +38,6 @@ created with mode 0600 so other users on the host can't read it.
 
 from __future__ import annotations
 
-import fcntl
 import logging
 import math
 import os
@@ -103,7 +102,7 @@ def save_api_key(key: str, *, provider: str = "", plan_id: str = "") -> Plan:
         current = live.get(name)
         if current is not None and (
             current.managed_by
-            or live.file_profiles(str(auth_toml_path().resolve())).get(name) is not current
+            or live.file_profiles(str(auth_toml_path().absolute())).get(name) is not current
         ):
             raise ValueError("Credential name belongs to another owner; use its login provider.")
         existing = store.get(name)
@@ -332,7 +331,7 @@ def save_auth_toml(
     from core.memory.atomic_write import atomic_write_text
 
     atomic_write_text(path, text)
-    source = str(path.resolve())
+    source = str(path.absolute())
     registry.remember_auth_file(source, plans, routing)
     store.remember_auth_file(source, profiles, pins, orders)
     return path
@@ -409,6 +408,7 @@ def load_auth_toml(
     registry: PlanRegistry | None = None,
     store: ProfileStore | None = None,
     path: Path | None = None,
+    clear_missing: bool = False,
 ) -> bool:
     """Validate then reconcile this file's plans, credentials and explicit choices.
 
@@ -423,13 +423,18 @@ def load_auth_toml(
     path = path or auth_toml_path()
 
     if not path.exists():
+        if clear_missing:
+            source = str(path.absolute())
+            registry.reconcile_auth_file(source, [], {})
+            store.reconcile_auth_file(source, [], {}, {})
+            return True
         return False
     try:
         path.chmod(0o600)
         with open(path, "rb") as f:
             data = tomllib.load(f)
         plans, profiles, routing, pins, orders = _auth_candidate(data)
-        source = str(path.resolve())
+        source = str(path.absolute())
         previous_plans = registry.file_plans(source)
         for plan in plans:
             current_plan = registry.get(plan.id)
@@ -450,6 +455,19 @@ def load_auth_toml(
                     continue
                 if _profile_to_dict(current) == _profile_to_dict(profile):
                     profile = current
+                elif (
+                    current.credential_type is CredentialType.OAUTH
+                    and profile.credential_type is CredentialType.OAUTH
+                ):
+                    # OAuth rotation does not revoke runtime health/disable decisions.
+                    profile = replace(
+                        profile,
+                        disabled=current.disabled,
+                        disabled_reason=current.disabled_reason,
+                        cooldown_until=current.cooldown_until,
+                        error_count=current.error_count,
+                        last_used=current.last_used,
+                    )
             owned.append(profile)
     except Exception as exc:
         # Exception strings and raw entries can contain keys supplied by a
@@ -480,6 +498,7 @@ def auth_file_transaction(
     not file-owned and are absent from the candidate. Not reentrant: a nested
     transaction on the same file waits on its own lock.
     """
+    from core.memory.atomic_write import exclusive_file_lock
     from core.wiring.container import ensure_profile_store
 
     registry = registry or get_plan_registry()
@@ -487,8 +506,7 @@ def auth_file_transaction(
     path = path or auth_toml_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     candidate = PlanRegistry(), ProfileStore()
-    with open(path.with_name(f".{path.name}.lock"), "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with exclusive_file_lock(path.with_name(f".{path.name}.lock")):
         if path.exists() and not load_auth_toml(
             registry=candidate[0], store=candidate[1], path=path
         ):

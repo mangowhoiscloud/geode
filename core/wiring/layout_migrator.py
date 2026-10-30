@@ -1,7 +1,8 @@
 """Version-aware migration for ``~/.geode/`` directory layout.
 
 Implements three frontier patterns synthesized from Hermes Agent
-(NousResearch) + OpenClaw + GEODE's own ``_resolve_with_fallback``:
+(NousResearch) + OpenClaw for optional maintenance. Required workspace cutover
+uses the separate ownership-checked admission below:
 
 1. **Schema version marker** — ``~/.geode/.layout-version`` dotfile holds
    an integer. Mirrors Hermes' ``schema_version`` table-inside-state.db
@@ -40,6 +41,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime as _dt
+import json
 import logging
 import os
 import shutil
@@ -51,6 +53,155 @@ from pathlib import Path
 from core.paths import GEODE_HOME
 
 log = logging.getLogger(__name__)
+
+
+class WorkspaceMigrationError(ValueError):
+    """A workspace cannot adopt old data without loss or ambiguous ownership."""
+
+
+def _directory_tree(path: Path) -> None:
+    if path.is_symlink() or not path.is_dir():
+        raise WorkspaceMigrationError(f"Expected a real directory: {path}")
+    for entry in path.rglob("*"):
+        if entry.is_symlink() or not (entry.is_file() or entry.is_dir()):
+            raise WorkspaceMigrationError(f"Unsupported entry in migration source: {entry}")
+
+
+def _move_workspace_directory(source: Path, target: Path) -> None:
+    """Move one stopped store; never merge competing histories or follow links."""
+    if not source.exists() and not source.is_symlink():
+        return
+    _directory_tree(source)
+    entries = list(source.rglob("*"))
+    if not any(entry.is_file() for entry in entries):
+        # Old vaults may contain only their initialized category directories.
+        # rmdir fails if a concurrent writer adds data; it never deletes files.
+        for entry in sorted(entries, key=lambda path: len(path.parts), reverse=True):
+            entry.rmdir()
+        source.rmdir()
+        return
+    if target.is_dir() and not target.is_symlink() and not any(target.iterdir()):
+        target.rmdir()
+    if target.exists() or target.is_symlink():
+        raise WorkspaceMigrationError(f"Both migration stores exist: {source} and {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # rename keeps the only copy intact on failure, including a different filesystem.
+    source.rename(target)
+
+
+def _require_stopped_legacy(home: Path) -> None:
+    """A responding legacy listener may still own any project's old store."""
+    import socket
+
+    endpoint = home / "cli.sock"
+    if not endpoint.exists():
+        return
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.2)
+        try:
+            probe.connect(str(endpoint))
+        except (ConnectionRefusedError, FileNotFoundError):
+            return
+        except OSError as exc:
+            raise WorkspaceMigrationError(
+                "Cannot inspect legacy runtime; stop it before migration"
+            ) from exc
+    raise WorkspaceMigrationError("Stop the legacy GEODE runtime before migrating workspace data")
+
+
+def ensure_project_layout(
+    workspace: Path, target: Path, *, legacy_project: Path | None = None
+) -> None:
+    """Bind/migrate a workspace before readers open its state. Failures propagate.
+
+    The old dash slug is ambiguous; only an existing owner or an explicit operator
+    binding authorizes adopting it. This lock is separate from optional global TTL
+    maintenance and its version marker.
+    """
+    from core.memory.atomic_write import atomic_write_json, atomic_write_text, exclusive_file_lock
+
+    workspace = workspace.resolve()
+    projects = target.parent
+    legacy = projects / str(workspace).replace(os.sep, "-")
+    expected = {"workspace": str(workspace), "layout": 1}
+    local = workspace / ".geode"
+    if local.is_symlink():
+        raise WorkspaceMigrationError(f"Workspace data root is a symlink: {local}")
+    if legacy_project is not None and legacy_project.absolute() != legacy.absolute():
+        raise WorkspaceMigrationError(f"Expected legacy project store: {legacy}")
+    projects.mkdir(parents=True, exist_ok=True)
+    with exclusive_file_lock(projects / ".workspace-layout.lock"):
+        if legacy.exists() or any(
+            (local / name).exists() for name in ("session", "journal", "result_cache")
+        ):
+            _require_stopped_legacy(projects.parent)
+        if target.is_symlink() or (target.exists() and not target.is_dir()):
+            raise WorkspaceMigrationError(f"Invalid workspace store: {target}")
+        if legacy.exists() or legacy.is_symlink():
+            _directory_tree(legacy)
+            owner_file = legacy / ".workspace.json"
+            owner = json.loads(owner_file.read_text()) if owner_file.exists() else None
+            if any(legacy.iterdir()) and owner != expected and legacy_project is None:
+                raise WorkspaceMigrationError(
+                    f"Legacy workspace ownership is ambiguous: {legacy}. "
+                    "Stop old runtimes, then bind it explicitly with "
+                    f"geode config migrate-workspace --legacy-project '{legacy}' '{workspace}'"
+                )
+            if owner is not None and owner != expected:
+                raise WorkspaceMigrationError(f"Legacy workspace owner conflicts: {legacy}")
+            if any(legacy.iterdir()):
+                atomic_write_json(owner_file, expected)
+                atomic_write_text(legacy / ".search-index-cutover", legacy.name)
+            _move_workspace_directory(legacy, target)
+        marker = target / ".workspace.json"
+        if marker.exists() or marker.is_symlink():
+            if marker.is_symlink() or json.loads(marker.read_text()) != expected:
+                raise WorkspaceMigrationError(f"Workspace owner conflicts: {target}")
+        elif target.exists() and any(target.iterdir()):
+            raise WorkspaceMigrationError(f"Workspace owner is missing: {target}")
+        else:
+            target.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(marker, expected)
+        pending_index = target / ".search-index-cutover"
+        if pending_index.exists() or pending_index.is_symlink():
+            if pending_index.is_symlink() or pending_index.read_text() != legacy.name:
+                raise WorkspaceMigrationError(f"Invalid search index cutover: {pending_index}")
+            index_path = projects.parent / "search" / "global.db"
+            if index_path.exists():
+                import sqlite3
+
+                from core.memory.search_index import SearchIndex
+
+                try:
+                    with SearchIndex(index_path) as index:
+                        index.relocate_project(legacy.name, target.name, workspace=str(workspace))
+                except sqlite3.Error as exc:
+                    raise WorkspaceMigrationError(
+                        "Workspace data moved; search index update is pending. "
+                        "Resolve index contention/conflicts and retry migration."
+                    ) from exc
+            pending_index.unlink()
+        for old, new in (
+            ("session", "sessions"),
+            ("journal", "journal"),
+            ("result_cache", "result_cache"),
+        ):
+            _move_workspace_directory(local / old, target / new)
+
+
+def migrate_workspace_vault(workspace: Path, target: Path) -> None:
+    """Remove the retired local vault location only after an unambiguous move."""
+    from core.memory.atomic_write import exclusive_file_lock
+
+    local = workspace / ".geode"
+    if local.is_symlink():
+        raise WorkspaceMigrationError(f"Workspace data root is a symlink: {local}")
+    if not (local / "vault").exists() and not (local / "vault").is_symlink():
+        return
+    with exclusive_file_lock(target.parent / ".vault-layout.lock"):
+        _require_stopped_legacy(target.parent)
+        _move_workspace_directory(local / "vault", target)
+
 
 # ---------------------------------------------------------------------------
 # Constants

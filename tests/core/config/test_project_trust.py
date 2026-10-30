@@ -81,7 +81,7 @@ def test_settings_read_project_env_only_when_trusted(
 
     trust.set_project_trust(home, trusted=True)
     trusted = Settings()
-    assert (trusted.verbose, trusted.anthropic_api_key) == (True, "sk-ant-project")
+    assert (trusted.verbose, trusted.anthropic_api_key) == (True, "")
     assert Settings(_env_file=None).verbose is False  # explicit argument is kept
 
 
@@ -100,7 +100,7 @@ def test_env_promotion_skips_untrusted_project_env(
 
         trust.set_project_trust(home, trusted=True)
         load_env_files()
-        assert os.environ[probe] == "https://attacker.example"
+        assert probe not in os.environ
     finally:
         os.environ.pop(probe, None)
 

@@ -366,6 +366,7 @@ class CLIPoller:
     ) -> None:
         self._services = services
         self._socket_path = socket_path or DEFAULT_SOCKET_PATH
+        self._socket_identity: tuple[int, int] | None = None
         self._async_server: asyncio.AbstractServer | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stop_event = threading.Event()
@@ -393,9 +394,21 @@ class CLIPoller:
                 raise RuntimeError("CLI channel is still stopping; retry after its worker exits")
             return
 
-        # Clean up stale socket file
+        # Never replace a live endpoint, including a pre-lock daemon.
         if self._socket_path.exists():
-            self._socket_path.unlink()
+            import errno
+            import socket
+
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+                probe.settimeout(1.0)
+                try:
+                    probe.connect(str(self._socket_path))
+                except OSError as exc:
+                    if exc.errno not in {errno.ECONNREFUSED, errno.ENOENT, errno.ENOTSOCK}:
+                        raise
+                    self._socket_path.unlink(missing_ok=True)
+                else:
+                    raise RuntimeError("CLI endpoint is already serving this workspace")
 
         self._stop_event.clear()
         self._ready_event.clear()
@@ -456,7 +469,12 @@ class CLIPoller:
             with self._clients_lock:
                 self._active_clients.clear()
             try:
-                self._socket_path.unlink(missing_ok=True)
+                if self._socket_identity is not None:
+                    with contextlib.suppress(FileNotFoundError):
+                        stat = self._socket_path.stat()
+                        if (stat.st_dev, stat.st_ino) == self._socket_identity:
+                            self._socket_path.unlink(missing_ok=True)
+                    self._socket_identity = None
             except OSError as exc:
                 if first_error is None:
                     first_error = exc
@@ -500,6 +518,8 @@ class CLIPoller:
             backlog=5,
             limit=MAX_IPC_MESSAGE_BYTES + 1,
         )
+        stat = self._socket_path.stat()
+        self._socket_identity = (stat.st_dev, stat.st_ino)
         os.chmod(str(self._socket_path), 0o600)
         self._ready_event.set()
 

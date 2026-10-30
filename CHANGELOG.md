@@ -47,6 +47,26 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.33] - 2026-10-30
+
+### Changed
+
+- **Workspace and credential cutover.** Daemons and session stores share a
+  canonical directory digest with verified ownership. Startup migrates local
+  legacy stores once, without a reader fallback; ambiguous global stores require
+  `geode config migrate-workspace`. Search-index project identifiers move with
+  their verified owner. Live legacy runtimes and conflicting histories block
+  migration without discarding data.
+- **User-owned authentication.** Trusted project files cannot choose LLM keys,
+  credential sources, endpoints, or authentication roots. Credential refresh
+  reconciles removed file entries and the imported Codex snapshot. Requests and
+  diagnostics share route eligibility, including disabled/cooldown decisions.
+  GEODE-owned OpenAI OAuth refreshes on its selected subscription route with
+  account checks, coordinated grants and durable publication; vendor-owned
+  tokens remain read-only. Updates refuse other active workspace daemons and
+  preserve the restarted daemon's gateway mode.
+
+
 ### Added
 
 - **Research desktop navigation.** Recognize one bounded horizontal wheel
@@ -104,6 +124,18 @@ functional change.
   history, vertical scrolling, pinch zoom, and taps on full-size image links.
 
 ### Fixed
+
+- **Site dependency security.** Update Next.js to 16.4.3 and the locked Zod
+  dependency to a patched release while retaining the reviewed local ESLint
+  plugin. The existing moderate-or-higher dependency audit remains required.
+
+- **Start GEODE from any directory.** CLI auto-start uses the invoking
+  workspace and Python installation, with separate sockets, logs, and daemon
+  ownership per resolved directory. Concurrent startup cannot replace a live
+  server; stop/status address only that workspace. Automatic local servers do
+  not launch external messaging gateways, and failed startup reaps its owned
+  child and returns a nonzero CLI status. Existing workspace admission checks
+  remain in force.
 
 - **Context pressure is measured in provider tokens.** The in-turn check
   estimated 4 characters per token plus a 1.2x margin, but dense text such as
