@@ -161,6 +161,9 @@ feature/<name> -> develop -> main
   administrators; never bypass them. The guard also requires merge-only server
   settings and verifies the result's ordered base/head parents before reporting
   success. Fetching does not update a stale checkout's guard or instructions.
+  Draft PRs defer CI, including its Test and Gate reducers, until the
+  `ready_for_review` event. Draft skips do not establish merge readiness;
+  eligible runs still reject missing, failed, cancelled or skipped prerequisites.
   Repeated runs can coexist on one head (for example, Draft → Ready). The
   command scopes GitHub CLI's current required-check selection by its explicit
   `pull_request` event (excluding same-head push runs), then binds its

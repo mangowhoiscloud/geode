@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": "### Fixed\n\n- **Native research reader scrolling.** Remove swipe and wheel scene navigation,\n  document paging shortcuts, forced scroll movement and scroll locks from all\n  three readers and the research collection menu. Explicit navigation and frozen\n  research content remain intact."
+    "body": "### Fixed\n\n- **Draft PR CI eligibility.** Defer aggregate Test and Gate jobs with their\n  prerequisite jobs while a PR is a draft. Ready PRs and protected-branch pushes\n  retain fail-closed prerequisite, collection, coverage and performance gates.\n- **Release freshness diagnostics.** When main advances during validation,\n  retain the pre-publication stop and report both commit IDs with guidance to\n  dispatch a fresh run, instead of an unexplained exit code.\n- **Native research reader scrolling.** Remove swipe and wheel scene navigation,\n  document paging shortcuts, forced scroll movement and scroll locks from all\n  three readers and the research collection menu. Explicit navigation and frozen\n  research content remain intact."
   },
   {
     "version": "1.0.34",

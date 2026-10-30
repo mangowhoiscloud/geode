@@ -22,6 +22,20 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text()
 
 
+def test_draft_ci_reducers_share_change_detection_eligibility() -> None:
+    workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
+    trigger = workflow.get("on", workflow.get(True))["pull_request"]
+    assert "ready_for_review" in trigger["types"]
+    jobs = workflow["jobs"]
+    eligibility = jobs["changes"]["if"]
+    assert eligibility == "github.event.pull_request.draft != true"
+    for name in ("test", "gate"):
+        # Draft skips must reach the reducers too; eligible runs still inspect
+        # failed/cancelled prerequisites instead of inheriting success().
+        assert jobs[name]["if"] == "${{ always() && (" + eligibility + ") }}"
+        assert not jobs[name].get("continue-on-error", False)
+
+
 @pytest.mark.parametrize("full", ["true", "false", "", "unknown", None, True])
 @pytest.mark.parametrize("result", ["success", "failure", "cancelled", "skipped"])
 def test_test_reducer_requires_all_shards_and_explicit_classification(
@@ -80,7 +94,7 @@ def test_test_shards_preserve_full_coverage_and_contract_checks() -> None:
 def test_merge_gate_executes_actual_predicate_and_rejects_non_success(result: str) -> None:
     workflow = yaml.safe_load(_read(".github/workflows/ci.yml"))
     gate = workflow["jobs"]["gate"]
-    assert gate["if"] == "${{ always() }}"
+    assert gate["if"] == "${{ always() && (github.event.pull_request.draft != true) }}"
     assert set(gate["needs"]) == {"changes", "lint", "typecheck", "test", "security"}
     needs: dict[str, dict[str, object]] = {key: {"result": "success"} for key in gate["needs"]}
     needs["changes"]["outputs"] = {"code": "true", "docs": "false", "full_tests": "true"}

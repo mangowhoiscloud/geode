@@ -49,6 +49,12 @@ functional change.
 
 ### Fixed
 
+- **Draft PR CI eligibility.** Defer aggregate Test and Gate jobs with their
+  prerequisite jobs while a PR is a draft. Ready PRs and protected-branch pushes
+  retain fail-closed prerequisite, collection, coverage and performance gates.
+- **Release freshness diagnostics.** When main advances during validation,
+  retain the pre-publication stop and report both commit IDs with guidance to
+  dispatch a fresh run, instead of an unexplained exit code.
 - **Native research reader scrolling.** Remove swipe and wheel scene navigation,
   document paging shortcuts, forced scroll movement and scroll locks from all
   three readers and the research collection menu. Explicit navigation and frozen

@@ -295,7 +295,7 @@ def test_documentation_fast_path_keeps_required_jobs_and_owner_checks() -> None:
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
     jobs = workflow["jobs"]
     assert jobs["test"]["name"] == "Test" and jobs["gate"]["name"] == "Gate"
-    assert jobs["test"]["if"] == "${{ always() }}"
+    assert jobs["test"]["if"] == "${{ always() && (github.event.pull_request.draft != true) }}"
     assert set(jobs["test"]["needs"]) == {"changes", "test_contracts", "test_shards"}
     for name in ("test_contracts", "test_shards"):
         assert jobs[name]["if"] == "needs.changes.outputs.full_tests == 'true'"
