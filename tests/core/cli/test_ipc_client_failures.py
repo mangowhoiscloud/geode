@@ -618,7 +618,7 @@ def test_startup_cli_renders_failure_and_foreground_recovery(
     rendered = Text.from_ansi(output.getvalue()).plain
     assert caught.value.exit_code == 1
     assert message in rendered
-    assert "serve.log" in rendered
+    assert str(result.log_path) in rendered.replace("\n", "")
     assert "Run `geode serve` in this directory" in rendered
     assert "geode serve &" not in rendered
     spinner.stop.assert_called_once()
