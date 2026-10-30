@@ -678,7 +678,7 @@ class NoteSaveTool(_AsyncExecuteMixin):
                 "Project memory not available.",
                 error_type="dependency",
                 recoverable=False,
-                hint="Project memory initializes from .geode/memory/. Check directory exists.",
+                hint="The runtime has no project memory service; reconnect the session.",
             )
 
         outcome = proj.record_insight(f"**{key}**: {content}")
@@ -687,10 +687,6 @@ class NoteSaveTool(_AsyncExecuteMixin):
         if outcome is MemoryWrite.UNCHANGED:
             return {"result": {"saved": False, "unchanged": True, "key": key}}
         failures: dict[MemoryWrite, tuple[ToolErrorType, str]] = {
-            MemoryWrite.NOT_FOUND: (
-                "not_found",
-                "Run `geode init` to create .geode/memory/PROJECT.md.",
-            ),
             MemoryWrite.INVALID: ("validation", "Notes must be one line of 10-500 characters."),
         }
         error_type, hint = failures.get(

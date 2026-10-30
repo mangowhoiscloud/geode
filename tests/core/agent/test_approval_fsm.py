@@ -727,10 +727,15 @@ class TestIPCApprovalRoundTrip:
         assert asyncio.run(scenario()) == "n"
 
     @pytest.mark.parametrize("disconnect", ["eof", "malformed"])
-    def test_disconnect_wakes_pending_approval_with_deny(self, disconnect: str) -> None:
+    def test_disconnect_wakes_pending_approval_with_deny(
+        self, disconnect: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Disconnect must deny the worker gate and cancel its awaiting owner promptly."""
+        from core.config import settings
+        from core.llm.adapters.registry import active_registry_snapshot
         from core.server.ipc_server.poller import CLIPoller, _AsyncClientEndpoint
 
+        monkeypatch.setattr(settings, "openai_api_key", "synthetic-approval-key")
         received: dict[str, Any] = {}
 
         async def scenario() -> None:
@@ -774,7 +779,12 @@ class TestIPCApprovalRoundTrip:
                         )
 
                     return SimpleNamespace(), SimpleNamespace(
-                        _quiet=True, _op_logger=None, arun=arun
+                        model="gpt-6-sol",
+                        _source="payg",
+                        _adapter_registry_snapshot=active_registry_snapshot(),
+                        _quiet=True,
+                        _op_logger=None,
+                        arun=arun,
                     )
 
             poller = CLIPoller.__new__(CLIPoller)
@@ -819,14 +829,19 @@ class TestIPCApprovalRoundTrip:
 
         assert asyncio.run(scenario()) == "y"
 
-    def test_approval_reply_consumed_mid_prompt_memory_save_incident(self) -> None:
+    def test_approval_reply_consumed_mid_prompt_memory_save_incident(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """ROOT-CAUSE regression: while a prompt is being processed, the
         reader pump must still consume the thin client's approval_response.
         Pre-fix, `_handle_client_async` awaited the prompt inline, the reply
         was never read, and the 120s timeout denied the write the user had
         approved with 'A'."""
+        from core.config import settings
+        from core.llm.adapters.registry import active_registry_snapshot
         from core.server.ipc_server.poller import CLIPoller, _AsyncClientEndpoint
 
+        monkeypatch.setattr(settings, "openai_api_key", "synthetic-approval-key")
         received: dict[str, Any] = {}
 
         async def scenario() -> None:
@@ -854,6 +869,9 @@ class TestIPCApprovalRoundTrip:
                         )
 
                     fake_loop = SimpleNamespace(
+                        model="gpt-6-sol",
+                        _source="payg",
+                        _adapter_registry_snapshot=active_registry_snapshot(),
                         _quiet=True,
                         _op_logger=None,
                         arun=arun,

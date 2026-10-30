@@ -58,6 +58,28 @@ def transport(monkeypatch: pytest.MonkeyPatch, handler) -> None:
     )
 
 
+@pytest.mark.parametrize("state", ["native", "borrowed", "disabled", "cooldown"])
+def test_login_health_matches_refreshable_route(native: Path, state: str) -> None:
+    from core.cli.commands.login import build_login_snapshot
+    from core.llm.routing import model_available
+
+    profile = ensure_profile_store().get("openai-codex-geode:user")
+    assert profile is not None
+    if state == "borrowed":
+        profile.managed_by = "codex-cli"
+    elif state == "disabled":
+        profile.disabled = True
+    elif state == "cooldown":
+        profile.cooldown_until = time.time() + 3600
+    before = native.read_bytes()
+    row = next(row for row in build_login_snapshot()["profiles"] if row["name"] == profile.name)
+    assert row["eligible"] is (state == "native")
+    assert model_available("gpt-6.1-sol", source="subscription") is (state == "native")
+    if state == "native":
+        assert row["reason"] == "refresh_required"
+    assert native.read_bytes() == before
+
+
 @pytest.mark.anyio
 async def test_concurrent_requests_rotate_once_and_publish_before_return(
     native: Path,

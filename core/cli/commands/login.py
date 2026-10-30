@@ -342,6 +342,7 @@ def build_login_snapshot() -> LoginSnapshot:
     The dashboard, ``/login health`` and the ``manage_login`` tool render this
     one result; each profile carries its verdict against its own provider.
     """
+    from core.auth.oauth_refresh import can_refresh_native_oauth
     from core.auth.profiles import ProfileRejectReason
     from core.llm.strategies.plan_registry import get_plan_registry
     from core.wiring.container import ensure_profile_store
@@ -364,6 +365,11 @@ def build_login_snapshot() -> LoginSnapshot:
     profile_rows: list[LoginProfileRow] = []
     for profile in profiles:
         verdict = verdicts.get(profile.name)
+        refreshable = (
+            verdict is not None
+            and verdict.reason_code == "expired"
+            and can_refresh_native_oauth(profile, store)
+        )
         profile_rows.append(
             {
                 "name": profile.name,
@@ -372,9 +378,19 @@ def build_login_snapshot() -> LoginSnapshot:
                 "plan_id": profile.plan_id or None,
                 "managed_by": profile.managed_by or None,
                 "active": pinned.get(profile.provider) == profile.name,
-                "eligible": verdict.eligible if verdict else False,
-                "reason": verdict.reason_code if verdict else "unknown",
-                "reason_detail": verdict.detail if verdict else "",
+                "eligible": refreshable or (verdict.eligible if verdict else False),
+                "reason": "refresh_required"
+                if refreshable
+                else verdict.reason_code
+                if verdict
+                else "unknown",
+                "reason_detail": (
+                    "Native OAuth will refresh before the next subscription request."
+                    if refreshable
+                    else verdict.detail
+                    if verdict
+                    else ""
+                ),
                 "expires_at": profile.expires_at if profile.expires_at > 0 else None,
             }
         )
@@ -474,8 +490,16 @@ def _login_show_status() -> None:
         expiry = ""
         if p["expires_at"] is not None:
             rem = int(p["expires_at"] - time.time())
-            expiry = f" · expires {rem // 60}m" if rem > 0 else " · [error]expired[/error]"
-        if p["eligible"]:
+            expiry = (
+                f" · expires {rem // 60}m"
+                if rem > 0
+                else " · refresh before request"
+                if p["reason"] == "refresh_required"
+                else " · [error]expired[/error]"
+            )
+        if p["reason"] == "refresh_required":
+            badge_str = "[warning]refresh_required[/warning]"
+        elif p["eligible"]:
             badge_str = "[success]✓[/success]"
         else:
             badge_str = f"[warning]✗ {p['reason']}[/warning]"
@@ -1071,12 +1095,14 @@ _HEALTH_SUGGESTIONS: dict[str, str] = {
     "missing_key": "Key/token is empty. Run `/login add` (interactive) or "
     "`/login set-key <plan> [key]` to populate.",
     "expired": "OAuth token past expires_at. Sign in again with `/login openai`.",
+    "refresh_required": "The next subscription request attempts native refresh; "
+    "if it fails, run `/login openai`.",
     "cooling_down": "Backoff after consecutive failures. The verdict line "
     "shows the cooldown deadline — wait it out, `/login use <plan>` to prefer "
     "another plan of the same provider, or `/model <model>` to switch this "
     "session to another provider.",
-    "disabled": "Manually disabled (`/login remove <plan>` to delete, or "
-    "edit `~/.geode/auth.toml` to flip `disabled=false`).",
+    "disabled": "Disabled after an authentication failure. Correct the credential with "
+    "`/login set-key` or sign in again with `/login openai`.",
 }
 
 
@@ -1111,7 +1137,7 @@ def _login_health(rest: str) -> None:
     _pkg.console.print("\n  [header]Eligibility[/header]")
     for p in profiles:
         code = p["reason"]
-        badge = "[success]ok[/success]" if p["eligible"] else f"[warning]{code}[/warning]"
+        badge = "[success]ok[/success]" if code == "ok" else f"[warning]{code}[/warning]"
         _pkg.console.print(f"  {badge:<24} [bold]{p['name']}[/bold]")
         if p["reason_detail"]:
             _pkg.console.print(f"    [muted]{p['reason_detail']}[/muted]")

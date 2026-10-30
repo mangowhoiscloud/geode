@@ -38,7 +38,7 @@ class MemoryWrite(StrEnum):
 
     APPLIED = "applied"
     UNCHANGED = "unchanged"  # idempotent: the same insight is already recorded
-    NOT_FOUND = "not_found"  # PROJECT.md or the named rule does not exist
+    NOT_FOUND = "not_found"  # the named rule does not exist
     CONFLICT = "conflict"  # create of a rule that already exists
     INVALID = "invalid"  # rejected input, unsafe name, or symlinked/escaping target
     FAILED = "failed"  # existing content unreadable, lock timeout, or write error
@@ -328,8 +328,7 @@ class ProjectMemory:
                     log.warning("MEMORY.md unreadable; left unchanged: %s", exc)
                     return MemoryWrite.FAILED
                 if content is None:
-                    log.warning("MEMORY.md does not exist — cannot add insight")
-                    return MemoryWrite.NOT_FOUND
+                    content = _DEFAULT_MEMORY
                 updated = self._with_insight(content, insight.strip())
                 if updated is None:
                     return MemoryWrite.UNCHANGED

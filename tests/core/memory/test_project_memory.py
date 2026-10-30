@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from core.memory.project import (
     MAX_INSIGHTS,
     MAX_MEMORY_LINES,
     ProjectMemory,
     _is_valid_insight,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_global_memory(monkeypatch, tmp_path):
+    monkeypatch.setattr("core.paths.GEODE_HOME", tmp_path / "global")
 
 
 class TestProjectMemoryExists:
@@ -175,7 +181,8 @@ class TestAddInsight:
 
     def test_add_insight_no_file(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)
-        assert mem.add_insight("this insight has no backing file") is False
+        assert mem.add_insight("this insight has no backing file") is True
+        assert "this insight has no backing file" in mem.load_memory()
 
     def test_multiple_insights(self, tmp_path: Path):
         mem = ProjectMemory(tmp_path)

@@ -13,11 +13,13 @@ import contextlib
 import logging
 import os
 import socket
+import stat
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from core.ipc_protocol import (
     IPC_CONTROL_TYPES,
@@ -32,6 +34,7 @@ from core.ipc_protocol import (
     negotiate_protocol,
     new_request_id,
 )
+from core.observability.redaction import redact_and_bound_text, redact_secrets
 from core.paths import CLI_SOCKET_PATH
 
 log = logging.getLogger(__name__)
@@ -39,33 +42,112 @@ log = logging.getLogger(__name__)
 DEFAULT_SOCKET_PATH: Path = CLI_SOCKET_PATH
 
 
-def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10.0) -> bool:
+@dataclass(frozen=True, slots=True)
+class ServeStartupResult:
+    status: Literal["ready", "exited", "timeout", "spawn_error"]
+    log_path: Path
+    exit_code: int | None = None
+    detail: str = ""
+
+    @property
+    def ready(self) -> bool:
+        return self.status == "ready"
+
+
+@dataclass(frozen=True, slots=True)
+class _ServeLogCursor:
+    identity: tuple[int, int] | None = None
+    offset: int = 0
+    line_boundary: bool = True
+
+
+def _snapshot_serve_log(path: Path) -> _ServeLogCursor:
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                return _ServeLogCursor(offset=-1)
+            offset = stream.seek(0, os.SEEK_END)
+            if offset:
+                stream.seek(offset - 1)
+            boundary = not offset or stream.read(1) == b"\n"
+            return _ServeLogCursor((info.st_dev, info.st_ino), offset, boundary)
+    except FileNotFoundError:
+        return _ServeLogCursor()
+    except OSError:
+        # An unreadable pre-existing log must never become historical evidence.
+        return _ServeLogCursor(offset=-1)
+
+
+def _read_fresh_serve_log(path: Path, before: _ServeLogCursor) -> str:
+    if before.offset < 0:
+        return ""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                return ""
+            same_file = before.identity == (info.st_dev, info.st_ino)
+            # A replaced/rotated log starts a new file. In-place truncation also
+            # starts at zero; otherwise exclude all bytes preceding our spawn.
+            offset = before.offset if same_file and info.st_size >= before.offset else 0
+            start = max(offset, info.st_size - 8192)
+            stream.seek(start)
+            data = stream.read(8192)
+            if start > offset or (offset and not before.line_boundary):
+                # Do not expose a partial credential whose prefix was cut off.
+                data = data.partition(b"\n")[2]
+        detail = redact_secrets(data.decode("utf-8", errors="replace").strip())
+        if len(detail) > 2000:
+            # Keep the terminal exception, after redacting complete log lines.
+            return "…[earlier log truncated]\n" + detail[-2000:]
+        return detail
+    except OSError:
+        return ""
+
+
+def start_serve_if_needed(
+    socket_path: Path | None = None, timeout_s: float = 10.0
+) -> ServeStartupResult:
     """Start this installation's local daemon in the caller's workspace."""
     import fcntl
     import subprocess  # nosec B404 — controlled local daemon spawn
 
+    from core.paths import get_project_root, resolve_cli_socket_path
+
     path = (socket_path or DEFAULT_SOCKET_PATH).resolve()
+    workspace = get_project_root()
+    # Logging follows the workspace's serve lock, even with a custom IPC path.
+    log_path = resolve_cli_socket_path(workspace).parent / "serve.log"
     if is_serve_running(path):
-        return True
+        return ServeStartupResult("ready", log_path)
     deadline = time.monotonic() + timeout_s
     lock_path = path.with_suffix(".startup.lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a") as lock_fd:
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_fd = lock_path.open("a")
+    except OSError as exc:
+        return ServeStartupResult("spawn_error", log_path, detail=redact_and_bound_text(exc, 2000))
+    with lock_fd:
         while True:
             try:
                 fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except BlockingIOError:
                 if is_serve_running(path):
-                    return True
+                    return ServeStartupResult("ready", log_path)
                 if time.monotonic() >= deadline:
-                    return False
+                    return ServeStartupResult("timeout", log_path)
                 time.sleep(0.1)
+            except OSError as exc:
+                return ServeStartupResult(
+                    "spawn_error", log_path, detail=redact_and_bound_text(exc, 2000)
+                )
         try:
             if is_serve_running(path):
-                return True
-            from core.paths import get_project_root
-
+                return ServeStartupResult("ready", log_path)
             env = {
                 **os.environ,
                 "GEODE_CLI_SOCKET": str(path),
@@ -78,31 +160,46 @@ def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10
             entrypoint = (
                 f"import sys; sys.path.insert(0, {package_root!r}); from core.cli import app; app()"
             )
-            process = subprocess.Popen(  # noqa: S603  # nosec B603
-                [sys.executable, "-P", "-c", entrypoint, "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-                cwd=get_project_root(),
-                env=env,
-            )
+            before = _snapshot_serve_log(log_path)
+            try:
+                process = subprocess.Popen(  # noqa: S603  # nosec B603
+                    [sys.executable, "-P", "-c", entrypoint, "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                    cwd=workspace,
+                    env=env,
+                )
+            except OSError as exc:
+                return ServeStartupResult(
+                    "spawn_error", log_path, detail=redact_and_bound_text(exc, 2000)
+                )
             ready = False
+            exit_code: int | None = None
             try:
                 while time.monotonic() < deadline and process.poll() is None:
                     if is_serve_running(path):
                         ready = True
-                        return True
+                        return ServeStartupResult("ready", log_path)
                     time.sleep(0.1)
-                return False
+                exit_code = process.poll()
             finally:
                 if not ready:
                     if process.poll() is None:
-                        process.terminate()
+                        with contextlib.suppress(ProcessLookupError):
+                            process.terminate()
                     try:
                         process.wait(timeout=5)
                     except subprocess.TimeoutExpired:
-                        process.kill()
+                        with contextlib.suppress(ProcessLookupError):
+                            process.kill()
                         process.wait(timeout=5)
+            return ServeStartupResult(
+                "exited" if exit_code is not None else "timeout",
+                log_path,
+                exit_code=exit_code,
+                detail=_read_fresh_serve_log(log_path, before),
+            )
         finally:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
 
@@ -269,19 +366,17 @@ class IPCClient:
         # Later terminal refreshes omit the selection to preserve live choices.
         selection_fields: dict[str, Any] = {}
         if include_model_config:
-            from core.config import _resolve_provider, settings
+            from core.config import settings
             from core.config.runtime_policy_sources import build_policy_source_bundle
-            from core.config.session import capture_session_model_config
-            from core.llm.routing import infer_source
+            from core.config.session import capture_session_model_config, resolve_initial_model
 
             sources = build_policy_source_bundle().get("provider_routing")
+            model, source = resolve_initial_model(settings, sources=sources)
             selection = capture_session_model_config(
                 settings,
-                model=settings.model,
+                model=model,
                 effort=settings.agentic_effort,
-                source=infer_source(
-                    _resolve_provider(settings.model), model=settings.model, sources=sources
-                ),
+                source=source,
                 sources=sources,
             )
             selection_fields = {"model": selection.model, "model_config": selection.model_dump()}
@@ -657,6 +752,53 @@ class IPCClient:
         if response is None:
             return {"type": "error", "message": "Connection lost"}
         return response
+
+    def inspect_model_routes(
+        self, queries: list[tuple[str, str | None]], *, timeout_s: float = 5.0
+    ) -> dict[tuple[str, str | None], bool]:
+        """Ask the session owner; never substitute this process's auth cache."""
+        from core.config.session import ModelRouteQuery
+
+        if "model_route_inspection" not in self.features:
+            raise ValueError("Restart serve and reconnect: model route inspection unsupported")
+        if not self._sock:
+            raise ValueError("Not connected")
+        unique = list(dict.fromkeys(queries))
+        if len(unique) > 256:
+            raise ValueError("Expected at most 256 model routes")
+        payload = {
+            "type": "command",
+            "cmd": "/model",
+            "args": "",
+            "model_queries": [
+                ModelRouteQuery.model_validate({"model": model, "source": source}).model_dump()
+                for model, source in unique
+            ],
+        }
+        sock = self._sock
+        previous_timeout = sock.gettimeout()
+        deadline = time.monotonic() + timeout_s
+        try:
+            sock.settimeout(timeout_s)
+            request_id = self._send(payload)
+            response = self._recv_for(request_id, deadline=deadline) or {}
+        finally:
+            if self._sock is sock:
+                sock.settimeout(previous_timeout)
+        rows = response.get("model_routes")
+        if response.get("status") != "ok" or not isinstance(rows, list):
+            raise ValueError("Could not inspect model routes; reconnect and retry /model")
+        result: dict[tuple[str, str | None], bool] = {}
+        for row in rows:
+            if not isinstance(row, dict) or type(row.get("available")) is not bool:
+                raise ValueError("Invalid backend model route assessment")
+            query = ModelRouteQuery.model_validate(
+                {"model": row.get("model"), "source": row.get("source")}
+            )
+            result[(query.model, query.source)] = row["available"]
+        if len(rows) != len(unique) or set(result) != set(unique):
+            raise ValueError("Incomplete backend model route assessment")
+        return result
 
     def apply_model_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         """Ask the session owner to apply a bounded explicit selection."""

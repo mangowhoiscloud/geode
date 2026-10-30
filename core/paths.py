@@ -15,7 +15,7 @@ Three-tier directory structure:
 
   Project-local (``{workspace}/.geode/``):
     Project config (gateway bindings), memory, rules, skills, reports, cache,
-    scheduler, hooks, tool-offload, plans.
+    scheduler, hooks, plans.
 
 Project data and runtime endpoints use a canonical-path digest with a persisted
 workspace owner. Legacy stores are migrated once, never selected as read fallbacks.
@@ -627,21 +627,10 @@ PROJECT_MEMORY_DIR = PROJECT_GEODE_DIR / "memory"
 PROJECT_RULES_DIR = PROJECT_GEODE_DIR / "rules"
 PROJECT_SKILLS_DIR = PROJECT_GEODE_DIR / "skills"
 PROJECT_REPORTS_DIR = PROJECT_GEODE_DIR / "reports"
-PROJECT_RESULT_CACHE_DIR = PROJECT_GEODE_DIR / "result_cache"
 PROJECT_SCHEDULER_FILE = PROJECT_GEODE_DIR / "scheduled_tasks.json"
 PROJECT_SCHEDULER_LOG_DIR = PROJECT_GEODE_DIR / "scheduler_logs"
 PROJECT_USER_PROFILE_DIR = PROJECT_GEODE_DIR / "user_profile"
 PROJECT_HOOKS_DIR = PROJECT_GEODE_DIR / "hooks"
-
-# Per-project caches surfaced by /clean for selective wipe.
-#
-# v0.95.x — `PROJECT_EMBEDDING_CACHE` and `PROJECT_VECTORS_DIR` were
-# removed (vestigial). No writer ever used either constant; the
-# corresponding on-disk directories (`.geode/embedding-cache/`,
-# `.geode/vectors/`) stopped receiving writes on 2026-04-05 and are
-# archived to `.geode/_archive/` by layout migration v1 → v2 (see
-# `core/wiring/layout_migrator.py:_migrate_v1_to_v2`).
-PROJECT_TOOL_OFFLOAD = PROJECT_GEODE_DIR / "tool-offload"
 
 # P3 (v0.95.x) — project-level state files. Surfaced here so writers stop
 # hardcoding `Path(".geode/<file>")` literals (frontier parity — Hermes
@@ -718,8 +707,19 @@ def resolve_sessions_dir(workspace_path: str | Path | None = None) -> Path:
     return admit_project_data_dir(workspace_path) / "sessions"
 
 
+def get_result_cache_dir(workspace_path: str | Path | None = None) -> Path:
+    """Pure canonical path for cache inspection and cleanup."""
+    return get_project_data_dir(workspace_path) / "result_cache"
+
+
 def resolve_result_cache_dir(workspace_path: str | Path | None = None) -> Path:
-    return admit_project_data_dir(workspace_path) / "result_cache"
+    admit_project_data_dir(workspace_path)
+    return get_result_cache_dir(workspace_path)
+
+
+def get_tool_offload_dir(workspace_path: str | Path | None = None) -> Path:
+    """Pure workspace-scoped cache path; bootstrap admits/migrates its owner."""
+    return get_project_data_dir(workspace_path) / "tool-offload"
 
 
 def resolve_vault_dir() -> Path:
@@ -737,15 +737,10 @@ _paths_log = _logging.getLogger(__name__)
 
 
 def ensure_directories() -> None:
-    """Create all required directories if missing.
+    """Create user-owned runtime state without scaffolding the working directory.
 
-    Called once at bootstrap. Follows Claude Code's lazy creation pattern:
-    ``mkdir(parents=True, exist_ok=True)`` — no error if already present,
-    creates full tree if absent.
-
-    Two tiers:
-    - Global (``~/.geode/``): runs, vault, models, usage, projects
-    - Project (``.geode/``): memory, rules, skills, reports, scheduler_logs
+    Project inputs are optional. ``geode init`` or a concrete memory, skill,
+    report or scheduler write creates its own project directories on demand.
     """
     created: list[str] = []
 
@@ -787,23 +782,6 @@ def ensure_directories() -> None:
             d.mkdir(parents=True, exist_ok=True)
             created.append(str(d))
 
-    # --- Project tier (.geode/) ---
-    project_dirs = [
-        PROJECT_GEODE_DIR,
-        PROJECT_MEMORY_DIR,
-        PROJECT_RULES_DIR,
-        PROJECT_SKILLS_DIR,
-        PROJECT_REPORTS_DIR,
-        PROJECT_SCHEDULER_LOG_DIR,
-    ]
-    for d in project_dirs:
-        if not d.exists():
-            d.mkdir(parents=True, exist_ok=True)
-            created.append(str(d))
-
-    # --- .gitignore entry for .geode/ ---
-    _ensure_geode_gitignore()
-
     if created:
         _paths_log.info("Created %d directories: %s", len(created), ", ".join(created))
 
@@ -819,25 +797,6 @@ def ensure_directories() -> None:
         ensure_layout_migrated()
     except Exception:  # pragma: no cover — migration must never block boot
         _paths_log.warning("Layout migration skipped", exc_info=True)
-
-
-def _ensure_geode_gitignore() -> None:
-    """Add .geode/ to .gitignore if not already present."""
-    gitignore = Path(".gitignore")
-    entry = ".geode/"
-    try:
-        if gitignore.exists():
-            content = gitignore.read_text(encoding="utf-8")
-            if entry in content:
-                return
-            if not content.endswith("\n"):
-                content += "\n"
-        else:
-            content = ""
-        content += f"\n# GEODE\n{entry}\n"
-        gitignore.write_text(content, encoding="utf-8")
-    except OSError:
-        pass  # read-only filesystem, CI, etc.
 
 
 # ---------------------------------------------------------------------------

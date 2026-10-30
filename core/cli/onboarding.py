@@ -48,7 +48,7 @@ def _set_dry_run_opt_in(enabled: bool) -> bool:
             GLOBAL_DRY_RUN_MARKER.unlink(missing_ok=True)
         return True
     except OSError as exc:
-        log.warning("Failed to persist dry-run setup choice: %s", exc)
+        log.warning("Failed to persist credential setup choice: %s", exc)
         return False
 
 
@@ -75,7 +75,7 @@ def env_setup_wizard() -> bool:
     """Interactive credential setup — runs when no usable credential is found.
 
     v0.54.0 — three branches: subscription guidance, API key paste, or
-    skip into dry-run mode. Returns True if any credential or skip was
+    skip credential setup. Returns True if any credential or skip was
     chosen (i.e. the wizard need not re-run on next launch).
     """
     from rich.panel import Panel
@@ -87,7 +87,7 @@ def env_setup_wizard() -> bool:
             "  [cyan]1[/cyan]  ChatGPT subscription sign-in "
             "(Plus / Pro / Business / Edu / Enterprise)\n"
             "  [cyan]2[/cyan]  API key (Anthropic / OpenAI / OpenRouter / GLM)\n"
-            "  [cyan]3[/cyan]  Skip — explore in dry-run mode (fixture data, no LLM)\n\n"
+            "  [cyan]3[/cyan]  Skip — explore setup and session commands\n\n"
             "[muted]Press Ctrl+C to abort at any time.[/muted]",
             title="Setup",
             border_style="cyan",
@@ -116,9 +116,7 @@ def env_setup_wizard() -> bool:
                 "to add a credential.[/muted]\n"
             )
             return True  # persisted skip suppresses the next-launch prompt
-        console.print(
-            "\n  [warning]Could not save the dry-run choice under GEODE_HOME.[/warning]\n"
-        )
+        console.print("\n  [warning]Could not save the setup choice under GEODE_HOME.[/warning]\n")
         return False
     configured = _wizard_api_key_path()  # choice == "2"
     if configured:
@@ -320,10 +318,13 @@ def render_readiness(report: ReadinessReport) -> None:
             console.print(f"  [success]  {cap.name}[/success]")
         else:
             hint = f" [muted]({cap.reason})[/muted]" if cap.reason else ""
-            console.print(f"  [warning]  {cap.name}[/warning]{hint}")
+            style = "warning" if cap.required else "muted"
+            console.print(f"  [{style}]  {cap.name}[/{style}]{hint}")
 
     console.print()
 
     if report.blocked:
-        console.print("  [warning]No LLM key configured — key registration required[/warning]")
+        console.print(
+            "  [warning]No usable account — sign in to a subscription or add an API key[/warning]"
+        )
         console.print()

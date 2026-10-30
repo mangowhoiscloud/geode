@@ -54,6 +54,9 @@ def test_short_ipc_prompt_preserves_history_and_accounting(
     monkeypatch.setenv("GEODE_FAST_CHAT", "1")
     monkeypatch.setattr(settings, "judgment_engine", "llm")
     monkeypatch.setattr(settings, "judge_model", "")
+    # This accounting test injects its provider; session admission is exercised
+    # separately with real in-memory profile routes.
+    monkeypatch.setattr("core.llm.routing.model_available", lambda *a, **kw: True)
     usage = UsageSummary(
         input_tokens=10,
         output_tokens=3,

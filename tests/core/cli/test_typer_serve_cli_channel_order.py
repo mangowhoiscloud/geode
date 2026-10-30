@@ -252,6 +252,55 @@ def test_cli_starts_from_caller_directory_without_using_path_binary(
     assert psutil.Process(owner["pid"]).environ()["GEODE_GATEWAY_ENABLED"] == "false"
 
 
+@pytest.mark.parametrize("populated", [False, True])
+def test_cli_starts_in_home_with_default_global_vault(
+    isolated_cli: tuple[Path, dict[str, str]], populated: bool
+) -> None:
+    root, env = isolated_cli
+    home = root / "home"
+    geode_home = home / ".geode"
+    vault = geode_home / "vault"
+    category = vault / "general"
+    category.mkdir(parents=True)
+    (geode_home / ".dry-run-opt-in").touch(mode=0o600)
+    artifact = category / "existing.md"
+    if populated:
+        artifact.write_bytes(b"user-owned global artifact")
+    inode = vault.stat().st_ino
+    env.pop("GEODE_HOME")
+
+    _run_cli(home, env)
+    endpoint = _socket_path(home, env)
+    owner = _owner(endpoint, home)
+    _run_cli(home, env)
+
+    assert _owner(endpoint, home) == owner
+    assert _listening(endpoint)
+    assert vault.stat().st_ino == inode
+    assert category.is_dir()
+    if populated:
+        assert artifact.read_bytes() == b"user-owned global artifact"
+
+
+def test_cli_starts_in_read_only_workspace_without_scaffolding(
+    isolated_cli: tuple[Path, dict[str, str]],
+) -> None:
+    root, env = isolated_cli
+    workspace = root / "읽기 전용 폴더"
+    workspace.mkdir()
+    (workspace / ".env.example").write_text("OPENAI_API_KEY=placeholder\n")
+    workspace.chmod(0o555)
+    try:
+        result = _run_cli(workspace, env)
+        assert _listening(_socket_path(workspace, env))
+        assert [p.name for p in workspace.iterdir()] == [".env.example"]
+        assert "Project Memory" not in result.stdout
+        assert "fixture data" not in result.stdout
+        assert "dry-run mode" not in result.stdout
+    finally:
+        workspace.chmod(0o755)
+
+
 def test_workspace_daemons_coexist_reuse_and_stop_independently(
     isolated_cli: tuple[Path, dict[str, str]],
 ) -> None:
@@ -287,15 +336,9 @@ def test_workspace_daemons_coexist_reuse_and_stop_independently(
     assert _listening(endpoint_a) and _listening(endpoint_b)
     assert _owner(endpoint_a, workspace_a) == owner_a
 
-    # Exercise the lifecycle owner from a fresh process for workspace A;
-    # the CLI currently has no standalone Typer stop subcommand.
+    # The public stop command targets only this workspace's verified owner.
     stopped = subprocess.run(  # noqa: S603
-        [
-            sys.executable,
-            "-c",
-            "from core.cli.commands.lifecycle import stop_serve; "
-            "raise SystemExit(0 if stop_serve(timeout=10) else 1)",
-        ],
+        [*CLI_COMMAND, "stop", "--timeout", "10"],
         cwd=workspace_a,
         env=env,
         capture_output=True,

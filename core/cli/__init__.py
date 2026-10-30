@@ -51,6 +51,7 @@ from core.cli.typer_commands import (
     about,
     history,
     setup,
+    stop,
     uninstall,
     update,
     version,
@@ -364,11 +365,26 @@ def _run_main(
 
             spinner = TextSpinner("Starting serve...")
             spinner.start()
-            ready = start_serve_if_needed(timeout_s=30)
-            spinner.stop()
-            if not ready:
-                console.print("  [error]Failed to start geode serve[/error]")
-                console.print("  [dim]Try manually: geode serve &[/dim]")
+            try:
+                startup = start_serve_if_needed(timeout_s=30)
+            finally:
+                spinner.stop()
+            if not startup.ready:
+                if startup.status == "exited":
+                    message = (
+                        f"geode serve exited before becoming ready (exit code {startup.exit_code})"
+                    )
+                elif startup.status == "timeout":
+                    message = "geode serve did not become ready within 30 seconds"
+                else:
+                    message = "Could not start geode serve"
+                console.print(f"  [error]{message}[/error]")
+                if startup.detail:
+                    console.print(startup.detail, markup=False, highlight=False)
+                console.print(f"  Log: {startup.log_path}", markup=False, highlight=False)
+                console.print(
+                    "  [dim]Run `geode serve` in this directory to see startup errors.[/dim]"
+                )
                 raise typer.Exit(1)
 
         _thin_interactive_loop(
@@ -425,7 +441,7 @@ def build_app(
     cli.add_typer(hub_app, name="hub")
     cli.add_typer(prompt_app, name="prompt")
     cli.add_typer(session_app, name="session")
-    for command in (version, about, setup, _doctor_command, update, uninstall, init, history):
+    for command in (version, about, setup, _doctor_command, stop, update, uninstall, init, history):
         cli.command()(command)
     if serve_command is not None:
         cli.command()(serve_command)

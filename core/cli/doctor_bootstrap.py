@@ -44,8 +44,8 @@ _AUDIT_DIST_IMPORTS: dict[str, str] = {
 }
 
 _SERVE_RESTART_FIX = (
-    "Rebuild landed but serve still runs the old code — restart it: "
-    "`launchctl kickstart -k gui/$(id -u)/com.geode.serve`"
+    "Run `geode stop` in this workspace, then run `geode` again. "
+    "Run `geode serve` in this directory to diagnose startup errors."
 )
 
 
@@ -111,21 +111,33 @@ def _check_geode_on_path() -> CheckResult:
 
 def _check_profile_store() -> CheckResult:
     """Inspect request routes, not merely the presence of stored key bytes."""
-    from core.config import settings
+    from core.config.session import resolve_initial_model
     from core.llm.routing import model_available
     from core.wiring.startup import has_available_llm_credential
 
     available = has_available_llm_credential()
-    selected = model_available(settings.model)
+    try:
+        model, source = resolve_initial_model()
+    except RuntimeError:
+        return CheckResult(
+            name="LLM credential routes",
+            ok=False,
+            detail="Selected model/source policy cannot resolve a supported route",
+            fix="Inspect `/login source` and `/model`; preserve the intended billing source",
+        )
+    selected = model_available(model, source=source)
     return CheckResult(
         name="LLM credential routes",
-        ok=available,
+        ok=selected,
         detail=(
             f"usable route: {'yes' if available else 'no'}; "
-            f"selected model {settings.model}: {'available' if selected else 'unavailable'} "
+            f"selected model {model} ({source}): {'available' if selected else 'unavailable'} "
             "(local inspection; upstream acceptance not tested)"
         ),
-        fix="" if available else "Run `geode setup` or inspect `/login` and source policy",
+        fix=""
+        if selected
+        else "Inspect `/login health` and `/model`; connect the selected route "
+        "or explicitly select an available model",
     )
 
 
@@ -156,7 +168,10 @@ def _check_serve_socket() -> CheckResult:
             name="geode serve",
             ok=False,
             detail=f"socket present but not accepting: {exc}",
-            fix="Stale socket. Kill any zombie `geode serve` PIDs and re-run `geode`",
+            fix=(
+                "No listener at this workspace socket. Run `geode` to retry; "
+                "if startup fails, run `geode serve` in this directory to see the error."
+            ),
         )
     finally:
         s.close()

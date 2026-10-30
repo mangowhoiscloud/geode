@@ -12,29 +12,31 @@ def test_status_tracks_credentials_without_cli_bootstrap(monkeypatch: pytest.Mon
     available = False
     monkeypatch.setattr(session_state, "_get_readiness", lambda: None)
     monkeypatch.setattr(startup, "has_available_llm_credential", lambda provider=None: available)
+    monkeypatch.setattr("core.llm.routing.model_available", lambda *a, **kw: available)
     handlers = dict(next(group for name, group in cli_handler_groups() if name == "system"))
     status = handlers["check_status"]
 
-    assert status()["mode"] == "dry_run"
+    assert status()["mode"] == "not_connected"
     available = True
-    assert status()["mode"] == "full_llm"
+    assert status()["mode"] == "available"
     available = False
-    assert status()["mode"] == "dry_run"
+    assert status()["mode"] == "not_connected"
 
 
-def test_status_reads_explicit_request_policy_after_composition(
+def test_status_does_not_turn_cached_readiness_into_execution_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     readiness = startup.ReadinessReport(force_dry_run=True)
     monkeypatch.setattr(session_state, "_get_readiness", lambda: readiness)
+    monkeypatch.setattr("core.llm.routing.model_available", lambda *a, **kw: True)
     handlers = dict(next(group for name, group in cli_handler_groups() if name == "system"))
     status = handlers["check_status"]
 
-    assert status()["mode"] == "dry_run"
+    assert status()["mode"] == "available"
     readiness = startup.ReadinessReport(force_dry_run=False)
-    assert status()["mode"] == "full_llm"
+    assert status()["mode"] == "available"
     readiness = startup.ReadinessReport(force_dry_run=True)
-    assert status()["mode"] == "dry_run"
+    assert status()["mode"] == "available"
 
 
 @pytest.mark.parametrize("yield_after_batch", [False, True])

@@ -61,6 +61,15 @@ from core.paths import CLI_SOCKET_PATH  # noqa: E402 — placed after TYPE_CHECK
 DEFAULT_SOCKET_PATH = CLI_SOCKET_PATH  # P2 — was `Path.home() / ".geode" / "cli.sock"`
 
 
+def _session_model_available(loop: Any, model: str, *, source: str | None) -> bool:
+    """Inspect current credentials using the same adapter generation as dispatch."""
+    from core.llm.adapters.registry import use_registry_snapshot
+    from core.llm.routing import model_available
+
+    with use_registry_snapshot(loop._adapter_registry_snapshot):
+        return model_available(model, source=source)
+
+
 def _request_error_context(msg: dict[str, Any], loop: Any, exc: Exception) -> dict[str, str]:
     return {
         "request_id": str(msg.get("request_id", "")),
@@ -1048,6 +1057,12 @@ class CLIPoller:
             _ipc_writer_local.writer = writer
 
         async def _run_admitted() -> dict[str, Any]:
+            if not _session_model_available(loop, loop.model, source=loop._source):
+                return ipc_error_response(
+                    "Selected model route is not connected. Run /login health, connect it "
+                    "with /login, or explicitly choose an available model with /model.",
+                    error_type="credential_unavailable",
+                )
             old_quiet = getattr(loop, "_quiet", True)
             old_op_quiet = getattr(loop, "_op_logger", None)
             old_suppress_verify = getattr(loop, "_suppress_public_verify", False)
@@ -1185,7 +1200,10 @@ class CLIPoller:
     async def _apply_session_selection(
         self, msg: dict[str, Any], loop: Any, *, initial: bool = False
     ) -> dict[str, Any]:
-        from core.agent.loop._model_switching import apply_session_model_config
+        from core.agent.loop._model_switching import (
+            apply_session_model_config,
+            validate_session_model_config,
+        )
         from core.config.session import SessionModelConfig
 
         raw = msg.get("model_config")
@@ -1201,6 +1219,20 @@ class CLIPoller:
         except ValidationError as exc:
             fields = sorted({str(error["loc"][0]) for error in exc.errors() if error["loc"]})
             raise IPCProtocolError(f"Invalid session model settings: {', '.join(fields)}") from None
+        validate_session_model_config(loop, candidate)
+        if not initial and candidate != current:
+            for role in ("", "reflection_", "judge_"):
+                model = getattr(candidate, f"{role}model")
+                source = getattr(candidate, f"{role}source")
+                previous = (getattr(current, f"{role}model"), getattr(current, f"{role}source"))
+                if (
+                    model
+                    and (model, source) != previous
+                    and not _session_model_available(loop, model, source=source)
+                ):
+                    raise IPCProtocolError(
+                        "Selected model route is not connected; run /login health or /model"
+                    )
         changed = await apply_session_model_config(
             loop, candidate, reason="cli_session" if initial else "user_switch"
         )
@@ -1239,6 +1271,36 @@ class CLIPoller:
                 "message": f"Slash command requires streaming transport: {cmd}",
             }
         if cmd == "/model":
+            if "model_queries" in msg:
+                from pydantic import TypeAdapter, ValidationError
+
+                from core.config.session import ModelRouteQuery
+
+                raw_queries = msg["model_queries"]
+                if not isinstance(raw_queries, list) or len(raw_queries) > 256:
+                    return ipc_error_response(
+                        "Expected at most 256 model routes", response_type="command_result"
+                    )
+                try:
+                    queries = TypeAdapter(list[ModelRouteQuery]).validate_python(raw_queries)
+                except ValidationError:
+                    return ipc_error_response(
+                        "Invalid model route query", response_type="command_result"
+                    )
+                return {
+                    "type": "command_result",
+                    "cmd": cmd,
+                    "status": "ok",
+                    "model_routes": [
+                        {
+                            **query.model_dump(),
+                            "available": _session_model_available(
+                                loop, query.model, source=query.source
+                            ),
+                        }
+                        for query in queries
+                    ],
+                }
             if "model_config" not in msg:
                 return {
                     "type": "command_result",

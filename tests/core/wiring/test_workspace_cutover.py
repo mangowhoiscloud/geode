@@ -76,6 +76,19 @@ def test_live_legacy_runtime_blocks_data_move(tmp_path: Path) -> None:
     assert (old / "state.json").read_text() == "keep"
 
 
+def test_offloaded_results_move_once_without_retaining_an_alternate_reader(tmp_path: Path):
+    workspace = tmp_path / "work"
+    old = workspace / ".geode" / "tool-offload"
+    (old / "session").mkdir(parents=True)
+    content = b'{"result":{"content":"keep complete result"},"offloaded_at":1}'
+    (old / "session" / "ref.json").write_bytes(content)
+    target = tmp_path / "home" / "projects" / encode_project_id(workspace)
+    ensure_project_layout(workspace, target)
+    ensure_project_layout(workspace, target)
+    assert not old.exists()
+    assert (target / "tool-offload" / "session" / "ref.json").read_bytes() == content
+
+
 def test_empty_vault_categories_do_not_conflict_with_existing_artifacts(tmp_path: Path) -> None:
     workspace = tmp_path / "work"
     old = workspace / ".geode" / "vault"
@@ -89,6 +102,33 @@ def test_empty_vault_categories_do_not_conflict_with_existing_artifacts(tmp_path
     assert not old.exists()
     assert list(target.iterdir()) == [artifact]
     assert artifact.read_text() == "existing artifact"
+
+
+@pytest.mark.parametrize("populated", [False, True])
+@pytest.mark.parametrize("workspace_alias", [False, True])
+def test_home_workspace_keeps_its_existing_global_vault(
+    tmp_path: Path, populated: bool, workspace_alias: bool
+) -> None:
+    home = tmp_path / "home"
+    vault = home / ".geode" / "vault"
+    category = vault / "general"
+    category.mkdir(parents=True)
+    artifact = category / "keep.md"
+    if populated:
+        artifact.write_bytes(b"existing global artifact")
+    inode = vault.stat().st_ino
+    workspace = home
+    if workspace_alias:
+        workspace = tmp_path / "home-alias"
+        workspace.symlink_to(home, target_is_directory=True)
+
+    migrate_workspace_vault(workspace, vault)
+    migrate_workspace_vault(workspace, vault)
+
+    assert vault.stat().st_ino == inode
+    assert category.is_dir()
+    if populated:
+        assert artifact.read_bytes() == b"existing global artifact"
 
 
 @pytest.mark.parametrize(

@@ -16,13 +16,16 @@ def _handlers(memory: ProjectMemory) -> dict[str, Any]:
     return dict(_build_memory_handlers(MemoryToolServices(project_memory=memory)))
 
 
-def test_memory_save_without_backing_file_is_an_error(tmp_path: Path) -> None:
+def test_memory_save_initializes_only_after_valid_input(tmp_path: Path) -> None:
     memory = ProjectMemory(tmp_path)
-    result = _handlers(memory)["memory_save"](key="fact", content="a retained project fact")
-    assert result["status"] == "error"
-    assert result["outcome"] == "not_found"
-    assert result["saved"] is False
+    save = _handlers(memory)["memory_save"]
+    invalid = save(key="fact", content="invalid\nmultiline insight")
+    assert invalid["status"] == "error" and invalid["error_type"] == "validation"
+    assert invalid["effect_applied"] is False
     assert not memory.memory_file.exists()
+    result = save(key="fact", content="a retained project fact")
+    assert result["status"] == "ok" and result["saved"] is True
+    assert "fact: a retained project fact" in memory.memory_file.read_text()
 
 
 def test_memory_save_reports_written_then_unchanged(tmp_path: Path) -> None:
@@ -102,18 +105,30 @@ def test_memory_search_filters_by_query_and_tier(tmp_path: Path) -> None:
 
 
 def test_note_save_reports_real_outcome(tmp_path: Path) -> None:
-    missing = NoteSaveTool(MemoryToolServices(project_memory=ProjectMemory(tmp_path)))
-    result = asyncio.run(missing.aexecute(key="parking", content="spot B2 on level 3"))
-    assert "error" in result and result["error_type"] == "not_found"
-
     memory = ProjectMemory(tmp_path)
-    memory.ensure_structure()
     tool = NoteSaveTool(MemoryToolServices(project_memory=memory))
     assert asyncio.run(tool.aexecute(key="parking", content="spot B2 on level 3"))["result"][
         "saved"
     ]
     again = asyncio.run(tool.aexecute(key="parking", content="spot B2 on level 3"))
     assert again["result"] == {"saved": False, "unchanged": True, "key": "parking"}
+    assert memory.memory_file.read_text().count("**parking**: spot B2 on level 3") == 1
+
+
+@pytest.mark.parametrize("surface", ["memory_save", "note_save"])
+def test_memory_save_preserves_unreadable_backing_file(tmp_path: Path, surface: str) -> None:
+    memory = ProjectMemory(tmp_path)
+    memory.memory_file.parent.mkdir(parents=True)
+    memory.memory_file.write_bytes(b"\xff\xfeunreadable memory")
+    before = memory.memory_file.read_bytes()
+    if surface == "memory_save":
+        result = _handlers(memory)[surface](key="fact", content="a retained project fact")
+        assert result["status"] == "error" and result["saved"] is False
+    else:
+        tool = NoteSaveTool(MemoryToolServices(project_memory=memory))
+        result = asyncio.run(tool.aexecute(key="fact", content="a retained project fact"))
+        assert "error" in result and "result" not in result
+    assert memory.memory_file.read_bytes() == before
 
 
 # memory_search over the shared session store: the gateway persists every

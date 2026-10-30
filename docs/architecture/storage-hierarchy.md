@@ -26,7 +26,7 @@ flowchart TB
     subgraph workspace["Workspace: <project>/.geode"]
         project_config["config.toml\nproject behavior overrides"]
         memory["memory/, rules/, skills/\nproject context"]
-        project_runtime["reports/, scheduler logs,\ntool-offload/"]
+        project_runtime["reports/, scheduler logs"]
     end
 
     subgraph repo["Repo-tracked source"]
@@ -228,7 +228,8 @@ git-reviewable evidence ledgers.
 │   ├── journal/runs.jsonl                 # execution journal
 │   ├── sessions/
 │   │   └── sessions.db                    # checkpoints + session_events + hook_events SoT
-│   └── result_cache/                      # pipeline result LRU cache
+│   ├── result_cache/                      # pipeline result LRU cache
+│   └── tool-offload/<session>/            # large tool results with TTL recall
 │
 ├── runs/{*.jsonl,_archive/}               # retired global archives; no new session history
 ├── workers/<task>.{result.json,stderr.log} # delegate worker output
@@ -238,7 +239,7 @@ git-reviewable evidence ledgers.
 └── models/                                # reserved (empty)
 
 
-{workspace}/.geode/                        project-local, gitignored by default
+{workspace}/.geode/                        optional project inputs; geode init adds gitignore
 ├── config.toml                            # project config overrides (capability keys need trust)
 ├── memory/PROJECT.md                      # project insights (`G4` tier in system prompt)
 ├── rules/*.md                             # project rules (loaded by tag)
@@ -246,7 +247,6 @@ git-reviewable evidence ledgers.
 ├── hooks/                                 # project hook plugins (need an extension-policy grant)
 ├── user_profile/                          # project overrides of ~/.geode/user_profile/
 ├── reports/                               # generated reports (user output)
-├── tool-offload/<session>/                # large tool results kept out of context
 ├── scheduled_tasks.json + .lock           # project-scoped cron jobs
 └── scheduler_logs/                        # scheduler run history
 
@@ -301,3 +301,29 @@ Pattern for adding a new migration (mirrors Hermes
 - `core/memory/project.py` — project memory cascade (project → global)
 - `core/cli/commands/lifecycle.py` — `/clean` / `/uninstall` consumers (must
   honour the same tier rules)
+
+## Startup and optional project inputs
+
+Starting the CLI creates required runtime state under `GEODE_HOME`, including
+workspace-scoped session and offload stores. It does not create `.env`,
+`.gitignore`, project memory, rules, skills, or reports in the invocation folder.
+`geode init` retains explicit scaffolding; concrete writers create their own
+parent directories. The first valid project insight seeds `PROJECT.md` within
+the existing containment check and exclusive lock. Invalid input creates no file.
+
+Legacy `.geode/tool-offload/` moves once to the admitted workspace store, with
+conflicts and unsafe symlinks rejected before adoption. Readers and cleanup use
+only the canonical destination. Invoking from HOME recognizes that its local-looking
+vault already is the global vault and leaves that store intact, even when empty.
+
+Offload session/reference IDs are single filesystem components. Base/session
+symlinks and result-file symlinks cannot redirect write, recall, expiry or cleanup
+to another workspace. The default store captures its workspace at construction
+and admits that owner before its first actual read or write, including legacy
+result migration. Construction and result inspection do not create project scaffolding.
+
+The HOME identity rule is consistent with the pinned
+[Codex loader exclusion](https://github.com/openai/codex/blob/00c972ed5d6ff6499317fd41b7f23605b8e6850d/codex-rs/config/src/loader/mod.rs#L1683)
+and [projectless-directory tests](https://github.com/openai/codex/blob/f752c97f7d0be0cbef5cece327f52a16ad6fb1c6/codex-rs/config/src/loader/projectless_directory_tests.rs#L51).
+GEODE retains canonical invocation-directory ownership; it does not merge
+sibling runtime stores merely because they share a Git root.

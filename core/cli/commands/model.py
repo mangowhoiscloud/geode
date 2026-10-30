@@ -405,7 +405,22 @@ def _model_available_for_role(
     model_id: str, role: AgentRole, client: IPCClient | None = None
 ) -> bool:
     source = _selection_source(model_id, role, client)
+    if client is not None:
+        return _inspect_model_routes(client, [(model_id, source)])[(model_id, source)]
     return model_available(model_id) if source is None else model_available(model_id, source=source)
+
+
+class _ModelRouteInspectionError(ValueError):
+    """An expected backend inspection failure that the command can display."""
+
+
+def _inspect_model_routes(
+    client: IPCClient, queries: list[tuple[str, str | None]]
+) -> dict[tuple[str, str | None], bool]:
+    try:
+        return client.inspect_model_routes(queries)
+    except ValueError as exc:
+        raise _ModelRouteInspectionError(str(exc)) from exc
 
 
 def _picker_profiles(
@@ -428,6 +443,20 @@ def _picker_profiles(
 def _role_model_availability(
     model_profiles: list[ModelProfile], client: IPCClient | None = None
 ) -> dict[str, dict[str, bool]]:
+    if client is not None:
+        queries = [
+            (p.id, _selection_source(p.id, role, client))
+            for role in AGENT_ROLES
+            for p in model_profiles
+        ]
+        available = _inspect_model_routes(client, queries)
+        return {
+            role.name: {
+                p.id: available[(p.id, _selection_source(p.id, role, client))]
+                for p in model_profiles
+            }
+            for role in AGENT_ROLES
+        }
     return {
         role.name: {p.id: _model_available_for_role(p.id, role, client) for p in model_profiles}
         for role in AGENT_ROLES
@@ -453,16 +482,18 @@ def _interactive_model_picker(*, client: IPCClient | None = None) -> None:
     from core.cli.effort_picker import pick_model_and_effort
     from core.config import settings
 
-    _ensure_profiles_hydrated()
+    if client is None:
+        _ensure_profiles_hydrated()
     role_initial_models = {r.name: _current_model_for_role(r, client) for r in AGENT_ROLES}
     model_profiles = _picker_profiles(role_initial_models, client)
+    availability = _role_model_availability(model_profiles, client)
     profiles = [
         (
             p.id,
             p.provider,
             p.label,
             p.cost,
-            model_available(p.id),
+            availability["primary"][p.id],
             forced_login_method_for(p.provider),
         )
         for p in model_profiles
@@ -482,7 +513,7 @@ def _interactive_model_picker(*, client: IPCClient | None = None) -> None:
         initial_role="primary",
         role_initial_models=role_initial_models,
         role_has_effort=role_has_effort,
-        role_model_availability=_role_model_availability(model_profiles, client),
+        role_model_availability=availability,
     )
     if result.cancelled:
         # M5 — surface the "login first" path explicitly when the user
@@ -627,16 +658,18 @@ def _interactive_model_picker_for_role(
     from core.cli.effort_picker import pick_model_and_effort
     from core.config import settings
 
-    _ensure_profiles_hydrated()
+    if client is None:
+        _ensure_profiles_hydrated()
     role_initial_models = {r.name: _current_model_for_role(r, client) for r in AGENT_ROLES}
     model_profiles = _picker_profiles(role_initial_models, client)
+    availability = _role_model_availability(model_profiles, client)
     profiles = [
         (
             p.id,
             p.provider,
             p.label,
             p.cost,
-            model_available(p.id),
+            availability[role_def.name][p.id],
             forced_login_method_for(p.provider),
         )
         for p in model_profiles
@@ -657,7 +690,7 @@ def _interactive_model_picker_for_role(
         initial_role=role_def.name,
         role_initial_models=role_initial_models,
         role_has_effort=role_has_effort,
-        role_model_availability=_role_model_availability(model_profiles, client),
+        role_model_availability=availability,
     )
     if result.cancelled:
         _pkg.console.print("  [muted]Cancelled[/muted]")
@@ -673,6 +706,20 @@ def _interactive_model_picker_for_role(
 
 
 def cmd_model(args: str, *, client: IPCClient | None = None) -> None:
+    """Handle model selection without ending the session on backend inspection failure."""
+    try:
+        _cmd_model(args, client=client)
+    except _ModelRouteInspectionError as exc:
+        from rich.markup import escape
+
+        from core.cli import commands as _pkg
+        from core.observability.redaction import redact_and_bound_text
+
+        message = escape(redact_and_bound_text(str(exc), 512))
+        _pkg.console.print(f"  [warning]{message} Selection unchanged.[/warning]\n")
+
+
+def _cmd_model(args: str, *, client: IPCClient | None = None) -> None:
     """Handle /model command (OpenClaw Auth Profile Rotation pattern).
 
     /model                       → interactive picker (this project)

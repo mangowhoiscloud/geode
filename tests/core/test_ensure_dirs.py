@@ -59,16 +59,9 @@ class TestEnsureDirectories:
         assert not (home / "identity").exists()  # career.toml lives in user_profile/
         assert (home / "user_profile").is_dir()
 
-    def test_creates_project_dirs(self, clean_dirs: Path) -> None:
+    def test_does_not_scaffold_project_inputs(self, clean_dirs: Path) -> None:
         ensure_directories()
-
-        proj = clean_dirs / "project" / ".geode"
-        assert proj.is_dir()
-        assert (proj / "memory").is_dir()
-        assert (proj / "rules").is_dir()
-        assert (proj / "skills").is_dir()
-        assert (proj / "reports").is_dir()
-        assert (proj / "scheduler_logs").is_dir()
+        assert list((clean_dirs / "project").iterdir()) == []
 
     def test_creates_project_user_dirs(self, clean_dirs: Path) -> None:
         ensure_directories()
@@ -87,29 +80,13 @@ class TestEnsureDirectories:
         home = clean_dirs / "home" / ".geode"
         assert home.is_dir()
 
-    def test_gitignore_entry_added(self, clean_dirs: Path) -> None:
-        ensure_directories()
-
+    @pytest.mark.parametrize("existing", [None, "node_modules\n", "# user-owned\n.geode/\n"])
+    def test_project_gitignore_is_not_created_or_modified(self, clean_dirs, existing):
         gitignore = clean_dirs / "project" / ".gitignore"
-        assert gitignore.exists()
-        content = gitignore.read_text()
-        assert ".geode/" in content
-
-    def test_gitignore_no_duplicate(self, clean_dirs: Path) -> None:
-        gitignore = Path(".gitignore")
-        gitignore.write_text("# existing\n.geode/\n")
-
+        if existing is not None:
+            gitignore.write_text(existing)
         ensure_directories()
-
-        content = gitignore.read_text()
-        assert content.count(".geode/") == 1
-
-    def test_gitignore_appends_to_existing(self, clean_dirs: Path) -> None:
-        gitignore = Path(".gitignore")
-        gitignore.write_text("node_modules/\n")
-
-        ensure_directories()
-
-        content = gitignore.read_text()
-        assert "node_modules/" in content
-        assert ".geode/" in content
+        if existing is None:
+            assert not gitignore.exists()
+        else:
+            assert gitignore.read_text() == existing
