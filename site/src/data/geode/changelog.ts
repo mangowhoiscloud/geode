@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "Unreleased",
     "date": "",
-    "body": ""
+    "body": "### Fixed\n\n- **Native research reader scrolling.** Remove swipe and wheel scene navigation,\n  document paging shortcuts, forced scroll movement and scroll locks from all\n  three readers and the research collection menu. Explicit navigation and frozen\n  research content remain intact."
   },
   {
     "version": "1.0.34",

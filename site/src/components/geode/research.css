@@ -45,7 +45,6 @@ html:has(.geode-research), body:has(.geode-research) { background: var(--paper);
 .geode-research .landing-menu-dialog nav { display: grid; gap: 4px; padding-top: 12px; }
 .geode-research .landing-menu-dialog nav a { display: flex; align-items: center; min-height: 44px; padding-inline: 8px; border-radius: 6px; color: var(--ink-2); font-size: 16px; text-decoration: none; }
 .geode-research .landing-menu-dialog nav a:hover { background: var(--paper-2); color: var(--ink); }
-html:has(.geode-research .landing-menu-dialog[open]) { overflow: hidden; }
 .geode-research .landing-skip { position: fixed; top: 8px; left: 16px; z-index: 30; transform: translateY(-150%); padding: 10px 18px; background: var(--ink); color: var(--paper); }
 .geode-research .landing-skip:focus { transform: none; }
 .geode-research .landing-hero { display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 68px; padding-block: 76px 72px; }
