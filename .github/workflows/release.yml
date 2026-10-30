@@ -404,7 +404,11 @@ jobs:
             # This is the last freshness check before the first public mutation.
             git fetch --force --no-tags origin \
               "refs/heads/main:refs/remotes/origin/main"
-            test "$target" = "$(git rev-parse origin/main)"
+            current_main=$(git rev-parse origin/main)
+            if [ "$target" != "$current_main" ]; then
+              echo "::error::Main advanced during release validation: validated $target, current $current_main. No release tag was created by this run. Recheck main and release tags, then start a new workflow dispatch; rerunning only this publish job reuses the validated source."
+              exit 1
+            fi
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag -a "$tag" -m "GEODE v${version}" "$target"
