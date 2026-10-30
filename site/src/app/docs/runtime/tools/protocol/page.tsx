@@ -140,7 +140,7 @@ export default function Page() {
               모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면{" "}
               <code>core/orchestration/tool_offload.py</code>의{" "}
               <code>ToolResultOffloadStore</code>가 본문을 세션별 디렉터리
-              (<code>.geode/tool-offload/</code> 아래)에 내려쓰고, 컨텍스트에는
+              (<code>~/.geode/projects/&lt;workspace-id&gt;/tool-offload/</code> 아래)에 내려쓰고, 컨텍스트에는
               요약과 <code>ref_id</code>만 남깁니다. 모델이 원본이 필요하면{" "}
               <code>recall_tool_result(ref_id)</code>로 다시 가져옵니다. 오프로드마다{" "}
               <code>TOOL_RESULT_OFFLOADED</code> 훅이 발화합니다.
@@ -344,7 +344,7 @@ export default function Page() {
               15,000-token threshold,{" "}
               <code>ToolResultOffloadStore</code> in{" "}
               <code>core/orchestration/tool_offload.py</code> persists the body
-              to a per-session directory under <code>.geode/tool-offload/</code>{" "}
+              to a per-session directory under <code>~/.geode/projects/&lt;workspace-id&gt;/tool-offload/</code>{" "}
               and leaves a summary plus a <code>ref_id</code> in context. The
               model re-fetches the original with <code>recall_tool_result(ref_id)</code>.
               Each offload fires the <code>TOOL_RESULT_OFFLOADED</code> hook.

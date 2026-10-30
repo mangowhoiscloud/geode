@@ -16,6 +16,7 @@ IPC_FEATURES = (
     "request_correlation",
     "stable_events",
     "session_model_config",
+    "model_route_inspection",
     "request_cancellation",
 )
 MAX_IPC_MESSAGE_BYTES = 1024 * 1024
@@ -73,7 +74,7 @@ IPC_EVENT_TYPES = (
 IPC_CONTROL_TYPES = frozenset({"ack", "exit_ack"})
 _CLIENT_FIELD_TYPES: dict[str, dict[str, type[Any] | tuple[type[Any], ...]]] = {
     "prompt": {"text": str},
-    "command": {"cmd": str, "args": str, "model_config": dict},
+    "command": {"cmd": str, "args": str, "model_config": dict, "model_queries": list},
     "command_stream": {"cmd": str, "args": str},
     "resume": {"session_id": str, "continue": bool},
     "client_capability": {

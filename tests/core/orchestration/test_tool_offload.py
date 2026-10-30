@@ -6,6 +6,7 @@ import json
 import time
 from pathlib import Path
 
+import pytest
 from core.orchestration.context_monitor import mask_stale_observations
 from core.orchestration.tool_offload import (
     ToolResultOffloadStore,
@@ -88,8 +89,113 @@ class TestToolResultOffloadStore:
             threshold=100,
             base_dir=tmp_path / "offload",
         )
+        assert not (tmp_path / "offload").exists()
+        assert store.cleanup_expired() == 0
+        assert "error" in store.recall("ref_dir")
+        assert not (tmp_path / "offload").exists()
         store.offload("ref_dir", {"test": True})
         assert (tmp_path / "offload" / "new-session" / "ref_dir.json").exists()
+
+    def test_default_store_works_in_read_only_workspace(self, tmp_path, monkeypatch):
+        workspace = tmp_path / "readonly"
+        workspace.mkdir()
+        data = tmp_path / "user-owned" / "project"
+        monkeypatch.chdir(workspace)
+        monkeypatch.setattr("core.paths.get_project_root", lambda: workspace)
+        monkeypatch.setattr("core.paths.get_project_data_dir", lambda _workspace=None: data)
+        workspace.chmod(0o555)
+        try:
+            store = ToolResultOffloadStore(session_id="session")
+            assert list(workspace.iterdir()) == []
+            result = {"content": "full result " * 10_000}
+            store.offload("large", result)
+            assert store.recall("large") == result
+            from core.wiring.layout_migrator import ensure_project_layout
+
+            assert (data / ".workspace.json").is_file()
+            ensure_project_layout(workspace, data)  # a direct first write permits later startup
+            assert list(workspace.iterdir()) == []
+            assert store.cleanup_session() == 1
+        finally:
+            workspace.chmod(0o755)
+
+    def test_first_default_recall_admits_legacy_results(self, tmp_path, monkeypatch):
+        workspace = tmp_path / "work"
+        legacy = workspace / ".geode" / "tool-offload"
+        (legacy / "s").mkdir(parents=True)
+        data = tmp_path / "user-store" / "project"
+        payload = {"result": {"full": "preserved"}, "offloaded_at": time.time()}
+        (legacy / "s" / "ref.json").write_text(json.dumps(payload))
+        monkeypatch.setattr("core.paths.get_project_root", lambda: workspace)
+        monkeypatch.setattr("core.paths.get_project_data_dir", lambda _workspace=None: data)
+        store = ToolResultOffloadStore(session_id="s")
+        assert legacy.is_dir() and not data.exists()
+        assert store.recall("ref") == payload["result"]
+        assert not legacy.exists()
+        assert (data / ".workspace.json").is_file()
+
+    @pytest.mark.parametrize("invalid", ["", ".", "..", "../x", "/outside", "a\\b", "a\x00b"])
+    def test_session_id_must_be_one_component(self, tmp_path, invalid):
+        with pytest.raises(ValueError, match="session ID"):
+            ToolResultOffloadStore(session_id=invalid, base_dir=tmp_path / "offload")
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.parametrize("expired", [False, True])
+    def test_reference_cannot_read_write_or_expire_a_sibling_workspace(self, tmp_path, expired):
+        base = tmp_path / "projects" / "one" / "tool-offload"
+        store = ToolResultOffloadStore(session_id="s", base_dir=base)
+        store.offload("own", {"ok": True})
+        outside = tmp_path / "projects" / "two" / "tool-offload" / "s" / "ref.json"
+        outside.parent.mkdir(parents=True)
+        outside.write_text(
+            json.dumps({"result": {"private": True}, "offloaded_at": 0 if expired else time.time()})
+        )
+        before = outside.read_bytes(), outside.stat().st_ino
+        for ref in (
+            "../../../two/tool-offload/s/ref",
+            str(outside.with_suffix("")),
+            "../ref",
+            "a\\b",
+            "",
+            ".",
+            "..",
+        ):
+            assert "error" in store.recall(ref)
+            with pytest.raises(ValueError, match="reference"):
+                store.offload(ref, {"overwrite": True})
+            assert (outside.read_bytes(), outside.stat().st_ino) == before
+
+    @pytest.mark.parametrize("level", ["base", "session", "result"])
+    def test_symlinks_cannot_redirect_store_operations(self, tmp_path, level):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        result = outside / "ref.json"
+        result.write_text(json.dumps({"result": {"private": True}, "offloaded_at": 0}))
+        before = result.read_bytes(), result.stat().st_ino
+        base = tmp_path / "store" / "offload"
+        base.parent.mkdir()
+        session = base / "s"
+        if level == "base":
+            base.symlink_to(outside, target_is_directory=True)
+        elif level == "session":
+            base.mkdir()
+            session.symlink_to(outside, target_is_directory=True)
+        else:
+            session.mkdir(parents=True)
+            (session / "ref.json").symlink_to(result)
+        store = ToolResultOffloadStore(session_id="s", base_dir=base)
+        assert "error" in store.recall("ref")
+        with pytest.raises(ValueError):
+            store.offload("ref", {"overwrite": True})
+        if level == "result":
+            assert store.cleanup_expired() == 0
+            assert store.cleanup_session() == 0
+        else:
+            with pytest.raises(ValueError):
+                store.cleanup_expired()
+            with pytest.raises(ValueError):
+                store.cleanup_session()
+        assert (result.read_bytes(), result.stat().st_ino) == before
 
 
 # ---------------------------------------------------------------------------

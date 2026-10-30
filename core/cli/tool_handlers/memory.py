@@ -93,18 +93,14 @@ def _build_memory_handlers(
                 "note": "This insight is already recorded.",
             }
         detail = {
-            MemoryWrite.NOT_FOUND: (
-                f"Project memory file is missing: {memory.memory_file}. "
-                "Run `geode init` to create it."
-            ),
             MemoryWrite.INVALID: (
                 "Insight rejected: it must be one line of 10-500 characters, not a "
                 "stub, and memory must resolve inside the project."
             ),
         }.get(outcome, "Project memory could not be read or written; it was left unchanged.")
         result = _memory_error("memory_save", outcome, detail, key=key, saved=False)
-        # record_insight returns NOT_FOUND / INVALID before taking any write path.
-        if outcome in (MemoryWrite.NOT_FOUND, MemoryWrite.INVALID):
+        # Validation rejects the insight before taking any write path.
+        if outcome is MemoryWrite.INVALID:
             return refused_before_effect(result)
         return result
 

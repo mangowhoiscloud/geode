@@ -91,7 +91,7 @@ export default function Page() {
             <h2>도구 결과 오프로딩</h2>
             <p>
               임계값을 넘는 도구 결과는 컨텍스트에 그대로 쌓이지 않습니다.{" "}
-              <code>.geode/tool-offload/&#123;session_id&#125;/</code>에
+              <code>~/.geode/projects/&lt;workspace-id&gt;/tool-offload/&#123;session_id&#125;/</code>에
               저장되고 컨텍스트에는 요약과 <code>ref_id</code>만 남으며,
               필요하면 <code>recall_tool_result(ref_id)</code>로 다시 불러옵니다
               (<code>core/orchestration/tool_offload.py</code>). 임계값은{" "}
@@ -206,7 +206,7 @@ export default function Page() {
             <h2>Tool-result offloading</h2>
             <p>
               Oversized tool results never pile into the context. They persist
-              to <code>.geode/tool-offload/&#123;session_id&#125;/</code> and
+              to <code>~/.geode/projects/&lt;workspace-id&gt;/tool-offload/&#123;session_id&#125;/</code> and
               the context keeps only a summary plus a <code>ref_id</code>;{" "}
               <code>recall_tool_result(ref_id)</code> fetches the full result back
               (<code>core/orchestration/tool_offload.py</code>). The knob is{" "}

@@ -7,12 +7,10 @@ must remain free of ``console.input``/``console.print`` so that headless
 processes (serve, IPC poller) can call it without an attached TTY.
 
 Public surface:
-  * ``auto_generate_env`` — copy ``.env.example`` to ``.env`` (placeholder safe)
   * ``check_readiness`` / ``ReadinessReport`` / ``Capability`` — gateway:startup data
-  * ``setup_project_memory`` / ``setup_user_profile`` — first-run scaffolding
 
 Detects environment readiness:
-  Any locally usable model credential route → full mode (LLM enabled)
+  Any locally usable model credential route → setup may be skipped
   None                                      → caller surfaces the wizard
 
 Availability is inspected locally; upstream credential acceptance is not tested.
@@ -23,82 +21,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from core.memory.project import ProjectMemory
 
 log = logging.getLogger(__name__)
-
-
-def __getattr__(name: str) -> Any:
-    """PEP 562 lazy ``settings`` alias.
-
-    Tests historically patch ``core.wiring.startup.settings``; preserve that
-    surface without paying the pydantic_settings cost at module import.
-    """
-    if name == "settings":
-        from core.config import settings as _settings
-
-        return _settings
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-def auto_generate_env(project_root: Path | None = None) -> bool:
-    """Auto-generate .env from .env.example if .env is absent.
-
-    Copies .env.example to .env. A line whose value is empty or a
-    placeholder (``sk-ant-...``, ``...``) is emitted COMMENTED
-    (``# KEY=``) rather than as an active blank ``KEY=`` — an active blank
-    secret entry reads as "key present but empty" and can shadow the
-    authoritative global ``~/.geode/.env`` value. Real values are kept.
-
-    Returns True if .env was generated, False otherwise.
-    """
-    root = project_root or Path(".")
-    env_path = root / ".env"
-    example_path = root / ".env.example"
-
-    if env_path.exists():
-        return False
-    if not example_path.exists():
-        return False
-
-    raw = example_path.read_text(encoding="utf-8")
-    lines: list[str] = []
-    for line in raw.splitlines():
-        # Skip commented-out lines — keep as-is
-        stripped = line.lstrip()
-        if stripped.startswith("#") or "=" not in stripped:
-            lines.append(line)
-            continue
-        # Split on first '='
-        key, _, value = line.partition("=")
-        value = value.strip()
-        # An empty or placeholder value is not a real credential — emit it
-        # commented so the generated .env documents the available keys
-        # without an active blank entry that could shadow the global value.
-        if value == "" or _is_placeholder(value):
-            lines.append(f"# {key.strip()}=")
-        else:
-            lines.append(line)
-
-    tmp_path = env_path.with_suffix(".tmp")
-    tmp_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    tmp_path.chmod(0o600)
-    tmp_path.replace(env_path)
-    log.info(".env auto-generated from .env.example")
-    return True
-
-
-def _is_placeholder(value: str) -> bool:
-    """Shared placeholder rule (SoT: ``core.config.env_io.is_placeholder``).
-
-    Lazy import keeps this module free of the pydantic-settings load cost at
-    import time, matching the ``__getattr__`` settings deferral above.
-    """
-    from core.config.env_io import is_placeholder
-
-    return is_placeholder(value)
 
 
 def has_available_llm_credential(provider: str | None = None) -> bool:
@@ -154,6 +80,7 @@ class Capability:
     name: str
     available: bool
     reason: str = ""
+    required: bool = True
 
 
 @dataclass
@@ -166,17 +93,17 @@ class ReadinessReport:
     has_memory: bool = False
     has_profile: bool = False
     blocked: bool = False
-    force_dry_run: bool = False  # backward-compat alias
+    force_dry_run: bool = False  # explicit audit override; not inferred from missing auth
 
     @property
     def all_ready(self) -> bool:
-        return all(c.available for c in self.capabilities)
+        return all(c.available for c in self.capabilities if c.required)
 
 
 def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     """Check system readiness (OpenClaw gateway:startup pattern).
 
-    Any usable model route unblocks full mode; no network authentication is attempted.
+    Any usable route satisfies setup; prompt admission checks the selected route.
     """
     root = project_root or Path(".")
     report = ReadinessReport()
@@ -207,7 +134,8 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
             Capability(
                 name="Environment",
                 available=False,
-                reason="cp .env.example .env",
+                reason="optional project configuration",
+                required=False,
             )
         )
 
@@ -217,8 +145,9 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     report.capabilities.append(
         Capability(
             name="Project Memory",
-            available=mem.exists(),
-            reason="" if mem.exists() else ".geode/memory/PROJECT.md not found",
+            available=report.has_memory,
+            reason="" if report.has_memory else "optional; created when saving project memory",
+            required=False,
         )
     )
 
@@ -233,7 +162,8 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
             Capability(
                 name="User Profile",
                 available=profile_exists,
-                reason="" if profile_exists else "run `geode init` to create it",
+                reason="" if profile_exists else "optional; run `geode init` to create it",
+                required=False,
             )
         )
     except Exception:
@@ -243,38 +173,14 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
                 name="User Profile",
                 available=False,
                 reason="load failed",
+                required=False,
             )
         )
 
     # 5. Always-available capabilities
-    report.capabilities.append(Capability(name="Dry-Run Analysis", available=True))
+    report.capabilities.append(Capability(name="Setup and session commands", available=True))
 
     # 5. Block only when there is no usable credential at all (key or OAuth)
     report.blocked = not has_credential
-    report.force_dry_run = not has_credential  # backward-compat
 
     return report
-
-
-def setup_project_memory(project_root: Path | None = None) -> bool:
-    """Initialize project memory if not present (OpenClaw boot-md pattern)."""
-    mem = ProjectMemory(project_root)
-    if mem.exists():
-        return False
-
-    created = mem.ensure_structure()
-    if created:
-        log.info("Project memory initialized at %s", mem.memory_file)
-    return created
-
-
-def setup_user_profile() -> bool:
-    """Initialize user profile if not present (~/.geode/user_profile/)."""
-    try:
-        from core.memory.user_profile import FileBasedUserProfile
-
-        profile = FileBasedUserProfile()
-        return profile.ensure_structure()
-    except Exception as e:
-        log.warning("User profile setup failed: %s", e)
-        return False

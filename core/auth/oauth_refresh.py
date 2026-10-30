@@ -22,11 +22,31 @@ from core.auth.profiles import AuthProfile, CredentialType
 from core.llm.strategies.plan_registry import PlanRegistry, get_plan_registry
 
 if TYPE_CHECKING:
+    from core.auth.profiles import ProfileStore
     from core.config.policy_source import PolicySourcePaths
 
 
 class OAuthRefreshError(RuntimeError):
     """A refresh failed; callers must preserve the subscription billing route."""
+
+
+def can_refresh_native_oauth(profile: AuthProfile, store: ProfileStore) -> bool:
+    """Inspect the native refresh owner without refreshing or borrowing authority."""
+    from core.config import CODEX_BASE_URL
+
+    plan = get_plan_registry().get(profile.plan_id)
+    endpoint = profile.base_url_override or (plan.base_url if plan else CODEX_BASE_URL)
+    return (
+        profile.provider == "openai-codex"
+        and profile.credential_type is CredentialType.OAUTH
+        and not profile.managed_by
+        and bool(profile.key.strip())
+        and bool(profile.refresh_token.strip())
+        and not profile.disabled
+        and not profile.is_cooling_down
+        and endpoint.rstrip("/") == CODEX_BASE_URL.rstrip("/")
+        and store.file_profiles(str(auth_toml_path().absolute())).get(profile.name) is profile
+    )
 
 
 def _identity(profile: AuthProfile) -> tuple[str, str, str]:

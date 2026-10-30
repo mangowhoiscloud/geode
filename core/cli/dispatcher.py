@@ -24,7 +24,6 @@ from core.cli.commands import (
 from core.cli.commands.key import run_key
 from core.cli.commands.login import run_login
 from core.cli.onboarding import render_readiness
-from core.cli.session_state import _get_readiness
 from core.ui.console import console
 from core.wiring.startup import check_readiness
 
@@ -133,11 +132,15 @@ def _handle_command(
 
         console.print()
         console.print("  [header]GEODE System Status[/header]")
+        from core.config.session import resolve_initial_model
         from core.llm.routing import model_available
         from core.wiring.startup import has_available_llm_credential
 
-        model = agentic_ref.model if agentic_ref is not None else settings.model
-        source = agentic_ref._model_settings.source if agentic_ref is not None else None
+        model, source = (
+            (agentic_ref.model, agentic_ref._model_settings.source)
+            if agentic_ref is not None
+            else resolve_initial_model(settings)
+        )
         console.print(f"  Model: [bold]{model}[/bold]")
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
         ant_ok = has_available_llm_credential("anthropic")
@@ -150,10 +153,8 @@ def _handle_command(
         console.print(
             f"  Selected model route: {'available' if selected_available else 'unavailable'}"
         )
-        readiness = _get_readiness() or check_readiness()
-        if readiness:
-            mode = "Full LLM" if not readiness.force_dry_run else "Dry-Run Only"
-            console.print(f"  Mode: [bold]{mode}[/bold]")
+        mode = "available" if selected_available else "not_connected"
+        console.print(f"  Mode: [bold]{mode}[/bold]")
         # MCP status section
         _mcp_st = mcp_manager.get_status() if mcp_manager is not None else {"active": []}
         console.print()

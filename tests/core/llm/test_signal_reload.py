@@ -104,7 +104,7 @@ def test_cli_thin_readopts_the_file_after_a_daemon_change(monkeypatch: pytest.Mo
 
     run_thin_command(client, "/login", "route gpt-6-sol openai-payg")
 
-    reload.assert_called_once_with()
+    reload.assert_called_once_with(clear_missing=True)
 
 
 def test_cli_thin_keeps_unrecognized_login_input_local(monkeypatch: pytest.MonkeyPatch) -> None:

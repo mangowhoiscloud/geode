@@ -47,6 +47,51 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.34] - 2026-10-30
+
+### Added
+
+- **Workspace stop command.** `geode stop` exposes the existing verified-owner
+  lifecycle operation without needing an interactive connection, including
+  bounded graceful shutdown and an explicit `--force` option.
+
+### Fixed
+
+- **Launch from HOME and ordinary directories.** Recognize the existing global
+  vault before attempting workspace migration, including empty stores and
+  canonical directory aliases. Optional project memory and profile absence no
+  longer appear as startup failures; cancelling credential setup exits before
+  a daemon starts.
+- **Actionable startup failures.** Distinguish child exit, timeout and spawn
+  errors, and show bounded redacted diagnostics from the current attempt with
+  the workspace log and foreground recovery command.
+
+### Security
+
+- **Offload workspace containment.** Validate session and reference path
+  components, reject redirected store directories and result symlinks, and
+  admit the default workspace owner before first use. Traversal cannot read,
+  overwrite or expire another workspace's tool results.
+
+### Changed
+
+- **Create project inputs only when needed.** Ordinary startup no longer copies
+  `.env.example`, edits `.gitignore`, or scaffolds project memory, rules, skills,
+  reports and scheduler logs. Explicit `geode init` retains project scaffolding;
+  the first valid memory save initializes its file within the existing lock.
+- **Workspace-owned tool results.** Large-result offloads live under the
+  user-owned workspace store, allowing read-only working directories. Existing
+  local results migrate once with conflict and ownership checks; recall and
+  cleanup use only the canonical store.
+- **Session-owned model readiness.** An unconfigured unavailable default may
+  select the sole eligible provider default; explicit model/source choices and
+  resumed selections remain unchanged. Connected model inspection and request
+  admission use backend eligibility, native credentials reload at new-session
+  admission, and refreshable native OAuth is distinguished from credentials
+  that require their external owner to sign in again.
+- **Truthful disconnected state.** Skipping credentials opens setup and session
+  commands without advertising an unenforced fixture mode.
+
 ## [1.0.33] - 2026-10-30
 
 ### Changed

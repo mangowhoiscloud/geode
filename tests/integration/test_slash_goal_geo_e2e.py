@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from core.cli.dispatcher import _handle_command
 from core.cli.ipc_client import IPCClient
 from core.cli.routing import compose_command_registry
@@ -99,7 +100,14 @@ def _loop(tmp_path: Path) -> Any:
     return loop
 
 
-def test_real_slash_input_routes_goal_plan_grill_and_geo(tmp_path: Path) -> None:
+def test_real_slash_input_routes_goal_plan_grill_and_geo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "openai_credential_source", "api_key")
+    monkeypatch.setattr(settings, "openai_api_key", "synthetic-slash-key")
     registry = SkillRegistry()
     SkillLoader(skills_dir=Path(".geode/skills")).load_all(registry=registry)
     loop = _loop(tmp_path)
@@ -139,6 +147,8 @@ def test_real_slash_input_routes_goal_plan_grill_and_geo(tmp_path: Path) -> None
 
         grilled = client.send_command_streaming("/grill", "Choose the rollout boundary")
         geo = client.send_command_streaming("/geo", "audit the public docs")
+        assert grilled["type"] == "result", grilled
+        assert geo["type"] == "result", geo
         assert grilled["text"] == "skill completed"
         assert geo["text"] == "skill completed"
         prompts = [call.args[0] for call in loop.arun.await_args_list]

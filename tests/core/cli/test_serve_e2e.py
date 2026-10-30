@@ -177,9 +177,8 @@ class TestServeToolExecution:
     ) -> None:
         """A serve session's failed memory_save must not block a later report.
 
-        Live regression: in an uninitialized project memory_save reports a
-        recoverable ``not_found``; it was masked as an uncertain effect whose
-        prepared receipt then refused every later effect in the session.
+        Invalid memory input is rejected before any write. A definite refusal
+        must not leave an uncertain receipt that blocks later session effects.
         """
         import core.paths as cp
         from core.agent.tool_executor import ToolExecutor
@@ -211,7 +210,7 @@ class TestServeToolExecution:
         saved = asyncio.run(
             executor.aexecute(
                 "memory_save",
-                {"key": "fact", "content": "a durable fact worth remembering"},
+                {"key": "fact", "content": "invalid multiline\nproject insight"},
                 context=step(1),
             )
         )
@@ -234,9 +233,9 @@ class TestServeToolExecution:
             )
         )
 
-        assert saved["error_type"] == "not_found"
+        assert saved["error_type"] == "validation"
         assert saved["effect_applied"] is False
-        assert "geode init" in saved["error"]
+        assert not (project / ".geode/memory/PROJECT.md").exists()
         assert "outcome_uncertain" not in saved
         assert rejected["error_type"] == "validation"
         assert rejected["effect_applied"] is False

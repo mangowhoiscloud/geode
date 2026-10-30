@@ -20,14 +20,12 @@ def memory(tmp_path: Path) -> ProjectMemory:
     return mem
 
 
-def test_outcomes_distinguish_missing_invalid_duplicate_and_written(tmp_path: Path) -> None:
+def test_first_valid_insight_creates_memory_and_duplicate_is_unchanged(tmp_path: Path) -> None:
     bare = ProjectMemory(tmp_path)
-    assert bare.record_insight("a perfectly valid insight") is MemoryWrite.NOT_FOUND
-    assert not bare.memory_file.exists()  # a failed save never creates the file
-
-    bare.ensure_structure()
+    assert not bare.memory_file.exists()
     assert bare.record_insight("short") is MemoryWrite.INVALID
     assert bare.record_insight("two\nlines of text here") is MemoryWrite.INVALID
+    assert not bare.memory_file.exists()  # invalid input never creates a file
     assert bare.record_insight("a perfectly valid insight") is MemoryWrite.APPLIED
     assert bare.record_insight("a perfectly valid insight") is MemoryWrite.UNCHANGED
     assert bare.memory_file.read_text().count("a perfectly valid insight") == 1
@@ -55,7 +53,11 @@ def test_unreadable_memory_is_left_byte_identical(memory: ProjectMemory) -> None
     assert memory.memory_file.read_bytes() == corrupt
 
 
-def test_threads_never_lose_insights(memory: ProjectMemory) -> None:
+@pytest.mark.parametrize("uninitialized", [False, True])
+def test_threads_never_lose_insights(memory: ProjectMemory, tmp_path, uninitialized) -> None:
+    if uninitialized:
+        memory = ProjectMemory(tmp_path / "fresh")
+
     def write(n: int) -> None:
         for i in range(5):
             assert memory.record_insight(f"thread {n} recorded fact number {i}") is (
@@ -83,10 +85,16 @@ for i in range(int(sys.argv[3])):
 """
 
 
-def test_processes_never_lose_insights(memory: ProjectMemory, tmp_path: Path) -> None:
+@pytest.mark.parametrize("uninitialized", [False, True])
+def test_processes_never_lose_insights(
+    memory: ProjectMemory, tmp_path: Path, uninitialized
+) -> None:
+    workspace = tmp_path / "fresh" if uninitialized else tmp_path
+    if uninitialized:
+        memory = ProjectMemory(workspace)
     procs = [
         subprocess.Popen(  # noqa: S603  # nosec B603 - fixed test interpreter argv
-            [sys.executable, "-c", _WRITER, str(tmp_path), f"p{n}", "10"],
+            [sys.executable, "-c", _WRITER, str(workspace), f"p{n}", "10"],
             cwd=_REPO_ROOT,
         )
         for n in range(4)

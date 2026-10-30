@@ -266,20 +266,25 @@ class TestCheckServeVersionDrift:
         assert result.ok is True
         assert __version__ in result.detail
 
-    def test_mismatch_warns_with_kickstart_fix(self):
+    def test_mismatch_warns_with_workspace_restart_fix(self):
         with patch("core.cli.ipc_client.query_serve_version", return_value="0.0.1"):
             result = _check_serve_version_drift()
         assert result.ok is False
         assert "0.0.1" in result.detail
         assert __version__ in result.detail
-        assert "launchctl kickstart -k gui/$(id -u)/com.geode.serve" in result.fix
+        assert "geode stop" in result.fix
+        assert "in this workspace" in result.fix
+        assert "geode serve" in result.fix
+        assert "launchctl" not in result.fix
 
     def test_versionless_greeting_warns(self):
         with patch("core.cli.ipc_client.query_serve_version", return_value=""):
             result = _check_serve_version_drift()
         assert result.ok is False
         assert "predates" in result.detail
-        assert "launchctl kickstart" in result.fix
+        assert "geode stop" in result.fix
+        assert "in this workspace" in result.fix
+        assert "launchctl" not in result.fix
 
 
 class TestAuditExtraDists:

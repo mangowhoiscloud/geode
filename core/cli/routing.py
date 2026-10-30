@@ -59,7 +59,7 @@ def run_thin_command(
                 # Local /model and /login source read this process's copy.
                 from core.auth.auth_toml import load_auth_toml
 
-                load_auth_toml()
+                load_auth_toml(clear_missing=True)
             return
         # Persistence and cross-process activation are separate outcomes.
         # Always send a value-free refresh; unchanged state reloads as a no-op.

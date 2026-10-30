@@ -13,7 +13,6 @@ from core.wiring.startup import (
     Capability,
     ReadinessReport,
     check_readiness,
-    setup_project_memory,
 )
 
 
@@ -68,7 +67,7 @@ class TestCheckReadiness:
             report = check_readiness(tmp_path)
         assert report.has_api_key is available
         assert report.blocked is not available
-        assert report.force_dry_run is not available
+        assert report.force_dry_run is False
         assert (
             next(c for c in report.capabilities if c.name == "LLM Analysis").available is available
         )
@@ -81,13 +80,13 @@ class TestCheckReadiness:
             report = check_readiness(tmp_path)
             assert report.has_env_file is False
 
-            # Create .env.example only → should suggest cp
+            # An example is optional project configuration
             (tmp_path / ".env.example").write_text("KEY=value\n")
             report = check_readiness(tmp_path)
             assert report.has_env_file is False
             env_cap = [c for c in report.capabilities if c.name == "Environment"]
             assert len(env_cap) == 1
-            assert "cp" in env_cap[0].reason
+            assert env_cap[0].required is False
 
             # Create .env → should be satisfied
             (tmp_path / ".env").write_text("KEY=value\n")
@@ -119,9 +118,9 @@ class TestCheckReadiness:
             report = check_readiness(tmp_path)
 
         names = [c.name for c in report.capabilities]
-        assert "Dry-Run Analysis" in names
+        assert "Setup and session commands" in names
 
-        dry_run_cap = next(c for c in report.capabilities if c.name == "Dry-Run Analysis")
+        dry_run_cap = next(c for c in report.capabilities if c.name == "Setup and session commands")
         assert dry_run_cap.available is True
 
 
@@ -239,17 +238,14 @@ def test_welcome_does_not_repeat_wizard_after_dry_run_opt_in():
     """A persisted skip choice, not project .env presence, gates re-prompting."""
     from core.cli.welcome import _welcome_screen
 
-    report = ReadinessReport(force_dry_run=True)
+    report = ReadinessReport(blocked=True)
     with (
         patch("core.cli.welcome._render_welcome_brand"),
-        patch("core.cli.welcome.auto_generate_env"),
         patch("core.wiring.startup.has_available_llm_credential", return_value=False),
         patch("core.cli.welcome.dry_run_opted_in", return_value=True),
         patch("core.cli.welcome.env_setup_wizard") as wizard,
         patch("core.cli.welcome.check_readiness", return_value=report),
         patch("core.cli.welcome._render_readiness_compact"),
-        patch("core.cli.welcome.setup_project_memory"),
-        patch("core.cli.welcome.setup_user_profile"),
         patch("core.cli.welcome.console"),
     ):
         _welcome_screen()
@@ -261,16 +257,13 @@ def test_welcome_clears_dry_run_opt_in_when_stored_route_is_available():
     """A discovered credential makes a previous skip choice stale."""
     from core.cli.welcome import _welcome_screen
 
-    report = ReadinessReport()
+    report = ReadinessReport(has_api_key=True)
     with (
         patch("core.cli.welcome._render_welcome_brand"),
-        patch("core.cli.welcome.auto_generate_env"),
         patch("core.wiring.startup.has_available_llm_credential", return_value=True),
         patch("core.cli.welcome.clear_dry_run_opt_in") as clear_opt_in,
         patch("core.cli.welcome.check_readiness", return_value=report),
         patch("core.cli.welcome._render_readiness_compact"),
-        patch("core.cli.welcome.setup_project_memory"),
-        patch("core.cli.welcome.setup_user_profile"),
         patch("core.cli.welcome.console"),
     ):
         _welcome_screen()
@@ -282,16 +275,13 @@ def test_welcome_clears_dry_run_opt_in_when_api_key_is_detected():
     """An existing API key also makes a previous skip choice stale."""
     from core.cli.welcome import _welcome_screen
 
-    report = ReadinessReport()
+    report = ReadinessReport(has_api_key=True)
     with (
         patch("core.cli.welcome._render_welcome_brand"),
-        patch("core.cli.welcome.auto_generate_env"),
         patch("core.wiring.startup.has_available_llm_credential", return_value=True),
         patch("core.cli.welcome.clear_dry_run_opt_in") as clear_opt_in,
         patch("core.cli.welcome.check_readiness", return_value=report),
         patch("core.cli.welcome._render_readiness_compact"),
-        patch("core.cli.welcome.setup_project_memory"),
-        patch("core.cli.welcome.setup_user_profile"),
         patch("core.cli.welcome.console"),
     ):
         _welcome_screen()
@@ -299,146 +289,46 @@ def test_welcome_clears_dry_run_opt_in_when_api_key_is_detected():
     clear_opt_in.assert_called_once_with()
 
 
-class TestIsPlaceholder:
-    """Test _is_placeholder helper."""
+def test_welcome_inspects_once_and_leaves_optional_project_inputs_untouched(tmp_path, monkeypatch):
+    from core.cli.welcome import _welcome_screen
 
-    def test_ellipsis_exact(self):
-        from core.wiring.startup import _is_placeholder
-
-        assert _is_placeholder("...") is True
-
-    def test_prefixed_ellipsis(self):
-        from core.wiring.startup import _is_placeholder
-
-        assert _is_placeholder("sk-ant-...") is True
-        assert _is_placeholder("sk-...") is True
-        assert _is_placeholder("lsv2_pt_...") is True
-        assert _is_placeholder("BSA...") is True
-
-    def test_real_value_not_placeholder(self):
-        from core.wiring.startup import _is_placeholder
-
-        assert _is_placeholder("sk-ant-api03-realkey123456789") is False
-        assert _is_placeholder("") is False
-        assert _is_placeholder("some-real-key") is False
-        assert _is_placeholder("true") is False
-
-    def test_trailing_dots_not_three(self):
-        from core.wiring.startup import _is_placeholder
-
-        # Only exactly "..." at end counts
-        assert _is_placeholder("value..") is False
-        assert _is_placeholder("value.") is False
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env.example").write_text("OPENAI_API_KEY=placeholder\n")
+    report = ReadinessReport(
+        has_api_key=True,
+        capabilities=[Capability("Project Memory", False, required=False)],
+    )
+    with (
+        patch("core.cli.welcome.check_readiness", return_value=report) as inspect,
+        patch("core.cli.welcome._render_welcome_brand"),
+        patch("core.cli.welcome.clear_dry_run_opt_in"),
+        patch("core.cli.welcome.console") as output,
+    ):
+        _welcome_screen()
+    inspect.assert_called_once_with()
+    output.print.assert_not_called()
+    assert report.all_ready
+    assert [p.name for p in tmp_path.iterdir()] == [".env.example"]
 
 
-class TestAutoGenerateEnv:
-    """Test auto_generate_env function."""
+def test_cancelled_setup_stops_before_starting_a_daemon(tmp_path, monkeypatch):
+    from unittest.mock import Mock
 
-    def test_creates_env_from_example(self, tmp_path: Path):
-        from core.wiring.startup import auto_generate_env
+    import typer
+    from core.cli import _run_main
 
-        example = tmp_path / ".env.example"
-        example.write_text("ANTHROPIC_API_KEY=sk-ant-...\nDEBUG=true\n")
-
-        result = auto_generate_env(tmp_path)
-        assert result is True
-
-        env = tmp_path / ".env"
-        assert env.exists()
-        content = env.read_text()
-        # Placeholder secret line is emitted COMMENTED, not an active blank
-        assert "# ANTHROPIC_API_KEY=" in content
-        assert "sk-ant-..." not in content
-        # Non-placeholder value should remain active
-        assert "DEBUG=true" in content
-
-    def test_env_file_permissions(self, tmp_path: Path):
-        """P0-1: .env must have 0o600 permissions (owner read/write only)."""
-        from core.wiring.startup import auto_generate_env
-
-        example = tmp_path / ".env.example"
-        example.write_text("KEY=sk-ant-...\n")
-
-        auto_generate_env(tmp_path)
-        env = tmp_path / ".env"
-        mode = env.stat().st_mode & 0o777
-        assert mode == 0o600, f"Expected 0o600, got {oct(mode)}"
-
-    def test_atomic_write_no_partial(self, tmp_path: Path):
-        """P0-2: .env should not exist as .tmp after successful write."""
-        from core.wiring.startup import auto_generate_env
-
-        example = tmp_path / ".env.example"
-        example.write_text("KEY=value\n")
-
-        auto_generate_env(tmp_path)
-        assert not (tmp_path / ".env.tmp").exists()
-        assert (tmp_path / ".env").exists()
-
-    def test_skips_existing_env(self, tmp_path: Path):
-        from core.wiring.startup import auto_generate_env
-
-        example = tmp_path / ".env.example"
-        example.write_text("KEY=sk-...\n")
-        env = tmp_path / ".env"
-        env.write_text("KEY=my-real-key\n")
-
-        result = auto_generate_env(tmp_path)
-        assert result is False
-        # Original .env should be untouched
-        assert env.read_text() == "KEY=my-real-key\n"
-
-    def test_no_example_file(self, tmp_path: Path):
-        from core.wiring.startup import auto_generate_env
-
-        # Neither .env nor .env.example exist
-        result = auto_generate_env(tmp_path)
-        assert result is False
-        assert not (tmp_path / ".env").exists()
-
-    def test_replaces_placeholders(self, tmp_path: Path):
-        from core.wiring.startup import auto_generate_env
-
-        example = tmp_path / ".env.example"
-        example.write_text(
-            "ANTHROPIC_API_KEY=sk-ant-...\n"
-            "OPENAI_API_KEY=sk-...\n"
-            "ZAI_API_KEY=...\n"
-            "DEBUG=true\n"
-            "# This is a comment\n"
-            "GEODE_MODEL=claude-opus-4-6\n"
-        )
-
-        result = auto_generate_env(tmp_path)
-        assert result is True
-
-        content = (tmp_path / ".env").read_text()
-        lines = content.strip().split("\n")
-
-        # Placeholders become COMMENTED — no active blank secret entry
-        assert lines[0] == "# ANTHROPIC_API_KEY="
-        assert lines[1] == "# OPENAI_API_KEY="
-        assert lines[2] == "# ZAI_API_KEY="
-        # No active (uncommented) blank key line survives
-        assert not any(ln == "ANTHROPIC_API_KEY=" for ln in lines)
-
-        # Non-placeholders preserved
-        assert "DEBUG=true" in content
-        assert "# This is a comment" in content
-        assert "GEODE_MODEL=claude-opus-4-6" in content
-
-    def test_preserves_comments(self, tmp_path: Path):
-        from core.wiring.startup import auto_generate_env
-
-        example = tmp_path / ".env.example"
-        example.write_text(
-            "# Anthropic\nANTHROPIC_API_KEY=sk-ant-...\n\n# OpenAI\nOPENAI_API_KEY=sk-...\n"
-        )
-
-        auto_generate_env(tmp_path)
-        content = (tmp_path / ".env").read_text()
-        assert "# Anthropic" in content
-        assert "# OpenAI" in content
+    monkeypatch.chdir(tmp_path)
+    with (
+        patch("core.cli.welcome.check_readiness", return_value=ReadinessReport(blocked=True)),
+        patch("core.cli.welcome.dry_run_opted_in", return_value=False),
+        patch("core.cli.welcome.env_setup_wizard", return_value=False),
+        patch("core.cli.ipc_client.start_serve_if_needed") as spawn,
+        pytest.raises(typer.Exit) as cancelled,
+    ):
+        _run_main(Mock(invoked_subcommand=None), False, False, "", False)
+    assert cancelled.value.exit_code != 0
+    spawn.assert_not_called()
+    assert list(tmp_path.iterdir()) == []
 
 
 class TestResolveProvider:
@@ -540,56 +430,6 @@ class TestModelProfiles:
             for offering in MODEL_OFFERINGS
             if offering.provider == "glm" and "payg" in offering.sources
         }
-
-
-class TestSetupProjectMemory:
-    def test_creates_memory(self, tmp_path: Path):
-        created = setup_project_memory(tmp_path)
-        assert created is True
-        assert (tmp_path / ".geode" / "memory" / "PROJECT.md").exists()
-
-    def test_idempotent(self, tmp_path: Path):
-        assert setup_project_memory(tmp_path) is True
-        assert setup_project_memory(tmp_path) is False
-
-
-class TestSetupUserProfileWarning:
-    """Fix 1: setup_user_profile() logs warning (not debug) on failure."""
-
-    def test_logs_warning_on_exception(self):
-        """setup_user_profile() should log.warning on failure, not log.debug."""
-        from unittest.mock import MagicMock
-
-        from core.wiring.startup import setup_user_profile
-
-        mock_profile = MagicMock()
-        mock_profile.ensure_structure.side_effect = RuntimeError("boom")
-
-        with (
-            patch(
-                "core.memory.user_profile.FileBasedUserProfile",
-                return_value=mock_profile,
-            ),
-            patch("core.wiring.startup.log") as mock_log,
-        ):
-            result = setup_user_profile()
-            assert result is False
-            mock_log.warning.assert_called_once()
-            assert "boom" in str(mock_log.warning.call_args)
-
-    def test_returns_false_on_failure(self):
-        from unittest.mock import MagicMock
-
-        from core.wiring.startup import setup_user_profile
-
-        mock_profile = MagicMock()
-        mock_profile.ensure_structure.side_effect = OSError("denied")
-
-        with patch(
-            "core.memory.user_profile.FileBasedUserProfile",
-            return_value=mock_profile,
-        ):
-            assert setup_user_profile() is False
 
 
 class TestReadinessProfileStatus:

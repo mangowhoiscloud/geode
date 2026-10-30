@@ -56,7 +56,8 @@ class TestCheckProfileStore:
         ):
             result = _check_profile_store()
         assert result.ok is False
-        assert "geode setup" in result.fix
+        assert "/login health" in result.fix
+        assert "/model" in result.fix
         assert "selected model" in result.detail
 
     def test_available_route_with_unavailable_selected_model(self):
@@ -65,9 +66,12 @@ class TestCheckProfileStore:
             patch("core.llm.routing.model_available", return_value=False),
         ):
             result = _check_profile_store()
-        assert result.ok is True
+        assert result.ok is False
+        assert "usable route: yes" in result.detail
         assert "unavailable" in result.detail
         assert "upstream acceptance not tested" in result.detail
+        assert "/login health" in result.fix
+        assert "/model" in result.fix
 
 
 class TestCheckServeSocket:
