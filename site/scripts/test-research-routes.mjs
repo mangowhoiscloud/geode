@@ -43,6 +43,16 @@ assert(projected.includes("href='/geode/research/'+(english?'?lang=en':'')+'#jev
 assert(!/(["'])assets\//.test(projected), "All relative asset references must be rebased");
 const stage = html => html.slice(html.indexOf('<div class="stage"'), html.indexOf('<script>'));
 assert(stage(source).length > 100000, "Exercise actual scene content");
+// Native scroll input must not select scenes; the archived film stays intact.
+assert(!/document\.addEventListener\(['"]keydown/.test(projected));
+assert(!/addEventListener\(['"](?:wheel|touchstart|touchmove|touchend)['"]/.test(projected));
+assert(!/\.(?:scrollIntoView|scrollTo|scrollBy)\(/.test(projected));
+assert(!/(?:touch-action|overscroll-behavior)\s*:/.test(projected));
+assert(!/html[^{}]*\{[^}]*overflow\s*:\s*hidden/.test(projected));
+for (const action of ["document.getElementById('previous').onclick=()=>advance(-1)",
+  "document.getElementById('next').onclick=()=>advance(1)", "window.__film="])
+  assert(projected.includes(action), `Explicit publication control remains: ${action}`);
+
 assert.equal(stage(projected).replaceAll(legacyPath, ""), stage(source), "No scene text, figures, or ordering changes");
 for (const item of [...receipt.assets, ...receipt.pdfs]) {
   const path = item.path ?? item.file;

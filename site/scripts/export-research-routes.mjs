@@ -3,8 +3,6 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { attachReaderSwipe } from "../src/lib/reader-swipe.mjs";
-import { attachReaderWheel } from "../src/lib/reader-wheel.mjs";
 
 export const legacyPath = "/geode/resaerch/jev-system1-offloading/";
 export const readerPath = "/geode/research/jev-system1-offloading/";
@@ -28,7 +26,28 @@ export function projectReader(source) {
   html = html.replace("</style>", `
 @media(min-width:768px) and (hover:hover) and (pointer:fine){.reader-pager button{min-width:72px}.reader-navigation .reader-pager button:focus-visible{background:var(--surface-card)}}
 </style>`);
-  // The frozen film's show() owns all scene navigation (TOC, keyboard, overview,
+  // The publication keeps its historical source bytes. The live reader uses
+  // native input; only explicit controls select scenes or builds.
+  const keyboard = source.match(/document\.addEventListener\('keydown',e=>\{[^\n]*\}\);/);
+  assert(keyboard, "Frozen reader keyboard boundary changed");
+  html = replaceRequired(html, keyboard[0], "");
+  const dialogKeyboard = source.match(/readerSources\.addEventListener\('keydown',e=>\{[^\n]*\}\);/);
+  assert(dialogKeyboard, "Frozen reader dialog boundary changed");
+  html = replaceRequired(html, dialogKeyboard[0], "");
+
+  for (const control of [
+    "button,a{touch-action:manipulation}",
+    "html.reader-sources-open{overflow:hidden}",
+    "overscroll-behavior:contain;",
+    "readerPlainText.scrollIntoView({block:'start',behavior:'instant'});",
+    "document.documentElement.classList.add('reader-sources-open');",
+    "document.documentElement.classList.remove('reader-sources-open');",
+    "document.getElementById('readerTextContent').addEventListener('keydown',e=>e.stopPropagation());",
+  ]) html = replaceRequired(html, control, "");
+  html = replaceRequired(html,
+    "html.render-mode,html.render-mode body{width:1920px;height:1080px;overflow:hidden;",
+    "html.render-mode,html.render-mode body{width:1920px;height:1080px;");
+  // The frozen film's show() owns explicit scene navigation (TOC, overview,
   // and pager). Project that boundary once; builds within a scene stay local.
   return html.replace("</script>", `
 let restoringResearchRoute=false;
@@ -41,14 +60,6 @@ function restoreResearchRoute(){
 }
 window.addEventListener('popstate',restoreResearchRoute);
 readerSourcesButton.addEventListener('click',()=>{if(location.hash!=='#readerSources')history.pushState(history.state,'','#readerSources');});
-// Swipes move whole scenes; the original pager still controls in-scene builds.
-if(!renderMode) (${attachReaderSwipe.toString()})(stage,direction=>{
- const next=state.index+direction;
- if(!state.overview&&next>=0&&next<slides.length)show(next);
-});
-if(!renderMode) (${attachReaderWheel.toString()})(stage,
- direction=>!state.overview&&state.index+direction>=0&&state.index+direction<slides.length,
- direction=>show(state.index+direction));
 </script>`);
 }
 

@@ -7,7 +7,6 @@
 html:has(.jevdb-reader) { background: #edf0f4; scrollbar-color: #cbd1dc #edf0f4; scroll-behavior: auto; }
 .jevdb-reader * { scrollbar-color: var(--reader-line) var(--reader-canvas); }
 .jevdb-reader ::selection { background: #e3e8f8; color: var(--reader-ink); }
-.jevdb-reader button, .jevdb-reader a { touch-action: manipulation; }
 .jevdb-reader button { cursor: pointer; }
 .jevdb-reader :focus-visible { outline: 2px solid var(--reader-accent); outline-offset: 3px; }
 .jevdb-reader button:disabled { color: var(--reader-muted); opacity: .6; cursor: not-allowed; }
@@ -34,7 +33,7 @@ html:has(.jevdb-reader) { background: #edf0f4; scrollbar-color: #cbd1dc #edf0f4;
 .jevdb-contents-hidden .jevdb-toc { display: none; }
 .jevdb-toc h2 { min-height: 64px; display: flex; align-items: center; gap: 4px; margin: 0; font-size: 13px; font-weight: 600; }
 .jevdb-toc small, .jevdb-dialog-heading small { font-size: 12px; font-weight: 400; color: var(--reader-muted); }
-.jevdb-scene-list { overflow: auto; overscroll-behavior: contain; padding: 4px 4px 12px; }
+.jevdb-scene-list { overflow: auto; padding: 4px 4px 12px; }
 .jevdb-scene-list a { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; min-height: 44px; padding: 10px 8px; margin-bottom: 2px; border-radius: 4px; color: var(--reader-muted); font-size: 12px; line-height: 1.45; }
 .jevdb-scene-list a > span:first-child { font-family: "Jev Reader Mono", monospace; font-size: 11px; padding-top: 1px; }
 .jevdb-scene-list a:hover, .jevdb-scene-list a[aria-current="page"] { background: var(--reader-surface); color: var(--reader-ink); }
@@ -69,7 +68,6 @@ html:has(.jevdb-reader) { background: #edf0f4; scrollbar-color: #cbd1dc #edf0f4;
 .jevdb-footer p { font-size: 12px; line-height: 1.65; color: var(--reader-muted); margin: 0; }
 .jevdb-footer button { min-height: 44px; padding: 0; border-radius: 4px; font-size: 13px; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--reader-line); }
 .jevdb-footer button:hover { text-decoration-color: currentColor; }
-body:has(.jevdb-dialog[open]) { overflow: hidden; }
 .jevdb-dialog { position: fixed; margin: 0; padding: 0; max-height: none; border: 1px solid var(--reader-line); border-radius: 6px; background: var(--reader-canvas); color: var(--reader-ink); overflow: hidden; }
 .jevdb-dialog[open] { display: flex; flex-direction: column; }
 .jevdb-dialog::backdrop { background: color-mix(in srgb, var(--reader-ink) 30%, transparent); }
@@ -78,7 +76,7 @@ body:has(.jevdb-dialog[open]) { overflow: hidden; }
 .jevdb-dialog-heading h2 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.4; }
 .jevdb-dialog-heading button { min-width: 64px; border: 1px solid var(--reader-line); }
 .jevdb-sources { inset: 16px 16px 16px auto; width: 600px; max-width: calc(100vw - 32px); height: calc(100dvh - 32px); }
-.jevdb-sources-body { overflow: auto; overscroll-behavior: contain; min-height: 0; padding: 20px 24px 28px; }
+.jevdb-sources-body { overflow: auto; min-height: 0; padding: 20px 24px 28px; }
 .jevdb-sources-body p { font-size: 13px; line-height: 1.65; color: var(--reader-muted); margin: 0; }
 .jevdb-sources-body section { margin-top: 28px; }
 .jevdb-sources-body h3 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
