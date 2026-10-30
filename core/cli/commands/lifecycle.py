@@ -432,7 +432,8 @@ def _print_status_text(report: StatusReport) -> None:
     console.print()
 
     if report.serve_running:
-        console.print(f"  Serve:   [success]Running[/success] (PID {report.serve_pid})")
+        owner = f" (PID {report.serve_pid})" if report.serve_pid is not None else ""
+        console.print(f"  Serve:   [success]Running[/success]{owner}")
     else:
         console.print("  Serve:   [muted]Stopped[/muted]")
 

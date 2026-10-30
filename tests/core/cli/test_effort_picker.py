@@ -16,6 +16,13 @@ Pinned 2026-04-28 against:
 
 from __future__ import annotations
 
+import json
+import os
+import pty
+import subprocess
+import sys
+import termios
+import time
 from unittest.mock import patch
 
 import pytest
@@ -421,3 +428,54 @@ def test_picker_renders_all_supported_efforts_and_preserves_noop_enter(
     assert choices.count("\033[1;36m") == 1
     assert result.effort == current_effort
     assert result.cancelled is False
+
+
+@pytest.mark.parametrize(
+    ("sequence", "expected"),
+    [
+        (b"\x1b", ("QUIT",)),
+        (b"\x1b[", ("QUIT",)),
+        (b"\x1b[1", ("QUIT",)),
+        (b"\x1bO", ("QUIT",)),
+        (b"\x1b[1;5C", ("RIGHT",)),
+        (b"\x1b[B\r", ("DOWN", "ENTER")),
+        (b"\x1b[A", ("UP",)),
+        (b"\x1b[B", ("DOWN",)),
+        (b"\x1b[C", ("RIGHT",)),
+        (b"\x1b[D", ("LEFT",)),
+        (b"\x1bOA", ("UP",)),
+        (b"\t", ("TAB",)),
+    ],
+)
+def test_real_terminal_key_finishes_without_another_key(
+    sequence: bytes, expected: tuple[str, ...]
+) -> None:
+    """Escape and incomplete sequences cannot consume the next REPL command."""
+    master, slave = pty.openpty()
+    script = (
+        "import json,termios; from core.cli.effort_picker import _read_key; "
+        "before=termios.tcgetattr(0); keys=[_read_key() for _ in range(COUNT)]; after=termios.tcgetattr(0); "
+        # macOS may set the transient pending-input bit while restoring modes.
+        "before[3]&=~getattr(termios,'PENDIN',0); after[3]&=~getattr(termios,'PENDIN',0); "
+        "print(json.dumps({'keys':keys,'restored':after==before}))"
+    )
+    script = script.replace("COUNT", str(len(expected)))
+    process = subprocess.Popen(  # noqa: S603 — fixed interpreter and test-owned script
+        [sys.executable, "-c", script], stdin=slave, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while termios.tcgetattr(slave)[3] & termios.ICANON:
+            assert process.poll() is None, "key reader exited before entering raw mode"
+            assert time.monotonic() < deadline, "key reader never entered raw mode"
+            time.sleep(0.01)
+        os.write(master, sequence)
+        stdout, stderr = process.communicate(timeout=2)
+        assert process.returncode == 0, stderr.decode()
+        assert json.loads(stdout) == {"keys": list(expected), "restored": True}
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=2)
+        os.close(master)
+        os.close(slave)

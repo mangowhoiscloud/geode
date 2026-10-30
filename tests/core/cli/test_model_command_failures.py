@@ -47,6 +47,37 @@ def command_client(monkeypatch):
     return client, output, persist, apply, picker
 
 
+@pytest.mark.parametrize("role", ["primary", "reflection"])
+@pytest.mark.parametrize("blocked", [False, True])
+def test_picker_cancel_only_reports_auth_when_a_model_was_blocked(
+    monkeypatch, command_client, role, blocked
+):
+    from core.cli.effort_picker import PickerResult
+
+    client, output, persist, apply, picker = command_client
+    original = dict(client.model_config)
+    monkeypatch.setattr(
+        client, "inspect_model_routes", lambda queries: dict.fromkeys(queries, True)
+    )
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        command, "model_unavailable_reason", lambda *a, **kw: pytest.fail("local auth recheck")
+    )
+    picker.return_value = PickerResult(
+        "gpt-6-sol",
+        "high",
+        cancelled=True,
+        role=role,
+        blocked_model_id="gpt-6.1-sol" if blocked else None,
+    )
+    command.cmd_model("" if role == "primary" else role, client=client)
+    assert "Cancelled" in output.getvalue()
+    assert ("/login" in output.getvalue()) is blocked
+    assert client.model_config == original
+    persist.assert_not_called()
+    apply.assert_not_called()
+
+
 @pytest.mark.parametrize("entry", ["named", "picker", "role-picker", "list"])
 @pytest.mark.parametrize("failure", ["old-feature", "disconnected", "malformed", "incomplete"])
 def test_public_command_reports_route_failure_without_selection_or_persistence(

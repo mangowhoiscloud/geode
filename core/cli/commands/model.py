@@ -516,19 +516,8 @@ def _interactive_model_picker(*, client: IPCClient | None = None) -> None:
         role_model_availability=availability,
     )
     if result.cancelled:
-        # M5 — surface the "login first" path explicitly when the user
-        # tried to pick an unavailable model. ``pick_model_and_effort``
-        # returns ``cancelled=True`` for both q/ESC and the blocked-Enter
-        # case; if the cursor still points at an unavailable entry we
-        # assume the latter.
         _pkg.console.print("  [muted]Cancelled[/muted]")
-        reason = model_unavailable_reason(
-            result.model_id,
-            source=_selection_source(result.model_id, role_by_name(result.role), client),
-        )
-        if reason:
-            _pkg.console.print(f"  [warning]{reason}[/warning]")
-        else:
+        if result.blocked_model_id is not None:
             _pkg.console.print(
                 "  [muted]Unavailable models need a supported source/model pair and "
                 "usable credentials. Run `/login` to manage credentials.[/muted]"
@@ -694,12 +683,11 @@ def _interactive_model_picker_for_role(
     )
     if result.cancelled:
         _pkg.console.print("  [muted]Cancelled[/muted]")
-        reason = model_unavailable_reason(
-            result.model_id,
-            source=_selection_source(result.model_id, role_by_name(result.role), client),
-        )
-        if reason:
-            _pkg.console.print(f"  [warning]{reason}[/warning]")
+        if result.blocked_model_id is not None:
+            _pkg.console.print(
+                "  [muted]Unavailable models need a supported source/model pair and "
+                "usable credentials. Run `/login` to manage credentials.[/muted]"
+            )
         _pkg.console.print()
         return
     _apply_picker_result(result, model_profiles, client=client)

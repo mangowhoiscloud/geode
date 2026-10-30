@@ -65,6 +65,10 @@ functional change.
 - **Actionable startup failures.** Distinguish child exit, timeout and spawn
   errors, and show bounded redacted diagnostics from the current attempt with
   the workspace log and foreground recovery command.
+- **Model picker keyboard recovery.** Escape and incomplete terminal key
+  sequences return without waiting for another key, while queued arrow/Enter
+  input is preserved. Ordinary cancellation no longer suggests an authentication
+  failure, and status output omits an unverified process ID.
 
 ### Security
 
