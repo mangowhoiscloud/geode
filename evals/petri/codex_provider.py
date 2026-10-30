@@ -114,7 +114,7 @@ def register() -> None:
         def _geode_official_endpoint(self) -> bool:
             from core.config import CODEX_BASE_URL
 
-            return self.base_url == CODEX_BASE_URL  # an explicit override is not Codex
+            return isinstance(self.base_url, str) and self.base_url == CODEX_BASE_URL
 
         def __init__(self, *args: _Any, **kwargs: _Any) -> None:
             from core.config import CODEX_BASE_URL

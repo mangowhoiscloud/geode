@@ -85,7 +85,10 @@ def test_release_checks_lock_before_uv_and_probes_installed_daemon() -> None:
     _, smoke_step = named["Clean wheel install smoke"]
     smoke = str(smoke_step["run"])
     assert 'exec "$release_venv/bin/geode" serve --poll 0.05' in smoke
-    assert 'test -S "$GEODE_HOME/cli.sock"' in smoke
+    assert 'test -S "$daemon_socket"' in smoke
+    assert "resolve_cli_socket_path(sys.argv[1])" in smoke
+    assert '"$release_venv/bin/python" -I - "$daemon_workspace"' in smoke
+    assert "$GEODE_HOME/cli.sock" not in smoke
     assert "query_serve_version" in smoke
     assert "timeout_s=30.0" in smoke
     assert "cleanup_daemon" in smoke

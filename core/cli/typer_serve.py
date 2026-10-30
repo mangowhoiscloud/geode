@@ -713,8 +713,64 @@ def _serve(
                 raise typer.Exit(1) from ingress_error
 
 
-# Public outer-composition seam.
-run_serve = _serve
+def run_serve(
+    poll_interval: float,
+    *,
+    services_builder: Callable[..., Any] | None = None,
+    runtime_builder: Callable[[], Any] | None = None,
+) -> None:
+    """Own one workspace daemon for its entire startup and shutdown lifetime."""
+    import fcntl
+    import json
+    import os
+    from contextlib import ExitStack
+
+    import psutil
+
+    from core.config import settings
+    from core.paths import CLI_SOCKET_PATH, SERVE_LOCK_PATH, get_project_root
+
+    # Canonical ownership participates in shared-home update/uninstall guards.
+    # A custom transport retains its own lease so two workspaces cannot replace
+    # one another's Unix socket between the live probe and bind.
+    with ExitStack() as leases:
+        owner = None
+        for path in dict.fromkeys((SERVE_LOCK_PATH, CLI_SOCKET_PATH.with_suffix(".serve.lock"))):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor = leases.enter_context(path.open("a+"))
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                console.print(
+                    "  [error]GEODE is already serving this workspace or endpoint.[/error]"
+                )
+                raise typer.Exit(1) from exc
+            if owner is None:
+                owner = descriptor
+        assert owner is not None
+        try:
+            owner.seek(0)
+            owner.truncate()
+            json.dump(
+                {
+                    "pid": os.getpid(),
+                    "create_time": psutil.Process().create_time(),
+                    "workspace": str(get_project_root()),
+                    "socket_path": str(CLI_SOCKET_PATH),
+                    "gateway_enabled": settings.gateway_enabled,
+                },
+                owner,
+            )
+            owner.flush()
+            _serve(
+                poll_interval,
+                services_builder=services_builder,
+                runtime_builder=runtime_builder,
+            )
+        finally:
+            owner.seek(0)
+            owner.truncate()
+            fcntl.flock(owner, fcntl.LOCK_UN)
 
 
 def _build_runtime_for_serve(

@@ -1,4 +1,4 @@
-"""Project Journal — append-only run record for the .geode/journal/ directory.
+"""Project Journal — append-only run record for the ~/.geode/projects/{id}/journal/ directory.
 
 Context Layer C2: "What have we done so far?"
 
@@ -6,7 +6,7 @@ The journal answers what analyses and tasks ran in this project. Session
 timelines own call costs and errors; active memory owns accepted learning.
 
 Files:
-  .geode/journal/runs.jsonl     — execution history (1 line per run)
+  ~/.geode/projects/{id}/journal/runs.jsonl     — execution history (1 line per run)
 
 Historical costs.jsonl, learned.md, and errors.jsonl files are left untouched.
 """
@@ -25,7 +25,7 @@ from core.time_format import format_age
 
 log = logging.getLogger(__name__)
 
-# Default resolves to ~/.geode/projects/{id}/journal/ with fallback to .geode/journal/
+# Default resolves to ~/.geode/projects/{id}/journal/
 _DEFAULT_JOURNAL_DIR: Path | None = None
 
 
@@ -83,7 +83,7 @@ class RunRecord:
 
 
 class ProjectJournal:
-    """Append-only project journal backed by .geode/journal/.
+    """Append-only project journal backed by ~/.geode/projects/{id}/journal/.
 
     Usage::
 

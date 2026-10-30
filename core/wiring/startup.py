@@ -142,11 +142,6 @@ def has_available_llm_credential(provider: str | None = None) -> bool:
         return False
 
 
-def _has_any_llm_key() -> bool:
-    """Legacy onboarding name; includes stored and managed credential routes."""
-    return has_available_llm_credential()
-
-
 # ---------------------------------------------------------------------------
 # Readiness Report
 # ---------------------------------------------------------------------------
@@ -187,7 +182,7 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     report = ReadinessReport()
 
     # Read the same route/eligibility decision as model selection and requests.
-    has_credential = _has_any_llm_key()
+    has_credential = has_available_llm_credential()
     report.has_api_key = has_credential
     if has_credential:
         report.capabilities.append(Capability(name="LLM Analysis", available=True))

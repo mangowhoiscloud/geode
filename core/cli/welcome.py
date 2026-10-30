@@ -52,9 +52,9 @@ def _welcome_screen() -> None:
     # Auto-generate .env from .env.example (placeholder → empty)
     auto_generate_env()
 
-    from core.wiring.startup import _has_any_llm_key
+    from core.wiring.startup import has_available_llm_credential
 
-    if _has_any_llm_key():
+    if has_available_llm_credential():
         clear_dry_run_opt_in()
     elif not dry_run_opted_in():
         env_setup_wizard()

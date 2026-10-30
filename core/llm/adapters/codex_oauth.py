@@ -4,10 +4,9 @@ Layer 3 adapter for OpenAI provider, source=subscription. Uses the
 ``chatgpt.com/backend-api/codex`` endpoint with the OAuth token resolved by
 :func:`core.llm.providers.codex.resolve_codex_token` — which checks **both**
 the GEODE ``ProfileStore`` (``openai-codex`` profile registered via
-``/login openai``) *and* the external ``~/.codex/auth.json`` (Codex CLI
-fallback). Codex MCP review 2026-05-23 HIGH finding: the prior version only
-checked ``~/.codex/auth.json``, which broke users who only had a GEODE-issued
-profile.
+``/login openai``) and the read-only imported Codex CLI profile. Admission
+uses the shared routing policy; disabled, expired, or cooling-down imported
+profiles never fall through to a raw token read.
 
 Adapter owns its own ``AsyncOpenAI`` client (Codex MCP BLOCKER fix — the
 module-level singleton in ``core.llm.providers.codex`` would shadow per-call
@@ -155,7 +154,7 @@ class CodexOAuthAdapter:
         if not resolved:
             raise RuntimeError(
                 "CodexOAuthAdapter: ChatGPT OAuth not found. Looked in GEODE "
-                f"ProfileStore ('openai-codex' profile) and {codex_auth_path()}. "
+                f"eligible subscription profiles, including {codex_auth_path()}. "
                 "Run ``/login openai`` in GEODE or ``codex login`` in the "
                 "Codex CLI to provision credentials, or use the openai-payg adapter."
             )
@@ -201,6 +200,9 @@ class CodexOAuthAdapter:
         """
         self._require_model_allowed(req.model)
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
+        from core.auth.oauth_refresh import refresh_native_oauth
+
+        await refresh_native_oauth(req.model, sources=self.routing_sources)
         client = self._get_client(req.model)
         # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — pre-send input-shape
         # diagnostic backfilled from the now-deleted
@@ -347,6 +349,9 @@ class CodexOAuthAdapter:
         search_model = model or CODEX_PRIMARY
         self._require_model_allowed(search_model)
         reasoning_kwargs = openai_effort_kwargs(search_model, effort)
+        from core.auth.oauth_refresh import refresh_native_oauth
+
+        await refresh_native_oauth(search_model, sources=self.routing_sources)
         client = self._get_client(search_model)
         text_parts: list[str] = []
         source_urls: list[str] = []
@@ -436,6 +441,9 @@ class CodexOAuthAdapter:
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         self._require_model_allowed(req.model)
         kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
+        from core.auth.oauth_refresh import refresh_native_oauth
+
+        await refresh_native_oauth(req.model, sources=self.routing_sources)
         client = self._get_client(req.model)
         async with client.responses.stream(**kwargs) as stream:
             async for event in translate_responses_stream(stream):
@@ -484,15 +492,23 @@ class CodexOAuthAdapter:
         return self.detect_model_credential(CODEX_PRIMARY)
 
     def detect_model_credential(self, model: str) -> CredentialDetection | None:
-        from core.llm.providers.codex import _resolve_codex_token_info
+        from core.llm.providers.codex import _resolve_codex_routing
 
         self._require_model_allowed(model)
-        resolved = _resolve_codex_token_info(
-            force_refresh=True, model=model, sources=self.routing_sources
+        target = _resolve_codex_routing(
+            force_refresh=True,
+            model=model,
+            sources=self.routing_sources,
+            allow_refreshable=True,
         )
-        if resolved is None:
+        if target is None:
             return None
-        return CredentialDetection(model=model, provider=self.provider, source_path=resolved.source)
+        suffix = " (refresh required)" if target.profile.is_expired else ""
+        return CredentialDetection(
+            model=model,
+            provider=self.provider,
+            source_path=f"profile:{target.profile.name}{suffix}",
+        )
 
 
 def _dump_empty_text_postmortem(

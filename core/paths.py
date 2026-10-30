@@ -17,8 +17,8 @@ Three-tier directory structure:
     Project config (gateway bindings), memory, rules, skills, reports, cache,
     scheduler, hooks, tool-offload, plans.
 
-Project ID encoding follows Claude Code's convention:
-  /home/user/workspace/geode  ->  -home-user-workspace-geode
+Project data and runtime endpoints use a canonical-path digest with a persisted
+workspace owner. Legacy stores are migrated once, never selected as read fallbacks.
 
 Both root overrides ``.expanduser()`` so a ``~`` in the env expands.
 """
@@ -576,14 +576,26 @@ GLOBAL_SEARCH_DB = GEODE_HOME / "search" / "global.db"
 # Project-scoped user data root
 GLOBAL_PROJECTS_DIR = GEODE_HOME / "projects"
 
-# Lifecycle / daemon paths (v0.63.0 — surfaced for /stop, /clean, /uninstall).
-# Single source of truth so any future relocation is one-line. Existing
-# duplicates in ``ipc_client.py`` + ``poller.py`` (DEFAULT_SOCKET_PATH) +
-# ``mcp/registry.py`` (_CACHE_FILE) match these values; dedup is a
-# follow-up refactor.
-CLI_SOCKET_PATH = GEODE_HOME / "cli.sock"
-CLI_STARTUP_LOCK = GEODE_HOME / "cli.startup.lock"
-SERVE_LOG_PATH = GEODE_HOME / "logs" / "serve.log"
+
+def encode_project_id(workspace_path: str | Path | None = None) -> str:
+    """Stable identity of a canonical invocation directory, independent of Git."""
+    import hashlib
+
+    workspace = Path(workspace_path or Path.cwd()).expanduser().resolve()
+    return hashlib.blake2s(os.fsencode(workspace), digest_size=16).hexdigest()
+
+
+def resolve_cli_socket_path(workspace_path: str | Path | None = None) -> Path:
+    """Use the same workspace identity for runtime endpoints and durable state."""
+    return GEODE_HOME / "run" / encode_project_id(workspace_path) / "cli.sock"
+
+
+CLI_SOCKET_PATH = (
+    Path(os.environ.get("GEODE_CLI_SOCKET") or resolve_cli_socket_path()).expanduser().resolve()
+)
+CLI_STARTUP_LOCK = CLI_SOCKET_PATH.with_suffix(".startup.lock")
+SERVE_LOCK_PATH = resolve_cli_socket_path().with_suffix(".serve.lock").resolve()
+SERVE_LOG_PATH = SERVE_LOCK_PATH.parent / "serve.log"
 # PR-SESSION-METRICS (2026-05-23) — ``journal/`` depth 제거. 이전엔
 # ``~/.geode/journal/transcripts/<project-slug>/<session_id>.jsonl`` 이중
 # nesting 이었으나 transcript 가 단독 Tier-1 으로 정렬되며 ``journal/``
@@ -649,45 +661,29 @@ def get_project_root() -> Path:
 
     Follows Claude Code's ``originalCwd`` pattern: the sandbox boundary is
     the directory where the CLI was invoked, **not** the package installation
-    path.  ``lru_cache`` ensures the value is frozen after the first call,
-    which happens during CLI startup.
+    path. The caller passes this identity across the CLI/daemon boundary.
     """
     return Path.cwd().resolve()
 
 
 # ---------------------------------------------------------------------------
-# Project ID — Claude Code-style path encoding
+# Project storage — canonical identity with one-time, ownership-checked migration.
 # ---------------------------------------------------------------------------
 
 
-def encode_project_id(workspace_path: str | Path | None = None) -> str:
-    """Encode a workspace path into a project ID.
-
-    Follows Claude Code's convention: replace ``/`` with ``-``.
-    Example: ``/home/user/workspace/geode`` -> ``-home-user-workspace-geode``
-
-    Args:
-        workspace_path: Absolute workspace path. Defaults to ``cwd()``.
-    """
-    if workspace_path is None:
-        workspace_path = Path.cwd()
-    path_str = str(Path(workspace_path).resolve())
-    return path_str.replace(os.sep, "-")
-
-
-@lru_cache(maxsize=4)
 def get_project_data_dir(workspace_path: str | Path | None = None) -> Path:
-    """User-level project-scoped data directory.
-
-    Returns ``~/.geode/projects/{project_id}/``.
-    """
-    project_id = encode_project_id(workspace_path)
-    return GLOBAL_PROJECTS_DIR / project_id
+    """Resolve without side effects; bootstrap admits/migrates the store before use."""
+    return GLOBAL_PROJECTS_DIR / encode_project_id(workspace_path)
 
 
-# ---------------------------------------------------------------------------
-# Project-scoped user directories (session, journal)
-# ---------------------------------------------------------------------------
+def admit_project_data_dir(workspace_path: str | Path | None = None) -> Path:
+    """Prepare a workspace at a durable-reader boundary, never at module import."""
+    from core.wiring.layout_migrator import ensure_project_layout
+
+    workspace = Path(workspace_path or Path.cwd()).expanduser().resolve()
+    target = get_project_data_dir(workspace)
+    ensure_project_layout(workspace, target)
+    return target
 
 
 def get_project_journal_dir(workspace_path: str | Path | None = None) -> Path:
@@ -706,55 +702,31 @@ def resolve_pending_asks_dir(workspace_path: str | Path | None = None) -> Path:
     Lives beside the sessions dir on purpose — every ask references a
     session checkpoint, so both must share one visibility domain.
     """
-    return get_project_data_dir(workspace_path) / "pending_asks"
+    return admit_project_data_dir(workspace_path) / "pending_asks"
 
 
 # ---------------------------------------------------------------------------
-# Backward-compat: fallback to old project-level paths
+# Runtime readers have no alternate legacy store after migration.
 # ---------------------------------------------------------------------------
-
-# Old paths (pre-v0.31) stored these under {workspace}/.geode/
-_OLD_JOURNAL_DIR = PROJECT_GEODE_DIR / "journal"
-_OLD_SESSION_DIR = PROJECT_GEODE_DIR / "session"
-_OLD_RESULT_CACHE_DIR = PROJECT_GEODE_DIR / "result_cache"
-_OLD_VAULT_DIR = PROJECT_GEODE_DIR / "vault"
 
 
 def resolve_journal_dir(workspace_path: str | Path | None = None) -> Path:
-    """Resolve journal directory with backward-compat fallback.
-
-    Returns new path if it exists or old path doesn't exist.
-    Falls back to old path if it has data and new path is empty.
-    """
-    new = get_project_journal_dir(workspace_path)
-    return _resolve_with_fallback(new, _OLD_JOURNAL_DIR)
+    return admit_project_data_dir(workspace_path) / "journal"
 
 
 def resolve_sessions_dir(workspace_path: str | Path | None = None) -> Path:
-    """Resolve sessions directory with backward-compat fallback."""
-    new = get_project_sessions_dir(workspace_path)
-    return _resolve_with_fallback(new, _OLD_SESSION_DIR)
+    return admit_project_data_dir(workspace_path) / "sessions"
 
 
 def resolve_result_cache_dir(workspace_path: str | Path | None = None) -> Path:
-    """Resolve result cache directory with backward-compat fallback."""
-    new = get_project_data_dir(workspace_path) / "result_cache"
-    return _resolve_with_fallback(new, _OLD_RESULT_CACHE_DIR)
+    return admit_project_data_dir(workspace_path) / "result_cache"
 
 
 def resolve_vault_dir() -> Path:
-    """Resolve vault directory with backward-compat fallback."""
-    return _resolve_with_fallback(GLOBAL_VAULT_DIR, _OLD_VAULT_DIR)
+    from core.wiring.layout_migrator import migrate_workspace_vault
 
-
-def _resolve_with_fallback(new_path: Path, old_path: Path) -> Path:
-    """Return new_path unless old_path has data and new_path is empty/missing."""
-    if new_path.exists() and any(new_path.iterdir()):
-        return new_path
-    if old_path.exists() and any(old_path.iterdir()):
-        return old_path
-    # Neither has data — use new path (will be created on first write)
-    return new_path
+    migrate_workspace_vault(Path.cwd().resolve(), GLOBAL_VAULT_DIR)
+    return GLOBAL_VAULT_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -776,6 +748,13 @@ def ensure_directories() -> None:
     - Project (``.geode/``): memory, rules, skills, reports, scheduler_logs
     """
     created: list[str] = []
+
+    # Required state cutover precedes directory creation and optional maintenance.
+    # Keep resolvers pure so recovery/diagnostic commands remain usable on failure.
+    from core.wiring.layout_migrator import ensure_project_layout, migrate_workspace_vault
+
+    ensure_project_layout(Path.cwd(), get_project_data_dir())
+    migrate_workspace_vault(Path.cwd(), GLOBAL_VAULT_DIR)
 
     # --- Global tier ---
     global_dirs = [

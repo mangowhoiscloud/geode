@@ -83,7 +83,9 @@ def about() -> None:
     from core.paths import CLI_SOCKET_PATH  # PR-CLEANUP-D2 anchor
 
     sock_path = CLI_SOCKET_PATH
-    if sock_path.exists():
+    from core.cli.ipc_client import is_serve_running
+
+    if is_serve_running(sock_path):
         console.print(
             f"  [bold]Daemon[/bold]     [success]running[/success]  [muted]({sock_path})[/muted]"
         )
@@ -127,12 +129,12 @@ def setup(
         configure_computer_use_helper,
         env_setup_wizard,
     )
-    from core.wiring.startup import _has_any_llm_key
+    from core.wiring.startup import has_available_llm_credential
 
     # Credential setup (skipped when already satisfied unless --reset) — then
     # the command sandbox step runs unconditionally so it is reachable on
     # every machine, including ones with credentials configured and no Docker.
-    if reset or not _has_any_llm_key():
+    if reset or not has_available_llm_credential():
         env_setup_wizard()
     else:
         clear_dry_run_opt_in()

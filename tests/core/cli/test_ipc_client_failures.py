@@ -252,3 +252,38 @@ def test_fullscreen_exit_releases_approval_waiter_and_denies_late_approval(monke
     assert not worker.is_alive()
     assert decision == ["n"]
     assert app._on_approval_request({"tool_name": "late_write"}) == "n"
+
+
+def test_failed_daemon_start_reaps_only_spawned_child(tmp_path, monkeypatch):
+    from unittest.mock import Mock, patch
+
+    from core.cli.ipc_client import start_serve_if_needed
+
+    child = Mock()
+    child.poll.return_value = None
+    monkeypatch.setattr("core.cli.ipc_client.is_serve_running", lambda *_: False)
+    with patch("subprocess.Popen", return_value=child) as spawn:
+        assert not start_serve_if_needed(tmp_path / "cli.sock", timeout_s=0.01)
+    child.terminate.assert_called_once()
+    child.wait.assert_called_once_with(timeout=5)
+    child.kill.assert_not_called()
+    command = spawn.call_args.args[0]
+    import sys
+
+    assert command[0] == sys.executable
+    assert spawn.call_args.kwargs["env"]["GEODE_GATEWAY_ENABLED"] == "false"
+    assert spawn.call_args.kwargs["env"]["GEODE_CLI_SOCKET"] == str(tmp_path / "cli.sock")
+
+
+def test_failed_initial_connection_exits_nonzero(monkeypatch):
+    from unittest.mock import Mock
+
+    import typer
+    from core.cli import _thin_interactive_loop
+
+    client = Mock(last_error="workspace mismatch")
+    client.connect.return_value = False
+    monkeypatch.setattr("core.cli.ipc_client.IPCClient", lambda: client)
+    with pytest.raises(typer.Exit) as caught:
+        _thin_interactive_loop()
+    assert caught.value.exit_code == 1

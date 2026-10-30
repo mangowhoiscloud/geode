@@ -25,7 +25,6 @@ from core.cli.update_provenance import (
 from core.paths import (
     APPROVE_HISTORY,
     CLI_SOCKET_PATH,
-    CLI_STARTUP_LOCK,
     DEFAULT_GEODE_HOME,
     GEODE_HOME,
     GLOBAL_PROJECTS_DIR,
@@ -39,7 +38,9 @@ from core.paths import (
     PROJECT_RESULT_CACHE_DIR,
     PROJECT_SCHEDULER_LOG_DIR,
     PROJECT_TOOL_OFFLOAD,
+    SERVE_LOCK_PATH,
     SERVE_LOG_PATH,
+    get_project_root,
     is_path_within,
 )
 from core.ui.console import console
@@ -128,24 +129,34 @@ def _cleanup_legacy_transcripts(max_age_days: int) -> int:
 
 
 def _find_serve_pid() -> int | None:
-    """Find the PID of the running geode serve process via pgrep."""
+    """Resolve only the live owner of this workspace's daemon lock."""
+    import fcntl
+    import json
+
+    import psutil
+
     try:
-        result = subprocess.run(
-            ["pgrep", "-f", "geode serve"],  # noqa: S607
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            # Return first PID (main serve process)
-            for line in result.stdout.strip().split("\n"):
-                pid = int(line.strip())
-                # Skip our own process
-                if pid != os.getpid():
-                    return pid
-    except (subprocess.TimeoutExpired, ValueError, OSError):
-        pass
-    return None
+        with SERVE_LOCK_PATH.open("r") as owner:
+            try:
+                fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                record = json.load(owner)
+            else:
+                fcntl.flock(owner, fcntl.LOCK_UN)
+                return None
+        if not isinstance(record, dict) or record.get("workspace") != str(get_project_root()):
+            return None
+        pid = record.get("pid")
+        if type(pid) is not int or pid <= 0 or pid == os.getpid():
+            return None
+        process = psutil.Process(pid)
+        if process.create_time() != record.get("create_time"):
+            return None
+        if Path(process.cwd()).resolve() != get_project_root():
+            return None
+        return pid
+    except (OSError, ValueError, psutil.Error):
+        return None
 
 
 def _find_child_pids(parent_pid: int) -> list[int]:
@@ -296,9 +307,7 @@ def _clean_stale_artifacts() -> None:
     if _is_socket_orphan(CLI_SOCKET_PATH):
         CLI_SOCKET_PATH.unlink(missing_ok=True)
         cleaned += 1
-    if CLI_STARTUP_LOCK.exists():
-        CLI_STARTUP_LOCK.unlink(missing_ok=True)
-        cleaned += 1
+    # Keep lock inodes stable: unlinking one lets a concurrent starter bypass it.
     if cleaned:
         console.print(f"  [muted]Removed {cleaned} stale artifact(s).[/muted]")
 
@@ -519,11 +528,6 @@ def do_clean(
         # Stale artifacts
         if _is_socket_orphan(CLI_SOCKET_PATH):
             targets.append(CleanTarget(path=CLI_SOCKET_PATH, label="stale socket", is_dir=False))
-        if CLI_STARTUP_LOCK.exists():
-            from core.cli.ipc_client import is_serve_running
-
-            if not is_serve_running():
-                targets.append(CleanTarget(path=CLI_STARTUP_LOCK, label="stale lock", is_dir=False))
 
     # Tier 2 — With --all (logs, old sessions, transcripts)
     if all_data:
@@ -707,23 +711,72 @@ def _run_lifecycle_step(
     return False
 
 
+def _all_runtimes_stopped(home: Path) -> bool:
+    # Refuse removal when another daemon is already active. This is an
+    # admission check, not a transaction against a future concurrent startup.
+    from core.cli.ipc_client import is_serve_running
+
+    if is_serve_running(home / "cli.sock"):
+        console.print(
+            "  [error]Stop the legacy GEODE daemon before replacing the installation.[/error]"
+        )
+        return False
+    import fcntl
+    import stat
+
+    try:
+        runtime_dir = home / "run"
+        directories = list(runtime_dir.iterdir()) if runtime_dir.exists() else []
+        for directory in directories:
+            if not stat.S_ISDIR(directory.lstat().st_mode):
+                continue
+            try:
+                owner = (directory / "cli.serve.lock").open("r")
+            except FileNotFoundError:
+                continue
+            with owner:
+                fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(owner, fcntl.LOCK_UN)
+    except OSError:
+        console.print(
+            "  [error]Another workspace daemon is active or cannot be inspected; "
+            "stop it before replacing the installation.[/error]"
+        )
+        return False
+
+    return True
+
+
 def _stop_serve_before_update(*, running: bool, dry_run: bool) -> bool:
-    if not running:
-        return True
     if dry_run:
-        console.print("  [muted]Would stop serve before replacing the install.[/muted]")
+        if running:
+            console.print("  [muted]Would stop serve before replacing the install.[/muted]")
         return True
-    console.print("  Stopping serve before replacing the install...")
-    if stop_serve(force=True, timeout=10):
-        return True
-    console.print("  [error]Existing serve could not be stopped; update aborted.[/error]")
-    return False
+    if running:
+        console.print("  Stopping serve before replacing the install...")
+        if not stop_serve(force=True, timeout=10):
+            console.print("  [error]Existing serve could not be stopped; update aborted.[/error]")
+            return False
+    return _all_runtimes_stopped(GEODE_HOME)
 
 
 def _serve_is_present() -> bool:
     from core.cli.ipc_client import is_serve_running
 
     return is_serve_running() or _find_serve_pid() is not None
+
+
+def _serve_gateway_mode() -> bool | None:
+    """Capture the owned daemon's mode before its owner record is released."""
+    import json
+
+    if _find_serve_pid() is None:
+        return None
+    try:
+        value = json.loads(SERVE_LOCK_PATH.read_text()).get("gateway_enabled")
+    except (OSError, ValueError):
+        return None
+    return value if isinstance(value, bool) else None
 
 
 def _serve_matches_cli(executable: str) -> bool:
@@ -760,18 +813,23 @@ def _start_serve_background(
     dry_run: bool = False,
     executable: str = "geode",
     timeout: float = SERVE_STARTUP_TIMEOUT_S,
+    gateway_enabled: bool | None = None,
 ) -> bool:
     """Start ``geode serve`` detached and verify socket readiness."""
     if dry_run:
         console.print(f"  [muted]Would restart serve: {executable} serve[/muted]")
         return True
     try:
+        env = dict(os.environ)
+        if gateway_enabled is not None:
+            env["GEODE_GATEWAY_ENABLED"] = str(gateway_enabled).lower()
         with Path(os.devnull).open("w") as devnull:
             process = subprocess.Popen(  # noqa: S603
                 [executable, "serve"],
                 stdout=devnull,
                 stderr=devnull,
                 start_new_session=True,
+                env=env,
             )
     except OSError as exc:
         console.print(f"  [warning]Updated, but failed to restart serve: {exc}[/warning]")
@@ -831,6 +889,7 @@ def _do_source_update(
         console.print(f"  [warning]Checkout is dirty; continuing because {reason}.[/warning]")
 
     serve_was_running = _serve_is_present()
+    gateway_mode = _serve_gateway_mode()
     tool_env = None
     geode_executable = "geode"
     if uv_tool_dir is not None and uv_tool_bin_dir is not None:
@@ -872,6 +931,7 @@ def _do_source_update(
         if not _start_serve_background(
             dry_run=dry_run,
             executable=geode_executable,
+            gateway_enabled=gateway_mode,
         ):
             return False
     elif serve_was_running:
@@ -920,6 +980,7 @@ def _do_uv_tool_update(
         }
         geode_executable = str(uv_tool_bin_dir / "geode")
         serve_was_running = _serve_is_present()
+        gateway_mode = _serve_gateway_mode()
         if not _stop_serve_before_update(running=serve_was_running, dry_run=dry_run):
             return False
 
@@ -958,6 +1019,7 @@ def _do_uv_tool_update(
             if not _start_serve_background(
                 dry_run=dry_run,
                 executable=geode_executable,
+                gateway_enabled=gateway_mode,
             ):
                 return False
         elif serve_was_running:
@@ -1143,6 +1205,9 @@ def do_uninstall(
         console.print(
             "  [error]Serve could not be stopped; uninstall aborted before removal.[/error]"
         )
+        return False
+
+    if not _all_runtimes_stopped(home):
         return False
 
     removed_bytes = 0

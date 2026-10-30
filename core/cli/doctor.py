@@ -382,11 +382,12 @@ def _check_transport(probe: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 def _check_socket() -> dict[str, Any]:
-    """Check if IPC socket exists (serve is accepting connections)."""
+    """Probe the current workspace endpoint without treating a file as a daemon."""
+    from core.cli.ipc_client import is_serve_running
     from core.paths import CLI_SOCKET_PATH
 
     sock_path = CLI_SOCKET_PATH
-    if sock_path.exists():
+    if is_serve_running(sock_path):
         return {"ok": True, "detail": str(sock_path)}
     return {"ok": False, "detail": "cli.sock not found", "hint": "geode serve creates this"}
 

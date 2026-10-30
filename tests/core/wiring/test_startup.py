@@ -243,7 +243,7 @@ def test_welcome_does_not_repeat_wizard_after_dry_run_opt_in():
     with (
         patch("core.cli.welcome._render_welcome_brand"),
         patch("core.cli.welcome.auto_generate_env"),
-        patch("core.wiring.startup._has_any_llm_key", return_value=False),
+        patch("core.wiring.startup.has_available_llm_credential", return_value=False),
         patch("core.cli.welcome.dry_run_opted_in", return_value=True),
         patch("core.cli.welcome.env_setup_wizard") as wizard,
         patch("core.cli.welcome.check_readiness", return_value=report),
@@ -265,7 +265,7 @@ def test_welcome_clears_dry_run_opt_in_when_stored_route_is_available():
     with (
         patch("core.cli.welcome._render_welcome_brand"),
         patch("core.cli.welcome.auto_generate_env"),
-        patch("core.wiring.startup._has_any_llm_key", return_value=True),
+        patch("core.wiring.startup.has_available_llm_credential", return_value=True),
         patch("core.cli.welcome.clear_dry_run_opt_in") as clear_opt_in,
         patch("core.cli.welcome.check_readiness", return_value=report),
         patch("core.cli.welcome._render_readiness_compact"),
@@ -286,7 +286,7 @@ def test_welcome_clears_dry_run_opt_in_when_api_key_is_detected():
     with (
         patch("core.cli.welcome._render_welcome_brand"),
         patch("core.cli.welcome.auto_generate_env"),
-        patch("core.wiring.startup._has_any_llm_key", return_value=True),
+        patch("core.wiring.startup.has_available_llm_credential", return_value=True),
         patch("core.cli.welcome.clear_dry_run_opt_in") as clear_opt_in,
         patch("core.cli.welcome.check_readiness", return_value=report),
         patch("core.cli.welcome._render_readiness_compact"),
@@ -743,7 +743,7 @@ class TestSetupReset:
         from core.cli.typer_commands import setup
 
         with (
-            patch("core.wiring.startup._has_any_llm_key", return_value=has_credential),
+            patch("core.wiring.startup.has_available_llm_credential", return_value=has_credential),
             patch("core.cli.onboarding.configure_bash_sandbox"),
             patch("core.cli.onboarding.configure_computer_use_helper"),
             patch("core.cli.typer_commands.console"),

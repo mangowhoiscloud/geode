@@ -163,7 +163,9 @@ class TestStop:
         assert stop_serve(force=False, timeout=5)
 
     @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None)
-    @patch("core.cli.ipc_client.is_serve_running", return_value=True)
+    @patch(
+        "core.cli.ipc_client.is_serve_running", side_effect=lambda endpoint=None: endpoint is None
+    )
     def test_active_socket_without_pid_is_not_stopped(
         self,
         mock_running: MagicMock,
@@ -205,7 +207,10 @@ class TestStartServe:
         executable = str(tmp_path / "bin" / "geode")
         with (
             patch("core.cli.commands.lifecycle.subprocess.Popen") as popen,
-            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch(
+                "core.cli.ipc_client.is_serve_running",
+                side_effect=lambda endpoint=None: endpoint is None,
+            ),
             patch("core.cli.commands.lifecycle._serve_matches_cli", return_value=True),
         ):
             assert _start_serve_background(executable=executable)
@@ -281,7 +286,10 @@ class TestStartServe:
     def test_mismatched_restart_is_stopped(self) -> None:
         with (
             patch("core.cli.commands.lifecycle.subprocess.Popen"),
-            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch(
+                "core.cli.ipc_client.is_serve_running",
+                side_effect=lambda endpoint=None: endpoint is None,
+            ),
             patch("core.cli.commands.lifecycle._serve_matches_cli", return_value=False),
             patch("core.cli.commands.lifecycle.stop_serve", return_value=True) as stop,
         ):
@@ -296,7 +304,6 @@ class TestCleanStaleArtifacts:
         sock.write_text("")
         with (
             patch("core.cli.commands.lifecycle.CLI_SOCKET_PATH", sock),
-            patch("core.cli.commands.lifecycle.CLI_STARTUP_LOCK", tmp_path / "nolock"),
             patch("core.cli.commands.lifecycle._is_socket_orphan", return_value=True),
         ):
             _clean_stale_artifacts()
@@ -333,6 +340,39 @@ class TestStatus:
 
 
 class TestClean:
+    @pytest.mark.parametrize("mode", ["workspace", "legacy", "unreadable"])
+    def test_other_daemon_preserves_shared_runtime_home(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+    ) -> None:
+        import fcntl
+
+        monkeypatch.chdir(tmp_path)
+        runtime = tmp_path / "runtime"
+        owner_path = runtime / "run" / "other-workspace" / "cli.serve.lock"
+        owner_path.parent.mkdir(parents=True)
+        sentinel = runtime / "evidence"
+        sentinel.write_text("preserve")
+        original_iterdir = Path.iterdir
+
+        def iterdir(path: Path):
+            if mode == "unreadable" and path == runtime / "run":
+                raise PermissionError("cannot inspect runtime owners")
+            return original_iterdir(path)
+
+        monkeypatch.setattr(Path, "iterdir", iterdir)
+        with (
+            owner_path.open("w") as owner,
+            patch("core.cli.commands.lifecycle.GEODE_HOME", runtime),
+            patch("core.cli.commands.lifecycle.PROJECT_GEODE_DIR", tmp_path / "project"),
+            patch("core.cli.commands.lifecycle.stop_serve", return_value=True),
+            patch("core.cli.ipc_client.is_serve_running", return_value=mode == "legacy"),
+            patch("shutil.which", return_value=None),
+        ):
+            fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            assert do_uninstall(force=True) is False
+        assert sentinel.read_text() == "preserve"
+        assert owner_path.exists()
+
     def test_dry_run_deletes_nothing(self, tmp_path: Path) -> None:
         # v0.95.x — `PROJECT_EMBEDDING_CACHE` was removed (vestigial). Use
         # `PROJECT_TOOL_OFFLOAD` (still live) for the dry-run guard test.
@@ -360,7 +400,6 @@ class TestClean:
             patch("core.cli.commands.lifecycle.PROJECT_RESULT_CACHE_DIR", result_cache),
             patch("core.cli.commands.lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no3"),
             patch("core.cli.commands.lifecycle.CLI_SOCKET_PATH", tmp_path / "no4"),
-            patch("core.cli.commands.lifecycle.CLI_STARTUP_LOCK", tmp_path / "no5"),
         ):
             do_clean(scope="project", force=True)
 
@@ -374,7 +413,6 @@ class TestClean:
             patch("core.cli.commands.lifecycle.PROJECT_RESULT_CACHE_DIR", tmp_path / "no3"),
             patch("core.cli.commands.lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no5"),
             patch("core.cli.commands.lifecycle.CLI_SOCKET_PATH", tmp_path / "no6"),
-            patch("core.cli.commands.lifecycle.CLI_STARTUP_LOCK", tmp_path / "no7"),
         ):
             do_clean(scope="project", force=True)
 
@@ -456,7 +494,9 @@ class TestUpdate:
     @patch("core.cli.commands.lifecycle._start_serve_background", return_value=True)
     @patch("core.cli.commands.lifecycle.stop_serve", return_value=True)
     @patch("core.cli.commands.lifecycle._run_lifecycle_step", return_value=True)
-    @patch("core.cli.ipc_client.is_serve_running", return_value=True)
+    @patch(
+        "core.cli.ipc_client.is_serve_running", side_effect=lambda endpoint=None: endpoint is None
+    )
     @patch("core.cli.commands.lifecycle._has_dirty_worktree", return_value=False)
     @patch("core.cli.commands.lifecycle.detect_update_target")
     def test_restarts_serve_when_it_was_running(
@@ -474,7 +514,7 @@ class TestUpdate:
         assert do_update(restart=True)
 
         mock_stop.assert_called_once_with(force=True, timeout=10)
-        mock_start.assert_called_once_with(dry_run=False, executable="geode")
+        mock_start.assert_called_once_with(dry_run=False, executable="geode", gateway_enabled=None)
 
     def test_uv_tool_defaults_to_current_patch_series(self, tmp_path: Path) -> None:
         tool_dir = tmp_path / "custom-tools"
@@ -560,7 +600,10 @@ class TestUpdate:
                     uv_tool_bin_dir=tmp_path / "bin",
                 ),
             ),
-            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch(
+                "core.cli.ipc_client.is_serve_running",
+                side_effect=lambda endpoint=None: endpoint is None,
+            ),
             patch("core.cli.commands.lifecycle.stop_serve", return_value=True) as stop,
             patch("core.cli.commands.lifecycle._run_lifecycle_step", return_value=False),
             patch(
@@ -585,7 +628,10 @@ class TestUpdate:
                     uv_tool_bin_dir=bin_dir,
                 ),
             ),
-            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch(
+                "core.cli.ipc_client.is_serve_running",
+                side_effect=lambda endpoint=None: endpoint is None,
+            ),
             patch("core.cli.commands.lifecycle.stop_serve", return_value=True) as stop,
             patch("core.cli.commands.lifecycle._run_lifecycle_step", return_value=True),
             patch(
@@ -598,6 +644,7 @@ class TestUpdate:
         start.assert_called_once_with(
             dry_run=False,
             executable=str(bin_dir / "geode"),
+            gateway_enabled=None,
         )
         stop.assert_called_once_with(force=True, timeout=10)
 
@@ -626,7 +673,10 @@ class TestUpdate:
                     uv_tool_bin_dir=tmp_path / "bin",
                 ),
             ),
-            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch(
+                "core.cli.ipc_client.is_serve_running",
+                side_effect=lambda endpoint=None: endpoint is None,
+            ),
             patch("core.cli.commands.lifecycle.stop_serve", side_effect=record_stop),
             patch("core.cli.commands.lifecycle._run_lifecycle_step", side_effect=record_step),
             patch(
@@ -682,7 +732,10 @@ class TestUpdate:
                     uv_tool_bin_dir=tmp_path / "bin",
                 ),
             ),
-            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch(
+                "core.cli.ipc_client.is_serve_running",
+                side_effect=lambda endpoint=None: endpoint is None,
+            ),
             patch("core.cli.commands.lifecycle.stop_serve", return_value=False) as stop,
             patch("core.cli.commands.lifecycle._run_lifecycle_step") as step,
             patch("core.cli.commands.lifecycle._start_serve_background") as start,
@@ -704,7 +757,10 @@ class TestUpdate:
                     uv_tool_bin_dir=tmp_path / "bin",
                 ),
             ),
-            patch("core.cli.ipc_client.is_serve_running", return_value=True),
+            patch(
+                "core.cli.ipc_client.is_serve_running",
+                side_effect=lambda endpoint=None: endpoint is None,
+            ),
             patch("core.cli.commands.lifecycle.stop_serve", return_value=True) as stop,
             patch("core.cli.commands.lifecycle._run_lifecycle_step", return_value=True),
             patch("core.cli.commands.lifecycle._start_serve_background") as start,
@@ -1144,18 +1200,32 @@ class TestUninstall:
 
 
 class TestFindServePid:
-    @patch("subprocess.run")
-    def test_returns_pid(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="99999\n")
-        pid = _find_serve_pid()
-        if pid is not None:
-            assert isinstance(pid, int)
-
-    @patch("subprocess.run")
-    def test_no_process(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
+    def test_missing_owner(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("core.cli.commands.lifecycle.SERVE_LOCK_PATH", tmp_path / "absent")
         assert _find_serve_pid() is None
 
-    @patch("subprocess.run", side_effect=OSError("pgrep not found"))
-    def test_pgrep_unavailable(self, mock_run: MagicMock) -> None:
-        assert _find_serve_pid() is None
+    @pytest.mark.parametrize("mismatch", ["none", "pid_reuse", "workspace", "unlocked"])
+    def test_only_live_matching_owner(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mismatch: str
+    ) -> None:
+        import fcntl
+        import json
+
+        from core.paths import get_project_root
+
+        owner_path = tmp_path / "serve.lock"
+        workspace = get_project_root()
+        record = {
+            "pid": 99999,
+            "create_time": 123.0,
+            "workspace": str(workspace if mismatch != "workspace" else tmp_path),
+        }
+        owner_path.write_text(json.dumps(record))
+        monkeypatch.setattr("core.cli.commands.lifecycle.SERVE_LOCK_PATH", owner_path)
+        process = MagicMock()
+        process.create_time.return_value = 124.0 if mismatch == "pid_reuse" else 123.0
+        process.cwd.return_value = str(workspace)
+        with owner_path.open() as owner, patch("psutil.Process", return_value=process):
+            if mismatch != "unlocked":
+                fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            assert _find_serve_pid() == (99999 if mismatch == "none" else None)

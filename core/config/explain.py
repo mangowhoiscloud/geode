@@ -38,6 +38,7 @@ from core.config import (
     PROJECT_CONFIG_PATH,
     _flatten_toml,
 )
+from core.config.env_io import project_env_allowed
 from core.config.project_trust import PROJECT_DENIED_KEYS, TRUST_REQUIRED_KEYS, is_project_trusted
 from core.config.toml_edit import read_config_toml, resolve_config_toml_path
 from core.paths import GLOBAL_ENV_FILE
@@ -133,7 +134,9 @@ def explain_field(field_name: str) -> FieldReport:
     candidates.append(LayerValue("global .env", str(GLOBAL_ENV_FILE), global_env.get(env_var)))
     project_env_value = project_env.get(env_var)
     project_env_source = str(PROJECT_ENV_FILE.resolve())
-    if project_env_value is not None and not trusted:
+    if project_env_value is not None and not project_env_allowed(env_var):
+        project_env_value, project_env_source = None, project_env_source + " (user-global only)"
+    elif project_env_value is not None and not trusted:
         project_env_value, project_env_source = None, project_env_source + _UNTRUSTED
     candidates.append(LayerValue("project .env", project_env_source, project_env_value))
 

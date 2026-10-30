@@ -13,7 +13,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.32 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.33 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE는 리서치, 파일 작업, 예약 작업을 위한 Python 에이전트 런타임입니다.
 에이전트는 도구를 호출하고 결과를 읽으며 작업을 이어갑니다.
@@ -138,6 +138,12 @@ geode update --latest          # 레지스트리 설치: 마이너·메이저 �
 받지 못한 호출의 비용을 0으로 간주하지도 않습니다.
 [사용량 회계](docs/architecture/usage-accounting.md)에서 자세히 설명합니다.
 
+`geode`는 실행한 디렉터리를 작업 폴더로 사용하며, 저장소나 프로젝트 설정이
+없어도 시작합니다. 폴더마다 별도의 로컬 데몬을 사용하고, 같은 폴더에서 다시
+실행하면 이를 재사용합니다. 자동 시작은 외부 메시징 연결을 활성화하지 않습니다.
+`geode serve`는 해당 폴더의 설정된 메시징 연결을 명시적으로 시작합니다.
+이미 로컬 데몬이 실행 중이라면 먼저 종료한 뒤 실행합니다.
+
 ### 문제가 생기면
 
 - **명령을 찾을 수 없음:** `uv tool dir --bin`과 셸의 PATH를 확인합니다.
@@ -146,8 +152,8 @@ geode update --latest          # 레지스트리 설치: 마이너·메이저 �
 - **모델·설정이 예상과 다름:** `geode about`, `/model`,
   `geode config explain model`을 확인합니다. 실행 중인 세션은 적용된 설정을
   유지합니다.
-- **데몬 연결 실패:** `geode doctor`, 설정된 Unix 소켓,
-  `~/.geode/logs/serve.log`를 확인합니다. 다른 세션이 사용 중일 수 있으므로
+- **데몬 연결 실패:** `geode doctor`, `~/.geode/run/` 아래 작업 폴더별
+  Unix 소켓과 그 옆의 `serve.log`를 확인합니다. 다른 세션이 사용 중일 수 있으므로
   종료하기 전에 프로세스의 소유자를 확인합니다.
 
 ## 연동

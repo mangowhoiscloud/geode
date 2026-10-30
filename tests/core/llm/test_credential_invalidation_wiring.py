@@ -81,7 +81,7 @@ def test_invalidate_is_scoped_to_one_provider() -> None:
 
 
 @pytest.mark.parametrize(
-    ("stored", "loaded", "resets"), [(True, False, 0), (True, True, 1), (False, False, 1)]
+    ("stored", "loaded", "resets"), [(True, False, 0), (True, True, 1), (False, True, 1)]
 )
 def test_login_refresh_preserves_payg_clients_until_selected_identity_changes(
     stored: bool, loaded: bool, resets: int, tmp_path: Path
@@ -99,11 +99,13 @@ def test_login_refresh_preserves_payg_clients_until_selected_identity_changes(
         assert all(count == 1 for count in before)
         with (
             patch("core.auth.auth_toml.load_auth_toml", return_value=loaded),
-            patch("core.auth.codex_cli_oauth.invalidate_cache") as codex_cache,
+            patch("core.auth.codex_cli_oauth.sync_codex_cli_profile") as codex_cache,
             patch("core.mcp.google_workspace_client.reset_google_workspace_client") as google_cache,
         ):
             login_mod.cmd_login("refresh")
         assert [adapter._clients.bound_loop_count() for adapter in adapters] == before
         assert codex_cache.call_count == google_cache.call_count == resets
+        if resets:
+            assert codex_cache.call_args.kwargs == {"force_refresh": True}
 
     asyncio.run(scenario())

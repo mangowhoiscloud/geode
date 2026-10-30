@@ -87,11 +87,37 @@ For the order in which exported variables, `~/.geode/.env`, a project `.env` and
 uv run geode init
 ```
 
-For manual secret configuration, use `.env.example` as a reference and merge
-only needed entries into an existing project `.env`; do not replace it.
+Keep LLM credentials in `~/.geode/auth.toml` (through `geode login`) or the
+user-global `~/.geode/.env`. Project `.env` files cannot choose LLM credentials,
+credential sources, endpoints, or user authentication roots, even in a trusted
+folder. Explicit shell exports remain operator overrides.
 The project `.env` and the `.geode/config.toml` settings that widen what the
 agent may do apply only after you run `geode config trust` in the folder; see
 [project trust](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust).
+
+### Workspace data cutover
+
+Run GEODE from the directory you want to work in; no Git repository is required.
+The canonical directory identifies both its daemon and its durable session store.
+Symlink aliases share that identity. Different directories, including names that
+previously produced the same dash slug, remain separate.
+
+Startup moves old local `.geode/session`, `journal`, and `result_cache` stores to
+`~/.geode/projects/<workspace-id>/` before opening them. It removes the old path
+only after the move succeeds; the runtime has no legacy read fallback. Stop the
+old daemon first. Existing populated destinations, symlinks, unreadable stores,
+and filesystem move errors stop migration and retain the source for recovery.
+
+Old global dash-slug directories do not reliably identify their original folder.
+If GEODE reports ambiguous ownership, explicitly bind the store after checking it:
+
+```bash
+geode config migrate-workspace --legacy-project ~/.geode/projects/OLD-SLUG /absolute/workspace
+```
+
+This command preserves the session database and checkpoints, updates the derived
+search index, and records the workspace owner. `geode version`, help, and this
+recovery command remain available if normal startup refuses an unsafe migration.
 
 ### 3. Global CLI Install
 
@@ -143,7 +169,7 @@ implicitly at CLI startup.
 geode serve                # foreground (Ctrl+C to stop)
 geode serve -p 5.0         # Discord/Telegram + Slack fallback poll interval (default: 3.0)
 
-# Background (production) — stdout/stderr go to ~/.geode/logs/serve.log
+# Background (production) — stdout/stderr go to ~/.geode/run/<workspace-id>/serve.log
 # via the internal logger; redirect only if you need a separate stream.
 nohup geode serve >/dev/null 2>&1 &
 ```
@@ -161,17 +187,27 @@ nohup geode serve >/dev/null 2>&1 &
 3. GeodeRuntime (connects configured MCP servers)
 4. SchedulerService (load jobs, start 60s tick)
 5. Gateway receivers (Slack Socket Mode, Discord/Telegram pollers)
-6. CLIPoller (Unix socket `~/.geode/cli.sock`)
+6. CLIPoller (Unix socket `~/.geode/run/<workspace-id>/cli.sock`)
 
 ### Auto-Start
 
-thin CLI (`geode`)는 serve 미실행 시 자동 시작합니다:
+thin CLI (`geode`)는 실행한 폴더의 로컬 serve가 없으면 자동으로 시작합니다.
+저장소나 설정 파일은 필요하지 않습니다. 폴더별 소켓·로그·수명 잠금으로 다른
+폴더의 실행과 분리되며, 같은 폴더에서는 기존 데몬을 재사용합니다. 자동 시작은
+현재 Python 설치본을 사용하고 외부 메시징 연결을 비활성화합니다. 메시징은
+해당 폴더에서 `geode serve`를 명시적으로 실행해 시작합니다. 이미 실행 중인
+로컬 데몬은 먼저 종료해야 합니다.
+
+`<workspace-id>`는 실행 폴더의 정규화된 절대 경로에서 계산합니다.
+`geode doctor` 또는 `geode about`에서 해당 폴더의 소켓 경로를 확인할 수 있습니다.
+로그는 `~/.geode/run/<workspace-id>/serve.log`입니다. `GEODE_CLI_SOCKET`으로
+소켓 위치를 바꿔도 로그와 작업 폴더 소유권 기록은 이 디렉터리에 유지됩니다.
 
 ```
 geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect IPC
 ```
 
-- Pidfile lock (`~/.geode/cli.startup.lock`)로 TOCTOU 방지
+- 폴더별 `cli.startup.lock`으로 동시 자동 시작을 직렬화하고, `cli.serve.lock`으로 실행 중 소유권을 유지합니다.
 - `start_new_session=True` + stdout DEVNULL로 background spawn
 
 ---
@@ -207,11 +243,12 @@ name. A project `[gateway]` table applies only in a
 
 ```bash
 geode serve &
-grep -E "Slack inbound mode|Slack Socket Mode connected" ~/.geode/logs/serve.log
+# Set GEODE_SERVE_LOG to ~/.geode/run/<workspace-id>/serve.log.
+grep -E "Slack inbound mode|Slack Socket Mode connected" "$GEODE_SERVE_LOG"
 # → Slack inbound mode: Socket Mode (push)
 # → Slack Socket Mode connected
 
-grep "binding" ~/.geode/logs/serve.log
+grep "binding" "$GEODE_SERVE_LOG"
 # → Channel binding added: slack/C0XXXXXXXXX (auto_respond=True)
 
 geode doctor slack
