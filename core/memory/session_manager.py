@@ -25,7 +25,6 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 # Default resolves to ~/.geode/projects/{id}/sessions/sessions.db
-# with fallback to .geode/session/sessions.db
 _DEFAULT_DB_PATH: Path | None = None
 
 

@@ -2,7 +2,7 @@
 
 Context Layer C3: "What are we doing right now?"
 
-Persists session state to .geode/session/{id}/ so that:
+Persists session state to ~/.geode/projects/{id}/sessions/{id}/ so that:
 - Sessions can be resumed after interruption
 - Core results settle into C2 (Journal) on completion
 - Old checkpoints are auto-cleaned after 72 hours
@@ -35,9 +35,9 @@ log = logging.getLogger(__name__)
 
 
 def _get_default_session_dir() -> Path:
-    from core.paths import resolve_sessions_dir
+    from core.paths import get_project_sessions_dir
 
-    return resolve_sessions_dir()
+    return get_project_sessions_dir()
 
 
 DEFAULT_SESSION_DIR = _get_default_session_dir()
@@ -289,7 +289,7 @@ class SessionState:
 
 
 class SessionCheckpoint:
-    """Manage session checkpoints in .geode/session/.
+    """Manage session checkpoints in ~/.geode/projects/{id}/sessions/.
 
     Usage::
 
@@ -301,6 +301,10 @@ class SessionCheckpoint:
     """
 
     def __init__(self, session_dir: Path | str | None = None) -> None:
+        if session_dir is None and _get_default_session_dir() == DEFAULT_SESSION_DIR:
+            from core.paths import admit_project_data_dir
+
+            admit_project_data_dir()
         self._dir = Path(session_dir) if session_dir else DEFAULT_SESSION_DIR
 
     @property

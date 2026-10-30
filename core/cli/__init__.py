@@ -145,7 +145,7 @@ def _thin_interactive_loop(
     client = IPCClient()
     if not client.connect():
         console.print(f"  [error]{client.last_error or 'Failed to connect to serve'}[/error]")
-        return
+        raise typer.Exit(1)
 
     console.print(f"  [muted]session {client.session_id} · connected[/muted]")
 

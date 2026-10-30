@@ -26,6 +26,7 @@ from core.auth.jwt_claims import decode_jwt_claims
 
 if TYPE_CHECKING:
     from core.config.policy_source import PolicySourcePaths
+    from core.llm.routing import RoutingTarget
 
 log = logging.getLogger(__name__)
 
@@ -106,89 +107,48 @@ def build_codex_oauth_headers(token: str) -> dict[str, str]:
     return headers
 
 
-def _resolve_codex_token_info(
-    *, force_refresh: bool = False, model: str = "", sources: PolicySourcePaths | None = None
-) -> _ResolvedCodexToken | None:
-    """Resolve Codex OAuth token with cache metadata.
-
-    v0.52.4 — checks two sources, GEODE-issued first:
-      1. ProfileStore for an ``openai-codex`` profile (the one created
-         by ``/login openai`` device flow). This is the token the
-         user just registered through GEODE.
-      2. ~/.codex/auth.json (external Codex CLI store) — fallback for
-         users who only have Codex CLI logged in.
-
-    Without (1) the geode-registered ``openai-codex-geode`` plan would
-    be invisible to the actual LLM call path and the OAuth login wizard
-    would do nothing for users who don't also run Codex CLI.
-
-    v0.99.x — returns token identity metadata so SDK clients can be
-    rebuilt when Codex CLI refreshes ``~/.codex/auth.json`` after the
-    daemon has already cached a client. This mirrors Hermes' credential
-    pool resync pattern: when the backing auth store changes, stale
-    runtime entries are replaced instead of kept until process restart.
-    """
+def _resolve_codex_routing(
+    *,
+    force_refresh: bool = False,
+    model: str = "",
+    sources: PolicySourcePaths | None = None,
+    allow_refreshable: bool = False,
+) -> RoutingTarget | None:
+    """Hydrate the managed owner, then admit one subscription route."""
     from core.auth.codex_cli_oauth import sync_codex_cli_profile
     from core.config import CODEX_BASE_URL
     from core.llm.routing import resolve_routing
-    from core.wiring.container import get_profile_store
+    from core.wiring.container import ensure_profile_store
 
-    store = get_profile_store()
-    creds = sync_codex_cli_profile(store, force_refresh=force_refresh)
+    store = ensure_profile_store()
+    sync_codex_cli_profile(store, force_refresh=force_refresh)
+    target = resolve_routing(
+        model,
+        provider="openai",
+        source="subscription",
+        sources=sources,
+        allow_refreshable=allow_refreshable,
+    )
+    if target is not None and target.base_url.rstrip("/") != CODEX_BASE_URL.rstrip("/"):
+        raise RuntimeError("Codex plan endpoint does not match the subscription backend")
+    return target
 
-    target = resolve_routing(model, provider="openai", source="subscription", sources=sources)
-    if target is not None:
-        if target.base_url.rstrip("/") != CODEX_BASE_URL.rstrip("/"):
-            raise RuntimeError("Codex plan endpoint does not match the subscription backend")
-        return _ResolvedCodexToken(
-            token=target.profile.key,
-            source=f"profile:{target.profile.name}",
-            expires_at=float(target.profile.expires_at or 0.0),
-        )
-    try:
-        if store is not None:
-            # v0.52.5 — two passes so a GEODE-issued OAuth token
-            # (managed_by="") wins over a borrowed Codex CLI token
-            # (managed_by="codex-cli"). Pre-fix the iteration was
-            # insertion-order — and ``build_auth`` adds external CLIs
-            # *before* reading auth.toml, so an active Codex CLI session
-            # silently shadowed the geode token.
-            for profile in store.list_all():
-                if (
-                    profile.provider == "openai-codex"
-                    and profile.is_available
-                    and profile.key
-                    and not profile.managed_by
-                ):
-                    return _ResolvedCodexToken(
-                        token=profile.key,
-                        source=f"profile:{profile.name}",
-                        expires_at=float(profile.expires_at or 0.0),
-                    )
-            for profile in store.list_all():
-                if profile.provider == "openai-codex" and profile.is_available and profile.key:
-                    return _ResolvedCodexToken(
-                        token=profile.key,
-                        source=f"profile:{profile.name}",
-                        expires_at=float(profile.expires_at or 0.0),
-                    )
-    except Exception:
-        log.debug("GEODE openai-codex profile lookup failed", exc_info=True)
 
-    try:
-        if creds:
-            resolved = _ResolvedCodexToken(
-                token=creds["access_token"],
-                source="codex-cli:~/.codex/auth.json",
-                expires_at=float(creds.get("expires_at", 0.0) or 0.0),
-            )
-            if resolved.has_expired:
-                log.warning("Codex CLI OAuth token is expired; refusing stale runtime token")
-                return None
-            return resolved
-    except Exception:
-        log.debug("Codex CLI token resolution failed", exc_info=True)
-    return None
+def _resolve_codex_token_info(
+    *,
+    force_refresh: bool = False,
+    model: str = "",
+    sources: PolicySourcePaths | None = None,
+) -> _ResolvedCodexToken | None:
+    """Resolve only an eligible request token, never a refreshable expired token."""
+    target = _resolve_codex_routing(force_refresh=force_refresh, model=model, sources=sources)
+    if target is None:
+        return None
+    return _ResolvedCodexToken(
+        token=target.profile.key,
+        source=f"profile:{target.profile.name}",
+        expires_at=float(target.profile.expires_at or 0.0),
+    )
 
 
 def resolve_codex_token() -> str:

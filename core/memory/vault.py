@@ -1,4 +1,4 @@
-"""Vault — purpose-routed artifact storage under .geode/vault/.
+"""Vault — purpose-routed artifact storage under ~/.geode/vault/.
 
 Context Layer V0: "What have we produced?"
 
@@ -28,7 +28,7 @@ from core.memory.atomic_write import atomic_write_text
 
 log = logging.getLogger(__name__)
 
-# Default resolves to ~/.geode/vault/ with fallback to .geode/vault/
+# Default resolves to ~/.geode/vault/
 _DEFAULT_VAULT_DIR: Path | None = None
 
 

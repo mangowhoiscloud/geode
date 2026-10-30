@@ -50,7 +50,7 @@ def test_auth_file_only_survives_reload_and_unblocks_readiness(
     assert load_auth_toml(store=store, registry=registry)
     assert model_available(model)
     assert startup.has_available_llm_credential(provider)
-    assert startup._has_any_llm_key()
+    assert startup.has_available_llm_credential()
     assert startup.check_readiness(tmp_path).blocked is False
 
 
@@ -71,7 +71,7 @@ def test_unavailable_accounts_and_source_policy_do_not_unblock(
     else:
         monkeypatch.setattr(settings, "forced_login_method", {"anthropic": "subscription"})
     assert not model_available(settings.model)
-    assert not startup._has_any_llm_key()
+    assert not startup.has_available_llm_credential()
     assert startup.check_readiness(tmp_path).blocked is True
     from core.cli.doctor_bootstrap import _check_profile_store
 
@@ -92,10 +92,10 @@ def test_external_settings_fallback_and_placeholder(
 ):
     monkeypatch.setattr(settings, field, "synthetic-environment-key")
     assert model_available(model)
-    assert startup._has_any_llm_key()
+    assert startup.has_available_llm_credential()
     monkeypatch.setattr(settings, field, placeholder)
     assert not model_available(model)
-    assert not startup._has_any_llm_key()
+    assert not startup.has_available_llm_credential()
 
 
 def test_explicit_unavailable_plan_does_not_use_environment_fallback(accounts, monkeypatch):

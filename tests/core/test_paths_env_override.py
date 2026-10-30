@@ -205,3 +205,19 @@ def test_explicit_evolve_workspace_owns_tracked_state(
 
     assert paths.require_evolve_workspace() == checkout.resolve()
     assert checkout / "evolve" / "scaffold_search" / "state" == paths.AUTORESEARCH_STATE_DIR
+
+
+def test_daemon_paths_use_resolved_workspace_without_separator_collisions(tmp_path: Path) -> None:
+    first = tmp_path / "a-b"
+    second = tmp_path / "a" / "b"
+    first.mkdir()
+    second.mkdir(parents=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(first, target_is_directory=True)
+    assert paths.resolve_cli_socket_path(first) != paths.resolve_cli_socket_path(second)
+    assert paths.resolve_cli_socket_path(alias) == paths.resolve_cli_socket_path(first)
+    deep = first / ("한글 " * 50) / ("nested" * 30)
+    assert len(paths.resolve_cli_socket_path(deep).name) == len("cli.sock")
+    assert len(str(paths.resolve_cli_socket_path(deep))) == len(
+        str(paths.resolve_cli_socket_path(first))
+    )

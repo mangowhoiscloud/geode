@@ -97,7 +97,7 @@ def init(
 
     # 3. .geode/ directories — the live project tier only. Journal, sessions,
     # vault and caches live under ~/.geode/; an empty legacy .geode/vault/ or
-    # .geode/journal/ here would win core.paths._resolve_with_fallback over them.
+    # Keep local project inputs separate from the canonical user-owned stores.
     geode_dirs = [
         Path(".geode/memory"),
         Path(".geode/rules"),

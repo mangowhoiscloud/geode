@@ -1,6 +1,7 @@
 """Kernel-owned ``geode config`` command group."""
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -70,6 +71,37 @@ def trust(
     )
 
 
+def migrate_workspace(
+    legacy_project: Annotated[
+        Path, typer.Option("--legacy-project", help="Exact old store to bind")
+    ],
+    path: str = typer.Argument(".", help="Workspace whose legacy store is being adopted"),
+) -> None:
+    """Bind ambiguous legacy project data explicitly; the old directory is removed."""
+    from core.cli.ipc_client import is_serve_running
+    from core.paths import (
+        GEODE_HOME,
+        GLOBAL_PROJECTS_DIR,
+        encode_project_id,
+        resolve_cli_socket_path,
+    )
+    from core.wiring.layout_migrator import ensure_project_layout
+
+    workspace = Path(path).expanduser().resolve()
+    if is_serve_running(GEODE_HOME / "cli.sock") or is_serve_running(
+        resolve_cli_socket_path(workspace)
+    ):
+        typer.echo("Stop the old and workspace runtimes before migrating their data.", err=True)
+        raise typer.Exit(1)
+    target = GLOBAL_PROJECTS_DIR / encode_project_id(workspace)
+    try:
+        ensure_project_layout(workspace, target, legacy_project=legacy_project.expanduser())
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Workspace migration failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"Workspace data: {target}")
+
+
 def build_config_app() -> typer.Typer:
     """Build an isolated config command group for one CLI composition."""
     config_app = typer.Typer(
@@ -80,6 +112,7 @@ def build_config_app() -> typer.Typer:
     )
     config_app.command(name="explain")(explain)
     config_app.command(name="trust")(trust)
+    config_app.command(name="migrate-workspace")(migrate_workspace)
     return config_app
 
 

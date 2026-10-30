@@ -45,9 +45,21 @@ class _ResultCache:
         self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._max_size = max_size
         self._lock = threading.Lock()
-        self._load_from_disk()
+        self._loaded = False
+
+    def _ensure_loaded(self) -> None:
+        with self._lock:
+            if self._loaded:
+                return
+            if _get_result_cache_dir() == _RESULT_CACHE_DIR:
+                from core.paths import admit_project_data_dir
+
+                admit_project_data_dir()
+            self._load_from_disk()
+            self._loaded = True
 
     def get(self, subject_id: str) -> dict[str, Any] | None:
+        self._ensure_loaded()
         key = subject_id.lower()
         with self._lock:
             if key not in self._cache:
@@ -61,6 +73,7 @@ class _ResultCache:
         subject_id = result.get("subject_id", "")
         if not subject_id:
             return
+        self._ensure_loaded()
         key = subject_id.lower()
         with self._lock:
             self._cache[key] = result
@@ -121,6 +134,7 @@ set_readiness = _set_readiness
 
 def _get_last_result() -> dict[str, Any] | None:
     """Get the most recently cached pipeline result."""
+    _result_cache._ensure_loaded()
     if not _result_cache._cache:
         return None
     # Last item in OrderedDict = most recent

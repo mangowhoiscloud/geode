@@ -31,6 +31,18 @@ BEHAVIOR_ENV_KEYS: tuple[str, ...] = (
 )
 
 
+def project_env_allowed(key: str) -> bool:
+    """Trusted project tuning cannot choose user credentials or credential roots."""
+    key = key.upper()
+    return not (
+        key.endswith(
+            ("_API_KEY", "_ACCESS_TOKEN", "_REFRESH_TOKEN", "_CREDENTIAL_SOURCE", "_BASE_URL")
+        )
+        or key.startswith("GEODE_AUTH_")
+        or key in {"GEODE_HOME", "CODEX_HOME", "GEODE_FORCED_LOGIN_METHOD", "GEODE_CLI_SOCKET"}
+    )
+
+
 def mask_key(key: str) -> str:
     """Mask an API key for display: show first 10 + last 4 chars."""
     if len(key) <= 14:
@@ -83,6 +95,8 @@ def load_env_files(*, skip_behavior_keys: bool = False) -> None:
             continue
         env_file.chmod(0o600)
         for key, val in dotenv_values(str(env_file)).items():
+            if env_file != GLOBAL_ENV_FILE and not project_env_allowed(key):
+                continue
             # Empty values (e.g. ANTHROPIC_API_KEY=) must NOT clobber
             if not val or key in inherited:
                 continue
@@ -111,7 +125,7 @@ def upsert_env(var_name: str, value: str, *, scope: EnvScope = "global") -> Path
     The default target is the user-global ``~/.geode/.env``. That mirrors
     Hermes' ``{APP}_HOME`` pattern and keeps first-run setup portable across
     workspaces. Project ``./.env`` remains available as an explicit advanced
-    scope for credentials that should fill only this workspace.
+    scope for project integration variables; LLM credentials and routes are user-global.
 
     C-2 contract (config-unification, 2026-06-11): the ``.env`` layer is
     **secrets-only** — API keys and credentials. Behavior settings (model
@@ -121,6 +135,8 @@ def upsert_env(var_name: str, value: str, *, scope: EnvScope = "global") -> Path
     (hazards H3/H4). Manual ``GEODE_*`` exports remain a power-user
     session override — by hand only.
     """
+    if scope == "project" and not project_env_allowed(var_name):
+        raise ValueError("Credentials and credential routing belong to the global user config")
     env_path = _env_path_for_scope(scope)
     env_path.parent.mkdir(parents=True, exist_ok=True)
     # Create privately before reading or writing.  ``write_text`` alone uses

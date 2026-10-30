@@ -132,7 +132,7 @@ def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
     live = ensure_profile_store()
     live_registry = get_plan_registry()
     with auth_file_transaction(registry=live_registry, store=live) as (registry, store):
-        source = str(auth_toml_path().resolve())
+        source = str(auth_toml_path().absolute())
         profile_name = f"{_GEODE_OPENAI_PLAN_ID}:user"
         live_profile = live.get(profile_name)
         if live_profile is not None and (

@@ -208,6 +208,8 @@ def sdk_poller(
 
     monkeypatch.setattr(thread, "join", short_join)
     poller.socket_path.touch()  # Ownership marker, not a listening socket.
+    stat = poller.socket_path.stat()
+    poller._socket_identity = (stat.st_dev, stat.st_ino)
     try:
         yield poller, release, closing, failures
     finally:

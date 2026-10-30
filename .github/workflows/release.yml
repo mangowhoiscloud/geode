@@ -183,7 +183,7 @@ jobs:
           .release-venv/bin/python -I scripts/check_installed_package.py
           daemon_root=$(mktemp -d "$RUNNER_TEMP/geode-release-daemon.XXXXXX")
           export GEODE_HOME="$daemon_root/home"
-          export GEODE_PROJECT_DIR="$daemon_root/project"
+          daemon_workspace="$daemon_root/project"
           export GEODE_STATE_ROOT="$daemon_root/state"
           export GEODE_GATEWAY_ENABLED=false
           export GEODE_WEBHOOK_ENABLED=false
@@ -191,27 +191,33 @@ jobs:
           export ANTHROPIC_API_KEY=
           export OPENAI_API_KEY=
           export ZAI_API_KEY=
-          mkdir -p "$GEODE_PROJECT_DIR"
+          mkdir -p "$daemon_workspace"
           (
-            cd "$GEODE_PROJECT_DIR"
+            cd "$daemon_workspace"
             exec "$release_venv/bin/geode" serve --poll 0.05
           ) >"$daemon_root/serve.log" 2>&1 &
           daemon_pid=$!
+          daemon_socket=$("$release_venv/bin/python" -I - "$daemon_workspace" <<'PY'
+          import sys
+          from core.paths import resolve_cli_socket_path
+          print(resolve_cli_socket_path(sys.argv[1]))
+          PY
+          )
           cleanup_daemon() {
             kill "$daemon_pid" 2>/dev/null || true
             wait "$daemon_pid" 2>/dev/null || true
           }
           trap cleanup_daemon EXIT
           for _ in $(seq 1 150); do
-            test -S "$GEODE_HOME/cli.sock" && break
+            test -S "$daemon_socket" && break
             kill -0 "$daemon_pid" 2>/dev/null || break
             sleep 0.1
           done
-          if ! test -S "$GEODE_HOME/cli.sock"; then
+          if ! test -S "$daemon_socket"; then
             cat "$daemon_root/serve.log"
             exit 1
           fi
-          .release-venv/bin/python -I - "$version" "$GEODE_HOME/cli.sock" <<'PY'
+          .release-venv/bin/python -I - "$version" "$daemon_socket" <<'PY'
           import sys
           from pathlib import Path
 

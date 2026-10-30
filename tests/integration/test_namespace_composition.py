@@ -49,10 +49,12 @@ def test_evaluation_cli_owns_migration_commands() -> None:
     assert {command.name for command in build_config_app().registered_commands} == {
         "explain",
         "trust",
+        "migrate-workspace",
     }
     assert {command.name for command in cli.config_app.registered_commands} == {
         "explain",
         "trust",
+        "migrate-workspace",
         "migrate-petri-toml",
     }
 

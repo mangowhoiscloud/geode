@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock
 
@@ -11,6 +12,11 @@ import typer
 from core.cli import typer_serve
 from core.config import settings
 from core.runtime import GeodeRuntime
+
+
+@pytest.fixture(autouse=True)
+def isolate_daemon_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("core.paths.SERVE_LOCK_PATH", tmp_path / "serve.lock")
 
 
 @pytest.mark.parametrize(

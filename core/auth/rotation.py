@@ -16,22 +16,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from core.auth.profiles import AuthProfile, EligibilityResult, ProfileStore
-
-# Module-level cache of the most recent eligibility breakdown per provider.
-# Read by ``credential_breadcrumb.format()`` so the LLM-facing system
-# message reflects the same verdicts the rotator just considered.
-_LAST_VERDICTS: dict[str, list[EligibilityResult]] = {}
-
-
-def get_last_eligibility_verdicts(provider: str) -> list[EligibilityResult]:
-    """Return the verdicts captured by the last ``ProfileRotator.resolve(provider)`` call.
-
-    Used by ``credential_breadcrumb.format()`` to inject an LLM-readable
-    note after auth failures. Empty list if nothing has been resolved yet.
-    """
-    return list(_LAST_VERDICTS.get(provider, ()))
-
+from core.auth.profiles import AuthProfile, ProfileStore
 
 log = logging.getLogger(__name__)
 
@@ -74,16 +59,14 @@ class ProfileRotator:
         """Resolve the best available profile for a provider.
 
         v0.51.0 — Calls ``ProfileStore.evaluate_eligibility`` so every
-        rejection emits a structured reason. The full verdict list is
-        cached per-provider for ``credential_breadcrumb.format()`` and
-        the ``/login`` dashboard to render.
+        rejection emits a structured reason. Diagnostics inspect their own
+        request account source directly rather than caching process-wide verdicts.
 
         If the selected profile is managed and expires within 120s,
         proactively re-reads from external storage before returning.
         Returns None if no profiles are eligible.
         """
         verdicts = self._store.evaluate_eligibility(provider)
-        _LAST_VERDICTS[provider] = verdicts
 
         eligible_profiles: list[AuthProfile] = []
         for verdict in verdicts:
