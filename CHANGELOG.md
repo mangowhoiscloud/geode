@@ -125,6 +125,10 @@ functional change.
 
 ### Fixed
 
+- **Site dependency security.** Update Next.js to 16.4.3 and the locked Zod
+  dependency to a patched release while retaining the reviewed local ESLint
+  plugin. The existing moderate-or-higher dependency audit remains required.
+
 - **Start GEODE from any directory.** CLI auto-start uses the invoking
   workspace and Python installation, with separate sockets, logs, and daemon
   ownership per resolved directory. Concurrent startup cannot replace a live
