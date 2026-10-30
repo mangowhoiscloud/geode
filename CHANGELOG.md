@@ -51,7 +51,8 @@ functional change.
 
 - **Native research reader scrolling.** Remove swipe and wheel scene navigation,
   document paging shortcuts, forced scroll movement and scroll locks from all
-  three readers. Explicit navigation and frozen research content remain intact.
+  three readers and the research collection menu. Explicit navigation and frozen
+  research content remain intact.
 
 ## [1.0.34] - 2026-10-30
 
