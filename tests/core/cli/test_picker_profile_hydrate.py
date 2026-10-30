@@ -10,10 +10,9 @@ though the daemon is authenticated. ``_ensure_profiles_hydrated`` loads
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from core.cli.commands import model as model_mod
+from core.cli.effort_picker import PickerResult
 
 
 def test_ensure_profiles_hydrated_calls_ensure_profile_store(monkeypatch) -> None:
@@ -55,7 +54,7 @@ def test_standalone_picker_hydrates_before_availability(monkeypatch, role) -> No
     monkeypatch.setattr(model_mod, "model_unavailable_reason", lambda *a, **kw: None)
     monkeypatch.setattr(
         "core.cli.effort_picker.pick_model_and_effort",
-        lambda *a, **kw: SimpleNamespace(cancelled=True, model_id="gpt-6-sol", role=role),
+        lambda *a, **kw: PickerResult("gpt-6-sol", "high", cancelled=True, role=role),
     )
     if role == "primary":
         model_mod._interactive_model_picker()

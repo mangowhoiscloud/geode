@@ -328,6 +328,21 @@ class TestCleanStaleArtifacts:
 
 
 class TestStatus:
+    @pytest.mark.parametrize("pid", [None, 12345])
+    def test_running_text_does_not_invent_a_process_id(self, monkeypatch, pid):
+        from io import StringIO
+
+        from core.cli.commands import lifecycle
+        from rich.console import Console
+
+        output = StringIO()
+        monkeypatch.setattr(lifecycle, "console", Console(file=output, color_system=None))
+        lifecycle._print_status_text(lifecycle.StatusReport(serve_running=True, serve_pid=pid))
+        text = output.getvalue()
+        assert "Running" in text
+        assert "PID None" not in text
+        assert ("PID 12345" in text) is (pid is not None)
+
     @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None)
     @patch("core.cli.ipc_client.is_serve_running", return_value=False)
     def test_text_output(self, mock_running: MagicMock, mock_pid: MagicMock) -> None:

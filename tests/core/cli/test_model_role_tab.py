@@ -627,6 +627,23 @@ def test_escape_discards_staged_picks(monkeypatch) -> None:
     )
     assert result.cancelled is True
     assert result.staged == (), "Esc must never half-apply staged picks"
+    assert result.blocked_model_id is None
+
+
+def test_blocked_enter_identifies_attempt_without_changing_saved_model(monkeypatch) -> None:
+    keys = iter([effort_picker._KEY_DOWN, effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *a, **kw: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+    profiles = [
+        ("gpt-6-sol", "openai", "Current", "", True, None),
+        ("gpt-6.1-sol", "openai", "Unavailable", "", False, None),
+    ]
+    result = effort_picker.pick_model_and_effort(profiles, "gpt-6-sol", "high")
+    assert result.cancelled is True
+    assert result.model_id == "gpt-6-sol"
+    assert result.blocked_model_id == "gpt-6.1-sol"
+    assert result.staged == ()
 
 
 def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
