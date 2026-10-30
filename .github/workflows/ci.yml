@@ -12,7 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Required jobs always report a result. Full runtime tests may skip only
+  # Draft PRs defer this workflow until ready_for_review. On eligible runs,
+  # required jobs always report a result. Full runtime tests may skip only
   # when every changed path is in the exact documentation allowlist below.
   # Existing code/docs filters continue to own other checks.
   changes:
@@ -410,7 +411,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     needs: [changes, test_contracts, test_shards]
-    if: ${{ always() }}
+    if: ${{ always() && (github.event.pull_request.draft != true) }}
     steps:
       - name: Require complete test prerequisites
         id: prerequisites
@@ -485,7 +486,7 @@ jobs:
   gate:
     name: Gate
     runs-on: ubuntu-latest
-    if: ${{ always() }}
+    if: ${{ always() && (github.event.pull_request.draft != true) }}
     needs: [changes, lint, typecheck, test, security]
     env:
       GATE_NEEDS: ${{ toJSON(needs) }}

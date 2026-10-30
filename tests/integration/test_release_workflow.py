@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
 import shlex
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -58,6 +60,76 @@ def test_release_run_blocks_parse_as_bash() -> None:
             assert result.returncode == 0, (
                 f"{job_name} / {label} is not valid Bash:\n{result.stderr}"
             )
+
+
+@pytest.mark.parametrize("state", ["fresh", "main_advanced", "existing_release"])
+def test_release_tag_checks_freshness_before_public_mutation(tmp_path: Path, state: str) -> None:
+    jobs = _workflow()["jobs"]
+    assert isinstance(jobs, dict)
+    step = next(
+        step
+        for step in jobs["publish-github-release"]["steps"]
+        if step.get("name") == "Create or verify the annotated release tag"
+    )
+    environment = os.environ | {
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GEODE_VERSION": "9.9.9",
+    }
+    git_executable = shutil.which("git")
+    assert git_executable is not None
+
+    def git(*args: str) -> str:
+        result = subprocess.run(  # noqa: S603 - isolated local Git repositories
+            [git_executable, *args],
+            cwd=tmp_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        return result.stdout.strip()
+
+    remote = tmp_path / "origin.git"
+    git("init", "--bare", str(remote))
+    git("init", "--initial-branch=main")
+    git("config", "user.name", "Release test")
+    git("config", "user.email", "release-test@example.invalid")
+    git("commit", "--allow-empty", "-m", "validated source")
+    target = git("rev-parse", "HEAD")
+    git("remote", "add", "origin", str(remote))
+    git("push", "origin", "main")
+    if state == "existing_release":
+        git("tag", "-a", "v9.9.9", "-m", "existing release", target)
+        git("push", "origin", "refs/tags/v9.9.9")
+    if state != "fresh":
+        git("commit", "--allow-empty", "-m", "concurrent main change")
+        git("push", "origin", "main")
+    current_main = git("rev-parse", "HEAD")
+    git("checkout", "--detach", target)
+    script = step["run"].replace("${{ needs.validate-build.outputs.sha }}", target)
+    result = subprocess.run(  # noqa: S603 - tracked release step, local bare origin only
+        ["/bin/bash", "-e", "-c", script],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+    remote_tag = git("ls-remote", "--tags", "origin", "refs/tags/v9.9.9")
+    if state == "main_advanced":
+        assert result.returncode != 0
+        assert not remote_tag and not git("tag", "--list", "v9.9.9")
+        assert "::error::Main advanced" in result.stdout
+        assert target in result.stdout and current_main in result.stdout
+        assert "new workflow dispatch" in result.stdout
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert remote_tag
+        assert git("cat-file", "-t", "refs/tags/v9.9.9") == "tag"
+        assert git("rev-parse", "v9.9.9^{commit}") == target
 
 
 def test_release_checks_lock_before_uv_and_probes_installed_daemon() -> None:
