@@ -10,9 +10,9 @@ though the daemon is authenticated. ``_ensure_profiles_hydrated`` loads
 
 from __future__ import annotations
 
-import inspect
-
+import pytest
 from core.cli.commands import model as model_mod
+from core.cli.effort_picker import PickerResult
 
 
 def test_ensure_profiles_hydrated_calls_ensure_profile_store(monkeypatch) -> None:
@@ -35,14 +35,29 @@ def test_ensure_profiles_hydrated_is_resilient(monkeypatch) -> None:
     model_mod._ensure_profiles_hydrated()  # must not raise
 
 
-def test_interactive_picker_hydrates_before_availability() -> None:
-    source = inspect.getsource(model_mod._interactive_model_picker)
-    # hydrate must come before the model_available evaluation
-    assert "_ensure_profiles_hydrated()" in source
-    assert source.index("_ensure_profiles_hydrated()") < source.index("model_available(")
+@pytest.mark.parametrize("role", ["primary", "reflection"])
+def test_standalone_picker_hydrates_before_availability(monkeypatch, role) -> None:
+    from core.cli.commands._state import ModelProfile, role_by_name
 
+    calls = []
+    monkeypatch.setattr(model_mod, "_ensure_profiles_hydrated", lambda: calls.append("hydrate"))
+    monkeypatch.setattr(
+        model_mod, "_picker_profiles", lambda *a: [ModelProfile("gpt-6-sol", "openai", "test", "$")]
+    )
 
-def test_role_picker_hydrates_before_availability() -> None:
-    source = inspect.getsource(model_mod._interactive_model_picker_for_role)
-    assert "_ensure_profiles_hydrated()" in source
-    assert source.index("_ensure_profiles_hydrated()") < source.index("model_available(")
+    def available(*args, **kwargs):
+        assert calls[0] == "hydrate"
+        calls.append("available")
+        return True
+
+    monkeypatch.setattr(model_mod, "model_available", available)
+    monkeypatch.setattr(model_mod, "model_unavailable_reason", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "core.cli.effort_picker.pick_model_and_effort",
+        lambda *a, **kw: PickerResult("gpt-6-sol", "high", cancelled=True, role=role),
+    )
+    if role == "primary":
+        model_mod._interactive_model_picker()
+    else:
+        model_mod._interactive_model_picker_for_role(role_by_name(role))
+    assert "available" in calls

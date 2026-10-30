@@ -108,6 +108,46 @@ class TestSharedServicesCreateSession:
             assert loop._hooks is not None
             assert loop._hooks is services.hook_system
 
+    def test_new_session_reconciles_removed_native_file_without_touching_borrowed_account(
+        self, services: SharedServices, monkeypatch
+    ) -> None:
+        from core.auth.auth_toml import auth_toml_path, save_api_key
+        from core.auth.profiles import AuthProfile, CredentialType
+        from core.wiring.container import ensure_profile_store
+
+        monkeypatch.setattr("core.config.reload_settings_from_disk", lambda: None)
+        monkeypatch.setattr(
+            "core.auth.codex_cli_oauth.sync_codex_cli_profile", lambda *a, **kw: None
+        )
+        save_api_key("synthetic-native-key", provider="anthropic")
+        store = ensure_profile_store()
+        native = next(p for p in store.list_all() if p.provider == "anthropic")
+        borrowed = AuthProfile(
+            name="borrowed",
+            provider="openai-codex",
+            key="synthetic-borrowed",
+            credential_type=CredentialType.OAUTH,
+            managed_by="codex-cli",
+        )
+        store.add(borrowed)
+        _, existing = services.create_session(SessionMode.IPC)
+        selection = existing._model_settings
+        auth_toml_path().unlink()
+        services.create_session(SessionMode.IPC)
+        assert store.get(native.name) is None
+        assert store.get(borrowed.name) is borrowed
+        assert existing._model_settings is selection
+
+    def test_invalid_auth_file_blocks_new_session_without_using_cached_credentials(
+        self, services: SharedServices, monkeypatch
+    ) -> None:
+        from core.auth.auth_toml import auth_toml_path
+
+        monkeypatch.setattr("core.config.reload_settings_from_disk", lambda: None)
+        auth_toml_path().write_text("invalid = [")
+        with pytest.raises(ValueError, match="Authentication configuration"):
+            services.create_session(SessionMode.IPC)
+
     def test_profile_restrictions_filter_the_live_bound_session(self) -> None:
         from core.tools.policy import ProfilePolicy
 

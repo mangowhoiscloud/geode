@@ -62,6 +62,15 @@ def _mock_session_loop() -> MagicMock:
     return loop
 
 
+@pytest.fixture
+def eligible_openai_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Admit synthetic prompt execution through the real credential owner."""
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "openai_api_key", "synthetic-ipc-key")
+
+
 # ---------------------------------------------------------------------------
 # IPC Client unit tests
 # ---------------------------------------------------------------------------
@@ -201,7 +210,9 @@ class TestCLIPoller:
         finally:
             poller.stop()
 
-    def test_async_prompt_runner_uses_arun_and_async_lanes(self) -> None:
+    def test_async_prompt_runner_uses_arun_and_async_lanes(
+        self, eligible_openai_route: None
+    ) -> None:
         """IPC daemon prompt execution should not use sync loop/lane boundaries."""
         from core.server.ipc_server.poller import CLIPoller
 
@@ -212,10 +223,9 @@ class TestCLIPoller:
         mock_result.termination_reason = "natural"
         mock_result.summary = ""
 
-        mock_loop = MagicMock()
+        mock_loop = _mock_session_loop()
         mock_loop.arun = AsyncMock(return_value=mock_result)
         mock_loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
-        mock_loop.model = "test-model"
         mock_loop._session_id = "s-machine"
         mock_loop._quiet = True
         mock_loop._op_logger = MagicMock(_quiet=True)
@@ -246,7 +256,9 @@ class TestCLIPoller:
         mock_loop.run.assert_not_called()
         assert entered == [("s-machine", ["session", "global"])]
 
-    def test_verify_suppression_is_scoped_inside_the_session_lane(self) -> None:
+    def test_verify_suppression_is_scoped_inside_the_session_lane(
+        self, eligible_openai_route: None
+    ) -> None:
         from core.observability.session_metrics import SessionMetrics
         from core.orchestration.lane_queue import LaneQueue, SessionLane
         from core.server.ipc_server.poller import CLIPoller
@@ -272,7 +284,8 @@ class TestCLIPoller:
             )
             return result
 
-        loop = MagicMock(
+        loop = _mock_session_loop()
+        loop.configure_mock(
             _session_id="s-machine",
             _quiet=True,
             _op_logger=MagicMock(_quiet=True),
@@ -291,7 +304,7 @@ class TestCLIPoller:
                     suppress_public_verify=True,
                 )
             )
-            await first_entered.wait()
+            await asyncio.wait_for(first_entered.wait(), timeout=2.0)
             ordinary = asyncio.create_task(
                 poller._run_prompt_streaming_async("ordinary", loop, None)
             )
@@ -409,7 +422,9 @@ class TestCLIPoller:
         }
         checkpoint.reopen.assert_not_called()
 
-    def test_async_prompt_runner_isolates_ui_state_per_task(self) -> None:
+    def test_async_prompt_runner_isolates_ui_state_per_task(
+        self, eligible_openai_route: None
+    ) -> None:
         """Concurrent async IPC prompts should keep console and writer bindings isolated."""
         from core.server.ipc_server.poller import CLIPoller
 
@@ -454,10 +469,9 @@ class TestCLIPoller:
                 assert console_after is console_at_runtime
                 return make_result(f"done:{name}:{prompt}")
 
-            loop = MagicMock()
+            loop = _mock_session_loop()
             loop.arun = AsyncMock(side_effect=arun)
             loop.run = MagicMock(side_effect=AssertionError("sync loop.run path used"))
-            loop.model = f"model-{name}"
             loop._quiet = True
             loop._op_logger = MagicMock(_quiet=True)
             poller = CLIPoller(MagicMock(lane_queue=None), socket_path=_test_sock())
@@ -504,6 +518,7 @@ class TestCLIChannelIntegration:
         from core.config import settings
 
         monkeypatch.setattr(settings, "model", "claude-opus-4-6")
+        monkeypatch.setattr(settings, "anthropic_api_key", "synthetic-ipc-key")
         monkeypatch.setattr(settings, "agentic_effort", "low")
         monkeypatch.setattr(settings, "cognitive_reflection_model", "")
         monkeypatch.setattr(settings, "judge_model", "")
@@ -511,17 +526,28 @@ class TestCLIChannelIntegration:
         monkeypatch.setattr("core.llm.routing.infer_source", lambda _, **kwargs: "payg")
 
     @pytest.fixture
-    def actual_session(self, monkeypatch: pytest.MonkeyPatch) -> Any:
+    def actual_session(self, monkeypatch: pytest.MonkeyPatch, eligible_openai_route: None) -> Any:
         """Real policy and loop owners; only task execution is replaced."""
         from core.agent.conversation import ConversationContext
         from core.agent.loop import AgenticLoop
         from core.agent.loop._bootstrap import AgenticLoopConfig
         from core.agent.tool_executor import ToolExecutor
+        from core.auth.profiles import AuthProfile, CredentialType
         from core.cli.ipc_client import IPCClient
         from core.config import settings
         from core.server.ipc_server.poller import CLIPoller
+        from core.wiring.container import ensure_profile_store
 
         monkeypatch.setattr(settings, "model", "gpt-6-sol")
+        ensure_profile_store().add(
+            AuthProfile(
+                name="ipc-subscription",
+                provider="openai-codex",
+                credential_type=CredentialType.OAUTH,
+                key="synthetic-ipc-token",
+                expires_at=time.time() + 3600,
+            )
+        )
         loop = AgenticLoop(
             ConversationContext(),
             ToolExecutor(),
@@ -786,6 +812,7 @@ class TestCLIChannelIntegration:
                 "stable_events",
                 "session_model_config",
                 "request_cancellation",
+                "model_route_inspection",
             }
             client.close()
         finally:

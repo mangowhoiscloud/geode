@@ -14,7 +14,6 @@ def _build_system_handlers(
 ) -> UniqueEntries[str, Any]:
     """Build system management tool handlers."""
     from core.cli.commands import show_help
-    from core.wiring.startup import check_readiness
 
     def handle_show_help(**_kwargs: Any) -> dict[str, Any]:
         show_help(command_registry)
@@ -28,30 +27,23 @@ def _build_system_handlers(
 
     def handle_check_status(**kwargs: Any) -> dict[str, Any]:
         from core import __version__ as geode_version
-        from core.cli.session_state import _get_readiness
         from core.config import settings
+        from core.config.session import resolve_initial_model
 
         owner = getattr(kwargs.get("_tool_context"), "agent_loop", None)
         model_config = owner._model_settings.model_dump() if owner is not None else None
-        model = owner.model if owner is not None else settings.model
+        model, source = (
+            (owner.model, owner._model_settings.source)
+            if owner is not None
+            else resolve_initial_model(settings)
+        )
         from core.llm.routing import model_available
         from core.wiring.startup import has_available_llm_credential
 
         ant_ok = has_available_llm_credential("anthropic")
         oai_ok = has_available_llm_credential("openai")
-        selected_available = model_available(
-            model, source=owner._model_settings.source if owner is not None else None
-        )
-        # Preserve explicit request policy (including audit overrides), but do
-        # not infer dry-run from a native host's missing CLI bootstrap.
-        readiness = _get_readiness()
-        if readiness is not None:
-            dry_run = readiness.force_dry_run
-        elif owner is not None:
-            dry_run = not selected_available
-        else:
-            dry_run = check_readiness().force_dry_run
-        mode = "dry_run" if dry_run else "full_llm"
+        selected_available = model_available(model, source=source)
+        mode = "available" if selected_available else "not_connected"
 
         console.print()
         console.print(f"  [header]GEODE v{geode_version}[/header]")

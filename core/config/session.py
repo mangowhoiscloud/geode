@@ -15,6 +15,79 @@ if TYPE_CHECKING:
     from core.config.policy_source import PolicySourcePaths
 
 
+def resolve_initial_model(
+    settings: Settings | None = None, *, sources: PolicySourcePaths | None = None
+) -> tuple[str, str]:
+    """Seed an unconfigured session from its sole eligible provider default.
+
+    Explicit model/source/policy choices remain authoritative even when unusable.
+    This returns a session preference; it never persists settings or changes an
+    existing session (including a restored checkpoint).
+    """
+    from core.config import _get_settings, _resolve_provider
+    from core.config.explain import explain_field
+    from core.config.runtime_policy_sources import build_policy_source_bundle
+    from core.llm.adapters.registry import active_registry_snapshot, bootstrap_builtins
+    from core.llm.registry import PROVIDER_VARIANTS
+    from core.llm.routing import _model_plans, infer_source, model_available
+
+    effective = settings if settings is not None else _get_settings()
+    bundle = build_policy_source_bundle()
+    if sources is None:
+        sources = bundle.get("provider_routing")
+    bootstrap_builtins(policy_sources=bundle)
+    model = effective.model
+    source = infer_source(
+        _resolve_provider(model), model=model, sources=sources, settings=effective
+    )
+
+    def explicit(field: str) -> bool:
+        if field not in type(effective).model_fields:
+            # A plugin may own an external policy field; its provenance is not
+            # ours to interpret as an unset preference.
+            return True
+        if (
+            field in effective.model_fields_set
+            or getattr(effective, field) != type(effective).model_fields[field].default
+        ):
+            return True
+        winner = explain_field(field).winner
+        return winner is None or winner.layer != "code default"
+
+    specs = dict(PROVIDER_VARIANTS)
+    for registration in active_registry_snapshot().registrations.values():
+        if registration.provider_spec is not None:
+            specs[registration.provider_spec.id] = registration.provider_spec
+    source_fields = {spec.credential.settings_field for spec in specs.values()} - {""}
+    if (
+        explicit("model")
+        or any(explicit(field) for field in source_fields)
+        or effective.forced_login_method
+        or _model_plans(model, sources)
+        or model_available(model, source=source)
+    ):
+        return model, source
+    candidates: set[tuple[str, str]] = set()
+    for spec in specs.values():
+        candidate = spec.profile.default_model()
+        if not candidate:
+            continue
+        selected = infer_source(
+            spec.profile.provider, model=candidate, sources=sources, settings=effective
+        )
+        if model_available(candidate, source=selected):
+            candidates.add((candidate, selected))
+    return next(iter(candidates)) if len(candidates) == 1 else (model, source)
+
+
+class ModelRouteQuery(BaseModel):
+    """A nonsecret request for the backend's current route eligibility."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+    model: str = Field(min_length=1, max_length=256)
+    source: Literal["payg", "subscription", "adapter"] | None = None
+
+
 class SessionModelConfig(BaseModel):
     """The bounded model-policy subset, not a Settings or credential snapshot."""
 

@@ -23,18 +23,16 @@ export default function Page() {
               표면의 전체 목록입니다.
             </p>
             <p>
-              먼저 정직한 한계 둘. 셸 원샷{" "}
+              셸 입력 방식. 셸 원샷{" "}
               <code>geode &quot;프롬프트&quot;</code>는 지원하지 않습니다.
               인식되지 않는 첫 토큰은 click의 &quot;No such command&quot;
               오류로 끝납니다. 자유 텍스트는 bare <code>geode</code>로 들어간
-              대화형 REPL 안에서 입력합니다. 그리고{" "}
-              <code>geode serve stop</code> 같은 서브커맨드는 없습니다. 데몬
-              정지 로직은 <code>core/cli/commands/lifecycle.py</code>에 있지만
-              Typer 표면에 노출되어 있지 않습니다.
+              대화형 REPL 안에서 입력합니다. 현재 작업공간의 데몬을 종료하려면
+              <code>geode stop</code>을 사용합니다. 다른 작업공간의 데몬은 유지됩니다.
             </p>
 
             <h2>2-프로세스 구조</h2>
-            <pre>{`geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode serve (데몬)
+            <pre>{`geode (thin CLI)  ── Unix socket IPC (~/.geode/run/<workspace-id>/cli.sock) ──→  geode serve (데몬)
   자유 텍스트 → send_prompt 스트리밍                            AgenticLoop, MCP, 스케줄러,
   슬래시 → 조립된 command registry가 THIN/daemon 결정           메신저 폴러, CLIPoller`}</pre>
             <p>
@@ -60,6 +58,21 @@ export default function Page() {
               취소 접수는 작업 종료나 이미 실행한 외부 변경의 복구를 의미하지 않습니다.
             </p>
 
+            <p>
+              설정을 취소하면 데몬을 시작하지 않고 종료합니다. 인증을 건너뛰면
+              설정·세션 명령을 사용할 수 있으며, 모델 요청은 선택된 인증 경로가
+              사용 가능해야 진행됩니다. 시작 실패에는 종료 상태, 이번 시도의
+              비밀정보를 가린 진단과 작업공간 로그 위치가 표시됩니다.
+            </p>
+
+            <p>
+              모델을 직접 설정하지 않았고 기본 모델을 사용할 수 없을 때만,
+              사용 가능한 제공자 기본 모델이 하나이면 그 모델로 세션을 엽니다.
+              명시한 모델·인증 경로와 복원한 세션 선택은 유지됩니다. 연결된
+              <code>/model</code>은 서버의 현재 사용 가능 여부를 확인하며,
+              모델 요청도 같은 서버 판정을 통과해야 합니다.
+            </p>
+
             <h2>환영 화면과 라이브 상태</h2>
             <p>
               bare <code>geode</code>가 띄우는 환영 화면은{" "}
@@ -71,9 +84,11 @@ export default function Page() {
               <code>◆ GEODE v{`{version}`}</code> 마크, <code>모델 · cwd</code>,{" "}
               <code>/help for commands · type naturally</code> 힌트, 그리고
               라우팅이 초기화돼 있으면 활성 플랜/쿼터 한 줄을 붙입니다. 이어서{" "}
-              <code>.env</code> 자동 생성, ChatGPT 구독 OAuth 감지, readiness
-              점검(문제만 표시 — 조용하면 정상), 프로젝트 기억과 사용자 프로파일
-              초기화가 돌아갑니다.
+              사용 가능한 인증 경로를 한 번 점검합니다. 프로젝트 기억과 사용자
+              프로필은 선택 사항이며, 시작할 때 작업 폴더에 <code>.env</code>,
+              <code>.gitignore</code>나 프로젝트 폴더를 만들지 않습니다.
+              명시적인 초기화는 <code>geode init</code>에서, 메모리 첫 저장은
+              실제 저장 기능에서 수행합니다. 읽기 전용 폴더에서도 세션을 열 수 있습니다.
             </p>
             <p>
               실행 중 라이브 상태는 <code>core/ui/event_renderer.py</code>가
@@ -118,6 +133,7 @@ export default function Page() {
                 <tr><td><code>geode about</code></td><td>실행 중인 것의 한 화면 요약. EFFECTIVE 모델, env가 toml을 가리는 경고, 경로, 데몬 소켓 상태</td><td>없음</td><td><code>core/cli/typer_commands.py</code></td></tr>
                 <tr><td><code>geode setup</code></td><td>최초 설정 마법사. ChatGPT 구독 OAuth(<code>~/.codex/auth.json</code>)를 API 키보다 먼저 감지</td><td><code>--reset/-r</code></td><td><code>core/cli/onboarding.py</code></td></tr>
                 <tr><td><code>geode doctor [target]</code></td><td>진단. 기본 <code>bootstrap</code>은 Python, PATH, 자격, 데몬 점검. <code>slack</code>은 게이트웨이 점검</td><td>positional <code>bootstrap</code> | <code>slack</code></td><td><code>core/cli/doctor_bootstrap.py</code>, <code>core/cli/doctor.py</code></td></tr>
+                <tr><td><code>geode stop</code></td><td>현재 작업공간의 데몬 종료</td><td><code>--force</code>, <code>--timeout</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode update</code></td><td>설치 경로 판별 후 uv patch 업데이트 또는 소스 재설치. 떠 있던 serve는 재시작</td><td><code>--latest</code>, <code>--dry-run</code>, <code>--force/-f</code>, <code>--restart/--no-restart</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode uninstall</code></td><td>런타임 데이터와 CLI 제거</td><td><code>--dry-run</code>, <code>--force/-f</code>, <code>--keep-config</code>, <code>--keep-data</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode init</code></td><td><code>.geode/</code> 프로젝트 골격 생성. 프로젝트 타입 자동 감지</td><td><code>--force/-f</code></td><td><code>core/cli/typer_init.py</code></td></tr>
@@ -283,18 +299,17 @@ export default function Page() {
               reference for both surfaces.
             </p>
             <p>
-              Two honest limits first. A shell one-shot{" "}
+              Shell input. A shell one-shot{" "}
               <code>geode &quot;prompt&quot;</code> is not supported; an
               unrecognized first token ends in click&apos;s &quot;No such
               command&quot; error. Free text goes inside the interactive REPL
-              you enter with bare <code>geode</code>. And there is no{" "}
-              <code>geode serve stop</code> subcommand: the stop logic exists in{" "}
-              <code>core/cli/commands/lifecycle.py</code> but is not exposed on
-              the Typer surface.
+              you enter with bare <code>geode</code>. Use <code>geode stop</code>
+              to stop the verified daemon for the current workspace. Other
+              workspace daemons remain running.
             </p>
 
             <h2>Two-process split</h2>
-            <pre>{`geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode serve (daemon)
+            <pre>{`geode (thin CLI)  ── Unix socket IPC (~/.geode/run/<workspace-id>/cli.sock) ──→  geode serve (daemon)
   free text → send_prompt streaming                            AgenticLoop, MCP, scheduler,
   slash → composed command registry picks THIN vs daemon       messenger pollers, CLIPoller`}</pre>
             <p>
@@ -322,6 +337,21 @@ export default function Page() {
               it does not establish termination or rollback earlier external effects.
             </p>
 
+            <p>
+              Cancelling setup exits before starting a daemon. Skipping credentials
+              permits setup and session commands; model requests require an
+              available selected route. Startup failures report the exit state,
+              redacted diagnostics from that attempt, and the workspace log path.
+            </p>
+
+            <p>
+              Only an unconfigured, unavailable default can be replaced by the
+              sole eligible provider default. Explicit model/source choices and
+              restored session selections are preserved. Connected <code>/model</code>
+              inspection and model requests use the backend&apos;s current route
+              eligibility. Refreshable native OAuth does not require signing in again.
+            </p>
+
             <h2>Welcome screen and live status</h2>
             <p>
               The welcome screen bare <code>geode</code> shows is drawn by{" "}
@@ -332,11 +362,12 @@ export default function Page() {
               truecolor half-block sprite, with a brand block to its right — an{" "}
               <code>◆ GEODE v{`{version}`}</code> mark, <code>model · cwd</code>,
               the <code>/help for commands · type naturally</code> hint, and an
-              optional active plan/quota line when routing is initialized. Then
-              it auto-generates <code>.env</code>, detects ChatGPT subscription
-              OAuth, runs the readiness check (surfacing problems only — silence
-              means healthy), and initializes project memory and the user
-              profile.
+              optional active plan/quota line when routing is initialized.
+              Credential readiness is inspected once unless setup changes it.
+              Project memory and the user profile are optional. Startup creates
+              no project scaffolding, <code>.env</code>, or <code>.gitignore</code>;
+              use <code>geode init</code> for explicit setup. The first memory
+              save initializes its own file. Sessions can start in read-only folders.
             </p>
             <p>
               Live status during a run is drawn by{" "}
@@ -385,6 +416,7 @@ export default function Page() {
                 <tr><td><code>geode about</code></td><td>One screen of what is running: EFFECTIVE model, env-masks-toml warning, paths, daemon socket state</td><td>none</td><td><code>core/cli/typer_commands.py</code></td></tr>
                 <tr><td><code>geode setup</code></td><td>First-time wizard; detects ChatGPT subscription OAuth (<code>~/.codex/auth.json</code>) before asking for API keys</td><td><code>--reset/-r</code></td><td><code>core/cli/onboarding.py</code></td></tr>
                 <tr><td><code>geode doctor [target]</code></td><td>Diagnostics. Default <code>bootstrap</code> checks Python, PATH, credentials, daemon; <code>slack</code> checks the gateway</td><td>positional <code>bootstrap</code> | <code>slack</code></td><td><code>core/cli/doctor_bootstrap.py</code>, <code>core/cli/doctor.py</code></td></tr>
+                <tr><td><code>geode stop</code></td><td>Stop the current workspace daemon</td><td><code>--force</code>, <code>--timeout</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode update</code></td><td>Detect the install, then apply a uv patch update or reinstall the source; restarts serve if it was running</td><td><code>--latest</code>, <code>--dry-run</code>, <code>--force/-f</code>, <code>--restart/--no-restart</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode uninstall</code></td><td>Remove runtime data and the installed CLI</td><td><code>--dry-run</code>, <code>--force/-f</code>, <code>--keep-config</code>, <code>--keep-data</code></td><td><code>core/cli/commands/lifecycle.py</code></td></tr>
                 <tr><td><code>geode init</code></td><td>Create the <code>.geode/</code> project skeleton; auto-detects the project type</td><td><code>--force/-f</code></td><td><code>core/cli/typer_init.py</code></td></tr>

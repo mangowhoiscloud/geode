@@ -288,24 +288,22 @@ def test_apply_model_primary_skips_effort_for_reflection_role(
 # ---------------------------------------------------------------------------
 
 
-def test_cmd_model_parses_role_prefix() -> None:
-    """``/model reflection haiku-4.5`` must route to the reflection
-    role, not interpret 'reflection' as a model name."""
-    from core.cli.commands.model import cmd_model
+@pytest.mark.parametrize("role", ["primary", "reflection"])
+def test_cmd_model_role_prefix_reaches_apply_model(monkeypatch, role) -> None:
+    """The public command parses the role and passes it to the selection owner."""
+    from core.cli.commands import model as model_command
+    from core.cli.commands._state import ModelProfile
 
-    src = inspect.getsource(cmd_model)
-    # Pin the role-prefix parsing branch
-    assert "first, _, rest = arg.partition" in src or "partition" in src
-    assert "role_name = first" in src or "role_name=" in src
-
-
-def test_cmd_model_role_def_passed_to_apply_model() -> None:
-    """End-to-end grep — ``cmd_model`` must pass ``role=role_def.name``
-    into ``_apply_model``, not the hardcoded 'primary' default."""
-    from core.cli.commands.model import cmd_model
-
-    src = inspect.getsource(cmd_model)
-    assert "role=role_def.name" in src
+    selected = ModelProfile("gpt-6-sol", "openai", "SOL", "$")
+    applied = []
+    monkeypatch.setattr(model_command, "get_model_profiles", lambda **kw: [selected])
+    monkeypatch.setattr(model_command, "model_unavailable_reason", lambda *a, **kw: None)
+    monkeypatch.setattr(model_command, "model_available", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        model_command, "_apply_model", lambda model, **kw: applied.append((model, kw))
+    )
+    model_command.cmd_model(f"{role} gpt-6-sol")
+    assert applied == [(selected, {"role": role, "scope": "project"})]
 
 
 # ---------------------------------------------------------------------------
@@ -629,6 +627,23 @@ def test_escape_discards_staged_picks(monkeypatch) -> None:
     )
     assert result.cancelled is True
     assert result.staged == (), "Esc must never half-apply staged picks"
+    assert result.blocked_model_id is None
+
+
+def test_blocked_enter_identifies_attempt_without_changing_saved_model(monkeypatch) -> None:
+    keys = iter([effort_picker._KEY_DOWN, effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_render", lambda *a, **kw: 0)
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+    profiles = [
+        ("gpt-6-sol", "openai", "Current", "", True, None),
+        ("gpt-6.1-sol", "openai", "Unavailable", "", False, None),
+    ]
+    result = effort_picker.pick_model_and_effort(profiles, "gpt-6-sol", "high")
+    assert result.cancelled is True
+    assert result.model_id == "gpt-6-sol"
+    assert result.blocked_model_id == "gpt-6.1-sol"
+    assert result.staged == ()
 
 
 def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:

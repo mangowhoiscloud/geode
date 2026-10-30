@@ -8,7 +8,8 @@ from core.wiring.bootstrap import build_tool_offload
 
 def test_session_end_does_not_delete_shared_store_data(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("core.config.settings.tool_offload_threshold", 1_000)
-    monkeypatch.setattr("core.paths.PROJECT_TOOL_OFFLOAD", tmp_path / "offload")
+    monkeypatch.setattr("core.paths.get_tool_offload_dir", lambda _workspace: tmp_path / "offload")
+    monkeypatch.setattr("core.paths.admit_project_data_dir", lambda _workspace: tmp_path)
     bus = HookSystem()
 
     first_store = build_tool_offload(session_id="runtime-session", hooks=bus)

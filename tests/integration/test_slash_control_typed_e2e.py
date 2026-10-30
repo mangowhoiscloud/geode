@@ -59,9 +59,13 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
     surface: str,
 ) -> None:
     from core import paths
+    from core.config import settings
     from core.memory import session_manager
 
     db_path = tmp_path / "sessions.db"
+    monkeypatch.setattr(settings, "model", "gpt-6-sol")
+    monkeypatch.setattr(settings, "openai_credential_source", "api_key")
+    monkeypatch.setattr(settings, "openai_api_key", "synthetic-slash-key")
     monkeypatch.setenv("GEODE_FAST_CHAT", "1")
     monkeypatch.setattr(paths, "resolve_sessions_dir", lambda: tmp_path)
     monkeypatch.setattr(session_manager, "_get_default_db_path", lambda: db_path)
@@ -78,7 +82,7 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
             session_id=f"slash-typed-{surface}",
             max_rounds=20,
         ),
-        model="gpt-5.6-luna",
+        model=settings.model,
         provider="openai",
         quiet=True,
     )
@@ -255,8 +259,10 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
                 should_retry=True,
             )
             first = client.send_command_streaming("/grill", "Choose rollout scope")
+            assert first["type"] == "result", first
             assert first["control_state"]["frontier"] == ["scope"]
             final = client.send_prompt("narrow")
+            assert final["type"] == "result", final
             assert final["termination"] == "natural"
             assert grill_store.get(loop._session_id).status.value == "complete"
             assert loop._session_metrics.active_plan is active_plan
@@ -265,8 +271,10 @@ def test_each_slash_command_emits_an_isolated_typed_trajectory(
             expected_calls = {"grill-define", "grill-answer", "grill-complete"}
         else:
             preflight = client.send_command_streaming("/geo", "Audit example.test")
+            assert preflight["type"] == "result", preflight
             assert preflight["control_state"]["phase"] == "preflight"
             live = client.send_command_streaming("/geo", "approve-live operator-receipt")
+            assert live["type"] == "result", live
             assert live["control_state"]["phase"] == "complete"
             assert live["control_state"]["vector"]["F"]["denominator"] == 1
             assert all(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from core.agent.conversation import ConversationContext
@@ -14,6 +14,42 @@ from core.agent.loop._model_switching import apply_session_model_config
 from core.agent.tool_executor import ToolExecutor
 from core.ipc_protocol import IPC_FEATURES, IPC_PROTOCOL_VERSION, decode_message, encode_message
 from core.server.ipc_server.poller import CLIPoller
+
+
+@pytest.fixture(autouse=True)
+def synthetic_routes(monkeypatch):
+    """Session-switch tests admit offline accounts before exercising live policy."""
+    from core.auth.profiles import AuthProfile, CredentialType, ProfileStore
+    from core.llm.registry import get_provider_spec
+    from core.llm.strategies.plan_registry import get_plan_registry
+    from core.llm.strategies.plans import Plan, PlanKind
+    from core.wiring import container
+
+    store = ProfileStore()
+    for provider in ("openai", "openai-codex", "anthropic", "glm"):
+        spec = get_provider_spec(provider)
+        plan = Plan(
+            id=provider,
+            provider=provider,
+            display_name=provider,
+            kind=PlanKind.SUBSCRIPTION if provider == "openai-codex" else PlanKind.PAYG,
+            base_url=spec.default_base_url,
+        )
+        get_plan_registry().add(plan)
+        store.add(
+            AuthProfile(
+                name=provider,
+                provider=provider,
+                key="synthetic-session-account",
+                plan_id=provider,
+                credential_type=CredentialType.OAUTH
+                if provider == "openai-codex"
+                else CredentialType.API_KEY,
+            )
+        )
+    monkeypatch.setattr(container, "_profile_store", store)
+    monkeypatch.setattr("core.auth.codex_cli_oauth.sync_codex_cli_profile", lambda *a, **kw: None)
+    return store
 
 
 @pytest.fixture
@@ -413,7 +449,7 @@ def test_named_cli_uses_actual_daemon_result_before_client_persistence(loop, mon
 
     client = Client()
     client.features = IPC_FEATURES
-    client._sock = object()
+    client._sock = Mock(gettimeout=Mock(return_value=None))
     monkeypatch.setattr(config, "settings", client_settings)
     monkeypatch.setattr(commands, "_model_available_for_role", lambda *_: True)
     monkeypatch.setattr("core.cli.commands._check_provider_key", lambda *_: None)
@@ -508,8 +544,13 @@ def test_picker_uses_live_policy_and_preserves_source_on_effort_only_change(loop
             }
         ),
     )
-    monkeypatch.setattr(commands, "_ensure_profiles_hydrated", lambda: None)
+    monkeypatch.setattr(
+        commands, "_ensure_profiles_hydrated", lambda: pytest.fail("local hydration")
+    )
     monkeypatch.setattr(commands, "model_available", lambda _, **kwargs: True)
+    monkeypatch.setattr(
+        client, "inspect_model_routes", lambda queries: dict.fromkeys(queries, True)
+    )
     monkeypatch.setattr(commands, "model_unavailable_reason", lambda *a, **k: None)
     monkeypatch.setattr(commands, "_apply_model", lambda *a, **k: None)
     monkeypatch.setattr(effort_picker, "pick_model_and_effort", picker)
@@ -574,14 +615,16 @@ def test_named_model_change_preserves_live_provider_source(
     monkeypatch.setattr(settings, "openai_credential_source", "api_key")
     client = IPCClient()
     client.features = IPC_FEATURES
-    client._sock = object()
+    client._sock = Mock(gettimeout=Mock(return_value=None))
     client.model_config = loop._model_settings.model_dump()
     responses = []
-    availability = []
+    queries = []
     persisted = []
     poller = _poller()
 
     def send(value):
+        if "model_queries" in value:
+            queries.extend(value["model_queries"])
         responses.append(
             asyncio.run(
                 poller._process_message_async(
@@ -592,11 +635,9 @@ def test_named_model_change_preserves_live_provider_source(
         return "request"
 
     monkeypatch.setattr(client, "_send", send)
-    monkeypatch.setattr(client, "_recv_for", lambda _: responses[-1])
+    monkeypatch.setattr(client, "_recv_for", lambda _, **kwargs: responses[-1])
     monkeypatch.setattr(
-        commands,
-        "model_available",
-        lambda model, *, source=None: availability.append((model, source)) or True,
+        commands, "model_available", lambda *a, **kw: pytest.fail("client auth read")
     )
     monkeypatch.setattr(commands, "_apply_model", lambda *a, **k: persisted.append(k))
     commands.cmd_model(f"{role} {target}", client=client)
@@ -607,6 +648,6 @@ def test_named_model_change_preserves_live_provider_source(
     assert getattr(loop._model_settings, field) == target
     assert getattr(loop._model_settings, source_field) == expected_source
     assert client.model_config[source_field] == expected_source
-    assert persisted and availability == [
-        (target, expected_source if target.startswith("gpt-") else None)
+    assert persisted and queries == [
+        {"model": target, "source": expected_source if target.startswith("gpt-") else None}
     ]

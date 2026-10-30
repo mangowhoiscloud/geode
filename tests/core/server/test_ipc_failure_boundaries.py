@@ -115,6 +115,9 @@ def test_wire_errors_are_redacted_bounded_and_keep_request_context(caplog):
 @pytest.mark.parametrize("mode", ["cancel", "queued", "disconnect"])
 def test_connection_cancellation_is_correlated_and_does_not_replay(monkeypatch, mode):
     from core.ipc_protocol import IPC_FEATURES, decode_message, encode_message
+    from core.llm.adapters.registry import active_registry_snapshot
+
+    monkeypatch.setattr("core.llm.routing.model_available", lambda *a, **kw: True)
 
     async def run():
         started = asyncio.Event()
@@ -141,6 +144,8 @@ def test_connection_cancellation_is_correlated_and_does_not_replay(monkeypatch, 
             arun=arun,
             _session_id="session",
             model="fixture",
+            _source="payg",
+            _adapter_registry_snapshot=active_registry_snapshot(),
             _quiet=True,
             amark_session_completed=AsyncMock(),
         )

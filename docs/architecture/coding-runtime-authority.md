@@ -97,6 +97,12 @@ Existing SDK client tests verify the next request's credential while preserving
 borrowed clients until event-loop drain. Saving a credential does not change a
 session's selected billing source or authorize a different provider.
 
+New daemon sessions reload native auth state before selecting their initial
+model. Connected model pickers query the daemon for route eligibility; explicit
+selection and prompt admission recheck that authority. Only an unconfigured,
+unavailable default with one eligible provider default may seed a different
+initial model. Explicit policy and restored session choices remain authoritative.
+
 For checkpoint status transitions, `state.json` is authoritative. A failed
 JSON write propagates before the SQLite index, transition observation or active
 pointer advances. An index failure after JSON publication remains best-effort

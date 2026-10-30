@@ -7,30 +7,30 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import typer
+
 from core import __version__
 from core.cli.onboarding import clear_dry_run_opt_in, dry_run_opted_in, env_setup_wizard
 from core.cli.session_state import _set_readiness
 from core.ui.console import console
 from core.wiring.startup import (
     ReadinessReport,
-    auto_generate_env,
     check_readiness,
-    setup_project_memory,
-    setup_user_profile,
 )
 
 
 def _render_welcome_brand() -> None:
     """Render the Geodi mascot branding block."""
-    from core.config import settings
+    from core.config.session import resolve_initial_model
     from core.ui.mascot import render_mascot
 
-    render_mascot(version=__version__, model=settings.model, cwd=str(Path.cwd()))
+    model, _source = resolve_initial_model()
+    render_mascot(version=__version__, model=model, cwd=str(Path.cwd()))
 
 
 def _render_readiness_compact(report: ReadinessReport) -> None:
     """Render readiness PROBLEMS only — silence means healthy."""
-    not_ready = [c for c in report.capabilities if not c.available]
+    not_ready = [c for c in report.capabilities if c.required and not c.available]
     if not not_ready and not report.blocked:
         return
 
@@ -40,40 +40,28 @@ def _render_readiness_compact(report: ReadinessReport) -> None:
 
     if report.blocked:
         console.print()
-        console.print("  [warning]API key not configured — key registration required[/warning]")
+        console.print("  [muted]Use /login to connect an account or API key.[/muted]")
 
     console.print()
 
 
 def _welcome_screen() -> None:
     """Show Claude Code-style welcome screen with readiness check."""
-    _render_welcome_brand()
-
-    # Auto-generate .env from .env.example (placeholder → empty)
-    auto_generate_env()
-
-    from core.wiring.startup import has_available_llm_credential
-
-    if has_available_llm_credential():
+    readiness = check_readiness()
+    if readiness.has_api_key:
         clear_dry_run_opt_in()
     elif not dry_run_opted_in():
-        env_setup_wizard()
+        if not env_setup_wizard():
+            raise typer.Exit(1)
+        # Reinspect only after setup can have changed credential state.
+        readiness = check_readiness()
 
-    # OpenClaw gateway:startup — readiness check
-    readiness = check_readiness()
+    _render_welcome_brand()
     _set_readiness(readiness)
     _render_readiness_compact(readiness)
 
-    # v0.54.0 — surface dry-run mode explicitly. Pre-fix the user could
-    # land on a dry-run prompt thinking it was a real LLM call.
-    if readiness.force_dry_run:
+    if readiness.blocked:
         console.print(
-            "  [warning]Running in dry-run mode (fixture data, no LLM).[/warning]\n"
-            "  [muted]Run [cyan]geode setup[/cyan] to add a credential.[/muted]\n"
+            "  [muted]Not connected. Setup and session commands are available; "
+            "model requests need a usable account.[/muted]\n"
         )
-
-    # OpenClaw boot-md — initialize project memory if absent
-    setup_project_memory()
-
-    # Tier 0.5 — initialize user profile if absent
-    setup_user_profile()

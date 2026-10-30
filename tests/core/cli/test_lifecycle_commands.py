@@ -29,6 +29,18 @@ from core.cli.commands.lifecycle import (
 )
 from core.cli.update_provenance import UpdateKind, UpdateTarget
 
+
+@pytest.mark.parametrize("success", [False, True])
+def test_stop_command_reports_verified_lifecycle_outcome(success):
+    from core.cli import app
+    from typer.testing import CliRunner
+
+    with patch("core.cli.commands.lifecycle.stop_serve", return_value=success) as stop:
+        result = CliRunner().invoke(app, ["stop", "--force", "--timeout", "4"])
+    assert result.exit_code == (0 if success else 1)
+    stop.assert_called_once_with(force=True, timeout=4)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -316,11 +328,40 @@ class TestCleanStaleArtifacts:
 
 
 class TestStatus:
+    @pytest.mark.parametrize("pid", [None, 12345])
+    def test_running_text_does_not_invent_a_process_id(self, monkeypatch, pid):
+        from io import StringIO
+
+        from core.cli.commands import lifecycle
+        from rich.console import Console
+
+        output = StringIO()
+        monkeypatch.setattr(lifecycle, "console", Console(file=output, color_system=None))
+        lifecycle._print_status_text(lifecycle.StatusReport(serve_running=True, serve_pid=pid))
+        text = output.getvalue()
+        assert "Running" in text
+        assert "PID None" not in text
+        assert ("PID 12345" in text) is (pid is not None)
+
     @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None)
     @patch("core.cli.ipc_client.is_serve_running", return_value=False)
     def test_text_output(self, mock_running: MagicMock, mock_pid: MagicMock) -> None:
         """Runs without error in text mode."""
         show_status(json_output=False)
+
+    def test_project_cleanup_uses_canonical_user_owned_caches(self, tmp_path, monkeypatch):
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        monkeypatch.chdir(workspace)
+        state = tmp_path / "user-store"
+        monkeypatch.setattr("core.paths.get_project_data_dir", lambda _workspace=None: state)
+        for name in ("tool-offload", "result_cache"):
+            (state / name).mkdir(parents=True)
+            (state / name / "entry.json").write_text("{}")
+        do_clean(scope="project", force=True)
+        assert not (state / "tool-offload").exists()
+        assert not (state / "result_cache").exists()
+        assert list(workspace.iterdir()) == []
 
     @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None)
     @patch("core.cli.ipc_client.is_serve_running", return_value=False)
@@ -375,12 +416,12 @@ class TestClean:
 
     def test_dry_run_deletes_nothing(self, tmp_path: Path) -> None:
         # v0.95.x — `PROJECT_EMBEDDING_CACHE` was removed (vestigial). Use
-        # `PROJECT_TOOL_OFFLOAD` (still live) for the dry-run guard test.
+        # the workspace-scoped offload store for the dry-run guard test.
         offload = tmp_path / "tool-offload"
         offload.mkdir()
         (offload / "result.json").write_text("payload")
 
-        with patch("core.cli.commands.lifecycle.PROJECT_TOOL_OFFLOAD", offload):
+        with patch("core.cli.commands.lifecycle.get_tool_offload_dir", return_value=offload):
             do_clean(scope="project", dry_run=True, force=True)
 
         assert offload.exists()
@@ -396,8 +437,8 @@ class TestClean:
         (result_cache / "cached.json").write_text("{}")
 
         with (
-            patch("core.cli.commands.lifecycle.PROJECT_TOOL_OFFLOAD", offload),
-            patch("core.cli.commands.lifecycle.PROJECT_RESULT_CACHE_DIR", result_cache),
+            patch("core.cli.commands.lifecycle.get_tool_offload_dir", return_value=offload),
+            patch("core.cli.commands.lifecycle.get_result_cache_dir", return_value=result_cache),
             patch("core.cli.commands.lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no3"),
             patch("core.cli.commands.lifecycle.CLI_SOCKET_PATH", tmp_path / "no4"),
         ):
@@ -409,8 +450,12 @@ class TestClean:
     def test_nothing_to_clean(self, tmp_path: Path) -> None:
         """No error when nothing exists."""
         with (
-            patch("core.cli.commands.lifecycle.PROJECT_TOOL_OFFLOAD", tmp_path / "no2"),
-            patch("core.cli.commands.lifecycle.PROJECT_RESULT_CACHE_DIR", tmp_path / "no3"),
+            patch(
+                "core.cli.commands.lifecycle.get_tool_offload_dir", return_value=tmp_path / "no2"
+            ),
+            patch(
+                "core.cli.commands.lifecycle.get_result_cache_dir", return_value=tmp_path / "no3"
+            ),
             patch("core.cli.commands.lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no5"),
             patch("core.cli.commands.lifecycle.CLI_SOCKET_PATH", tmp_path / "no6"),
         ):

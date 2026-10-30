@@ -22,8 +22,10 @@ def env_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path
     project_env = tmp_path / "project" / ".env"
     project_env.parent.mkdir()
     monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", global_env, raising=True)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("GEODE_MODEL", raising=False)
+    for variable in ("ANTHROPIC_API_KEY", "GEODE_MODEL"):
+        # Register restoration even when absent: env_io writes os.environ directly.
+        monkeypatch.setenv(variable, "")
+        monkeypatch.delenv(variable)
     monkeypatch.chdir(project_env.parent)
     return {"global": global_env, "project": project_env}
 
@@ -65,7 +67,8 @@ def test_load_env_files_repairs_existing_secret_permissions(env_paths: dict[str,
 @pytest.fixture()
 def legacy_cwd_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr("core.paths.GLOBAL_ENV_FILE", tmp_path / "home" / ".env", raising=True)
-    monkeypatch.delenv("GEODE_MODEL", raising=False)
+    monkeypatch.setenv("GEODE_MODEL", "")
+    monkeypatch.delenv("GEODE_MODEL")
     monkeypatch.chdir(tmp_path)
     return tmp_path / ".env"
 

@@ -2,7 +2,7 @@
 
 > GEODE is an autonomous agent runtime and evaluation substrate: an inner agentic loop runs tasks (research, analysis, automation, scheduling), while an experimental safety-gated outer loop mutates and evaluates scaffold candidates.
 
-Version v1.0.33. Last sync 2026-10-30. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v1.0.34. Last sync 2026-10-30. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -989,7 +989,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/runtime/context.md
 
 ## 대형 도구 결과: 오프로드
 
-모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면 `core/orchestration/tool_offload.py`의 `ToolResultOffloadStore`가 결과를 디스크 (`.geode/tool-offload/` 아래 세션 디렉터리)로 내리고, 컨텍스트에는 요약과 `ref_id`만 남깁니다. 모델은 필요할 때 `recall_tool_result(ref_id)` 경로로 원본을 다시 가져옵니다. 오프로드 시 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
+모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면 `core/orchestration/tool_offload.py`의 `ToolResultOffloadStore`가 결과를 디스크 (`~/.geode/projects/<workspace-id>/tool-offload/` 아래 세션 디렉터리)로 내리고, 컨텍스트에는 요약과 `ref_id`만 남깁니다. 모델은 필요할 때 `recall_tool_result(ref_id)` 경로로 원본을 다시 가져옵니다. 오프로드 시 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
 
 MCP의 `CallToolResult`는 호환성을 위해 같은 값을 `content`와 `structuredContent`에 함께 담을 수 있습니다. 원본은 session timeline과 tool log에 receipt로 그대로 남기고, 모델 경계에서는 structured 값을 우선해 한 표현만 고른 뒤 오프로드와 25,000-token hard guard를 적용합니다. 따라서 증거는 보존하면서 중복 JSON을 컨텍스트에 다시 넣지 않습니다.
 
@@ -1226,7 +1226,7 @@ GLM과 OpenRouter의 Chat Completions reasoning 필드는 기존 assistant 이�
 
 ## 대형 결과: 오프로드와 recall
 
-모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면 `core/orchestration/tool_offload.py`의 `ToolResultOffloadStore`가 본문을 세션별 디렉터리 (`.geode/tool-offload/` 아래)에 내려쓰고, 컨텍스트에는 요약과 `ref_id`만 남깁니다. 모델이 원본이 필요하면 `recall_tool_result(ref_id)`로 다시 가져옵니다. 오프로드마다 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
+모델에 전달할 도구 결과가 기본 15,000 토큰 임계값을 넘으면 `core/orchestration/tool_offload.py`의 `ToolResultOffloadStore`가 본문을 세션별 디렉터리 (`~/.geode/projects/<workspace-id>/tool-offload/` 아래)에 내려쓰고, 컨텍스트에는 요약과 `ref_id`만 남깁니다. 모델이 원본이 필요하면 `recall_tool_result(ref_id)`로 다시 가져옵니다. 오프로드마다 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
 
 MCP 결과는 evidence용 원본과 model-facing 표현을 분리합니다. timeline과 tool log에는 전체 `CallToolResult`를 남기고, 모델에는 `structuredContent`를 우선한 단일 표현만 보냅니다. 호환성용 `content` 복제본을 다시 직렬화하지 않으며, 오프로드 뒤 25,000-token hard guard가 최종 상한을 보장합니다.
 
@@ -3444,7 +3444,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/ops/long-running.md
 
 ## 도구 결과 오프로딩
 
-임계값을 넘는 도구 결과는 컨텍스트에 그대로 쌓이지 않습니다. `.geode/tool-offload/{session_id}/`에 저장되고 컨텍스트에는 요약과 `ref_id`만 남으며, 필요하면 `recall_tool_result(ref_id)`로 다시 불러옵니다 (`core/orchestration/tool_offload.py`). 임계값은 `tool_offload_threshold` 설정이고 0이면 꺼집니다. 오프로드 시 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
+임계값을 넘는 도구 결과는 컨텍스트에 그대로 쌓이지 않습니다. `~/.geode/projects/<workspace-id>/tool-offload/{session_id}/`에 저장되고 컨텍스트에는 요약과 `ref_id`만 남으며, 필요하면 `recall_tool_result(ref_id)`로 다시 불러옵니다 (`core/orchestration/tool_offload.py`). 임계값은 `tool_offload_threshold` 설정이고 0이면 꺼집니다. 오프로드 시 `TOOL_RESULT_OFFLOADED` 훅이 발화합니다.
 
 ## 서브에이전트 경계
 
@@ -6957,12 +6957,12 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/harness/cli.md
 
 GEODE의 진입점은 둘입니다. `geode`(Typer CLI)와 `geode-mcp`(stdio MCP 서버). 둘 다 `pyproject.toml`의 `[project.scripts]`에 선언되어 있고, 각각 `core/cli/__init__.py`와 `core/mcp_server.py`로 들어갑니다. 이 페이지는 그 두 표면의 전체 목록입니다.
 
-먼저 정직한 한계 둘. 셸 원샷 `geode "프롬프트"`는 지원하지 않습니다. 인식되지 않는 첫 토큰은 click의 "No such command" 오류로 끝납니다. 자유 텍스트는 bare `geode`로 들어간 대화형 REPL 안에서 입력합니다. 그리고 `geode serve stop` 같은 서브커맨드는 없습니다. 데몬 정지 로직은 `core/cli/commands/lifecycle.py`에 있지만 Typer 표면에 노출되어 있지 않습니다.
+셸 입력 방식. 셸 원샷 `geode "프롬프트"`는 지원하지 않습니다. 인식되지 않는 첫 토큰은 click의 "No such command" 오류로 끝납니다. 자유 텍스트는 bare `geode`로 들어간 대화형 REPL 안에서 입력합니다. 현재 작업공간의 데몬을 종료하려면`geode stop`을 사용합니다. 다른 작업공간의 데몬은 유지됩니다.
 
 ## 2-프로세스 구조
 
 ```
-geode (thin CLI)  ── Unix socket IPC (~/.geode/cli.sock) ──→  geode serve (데몬)
+geode (thin CLI)  ── Unix socket IPC (~/.geode/run/<workspace-id>/cli.sock) ──→  geode serve (데몬)
   자유 텍스트 → send_prompt 스트리밍                            AgenticLoop, MCP, 스케줄러,
   슬래시 → 조립된 command registry가 THIN/daemon 결정           메신저 폴러, CLIPoller
 ```
@@ -6971,9 +6971,13 @@ bare `geode`는 환영 화면을 띄우고 소켓을 조사한 뒤, 데몬이 �
 
 입력과 화면은 CLI가, 실행과 세션 상태는 데몬이 소유합니다. 대화형 로그인은 터미널에서 수행하며 데몬이 브라우저나 비밀 입력을 대신 열지 않습니다. 오류·취소·완료를 구분해 전달하고, 연결이 끊겨 결과를 확인할 수 없으면 같은 작업을 자동으로 재실행하지 않습니다. 요청 취소는 지원 기능을 협상한 뒤 해당 요청 ID에만 적용됩니다. 취소 접수는 작업 종료나 이미 실행한 외부 변경의 복구를 의미하지 않습니다.
 
+설정을 취소하면 데몬을 시작하지 않고 종료합니다. 인증을 건너뛰면 설정·세션 명령을 사용할 수 있으며, 모델 요청은 선택된 인증 경로가 사용 가능해야 진행됩니다. 시작 실패에는 종료 상태, 이번 시도의 비밀정보를 가린 진단과 작업공간 로그 위치가 표시됩니다.
+
+모델을 직접 설정하지 않았고 기본 모델을 사용할 수 없을 때만, 사용 가능한 제공자 기본 모델이 하나이면 그 모델로 세션을 엽니다. 명시한 모델·인증 경로와 복원한 세션 선택은 유지됩니다. 연결된`/model`은 서버의 현재 사용 가능 여부를 확인하며, 모델 요청도 같은 서버 판정을 통과해야 합니다.
+
 ## 환영 화면과 라이브 상태
 
-bare `geode`가 띄우는 환영 화면은 `core/cli/welcome.py`의 `_welcome_screen`이 그립니다. 먼저 Geodi 브랜드 블록(`core/ui/mascot.py`의 `render_mascot`)이 나옵니다. 손으로 찍은 픽셀아트 Geodi(로즈 아졸로틀, `core/ui/geodi_art.py`)를 truecolor 하프블록 스프라이트로 그리고, 오른쪽에 `◆ GEODE v{version}` 마크, `모델 · cwd`, `/help for commands · type naturally` 힌트, 그리고 라우팅이 초기화돼 있으면 활성 플랜/쿼터 한 줄을 붙입니다. 이어서 `.env` 자동 생성, ChatGPT 구독 OAuth 감지, readiness 점검(문제만 표시 — 조용하면 정상), 프로젝트 기억과 사용자 프로파일 초기화가 돌아갑니다.
+bare `geode`가 띄우는 환영 화면은 `core/cli/welcome.py`의 `_welcome_screen`이 그립니다. 먼저 Geodi 브랜드 블록(`core/ui/mascot.py`의 `render_mascot`)이 나옵니다. 손으로 찍은 픽셀아트 Geodi(로즈 아졸로틀, `core/ui/geodi_art.py`)를 truecolor 하프블록 스프라이트로 그리고, 오른쪽에 `◆ GEODE v{version}` 마크, `모델 · cwd`, `/help for commands · type naturally` 힌트, 그리고 라우팅이 초기화돼 있으면 활성 플랜/쿼터 한 줄을 붙입니다. 이어서 사용 가능한 인증 경로를 한 번 점검합니다. 프로젝트 기억과 사용자 프로필은 선택 사항이며, 시작할 때 작업 폴더에 `.env`,`.gitignore`나 프로젝트 폴더를 만들지 않습니다. 명시적인 초기화는 `geode init`에서, 메모리 첫 저장은 실제 저장 기능에서 수행합니다. 읽기 전용 폴더에서도 세션을 열 수 있습니다.
 
 실행 중 라이브 상태는 `core/ui/event_renderer.py`가 그리고, 스피너는 `core/ui/spinner_glyph.py` 단일 소스에서 옵니다(direct 모드 `GeodeStatus`와 IPC thin-client 트래커가 공유). 시그니처 스피너는 모양이 바뀌지 않는 로즈 젬 `◆`입니다. raised-cosine 밝기 밴드가 라벨 위를 2초 주기로 좌→우로 활강합니다(단일 색조, 무지개 아님 — 모양을 순환시키는 글리프는 기계적으로 읽힌다는 Codex/Claude Code의 교훈).
 
@@ -6990,6 +6994,7 @@ HITL 승인 프롬프트(`core/cli/ipc_client.py`의 `_handle_approval_request`)
 | `geode about` | 실행 중인 것의 한 화면 요약. EFFECTIVE 모델, env가 toml을 가리는 경고, 경로, 데몬 소켓 상태 | 없음 | `core/cli/typer_commands.py` |
 | `geode setup` | 최초 설정 마법사. ChatGPT 구독 OAuth(`~/.codex/auth.json`)를 API 키보다 먼저 감지 | `--reset/-r` | `core/cli/onboarding.py` |
 | `geode doctor [target]` | 진단. 기본 `bootstrap`은 Python, PATH, 자격, 데몬 점검. `slack`은 게이트웨이 점검 | positional `bootstrap` | `slack` | `core/cli/doctor_bootstrap.py`, `core/cli/doctor.py` |
+| `geode stop` | 현재 작업공간의 데몬 종료 | `--force`, `--timeout` | `core/cli/commands/lifecycle.py` |
 | `geode update` | 설치 경로 판별 후 uv patch 업데이트 또는 소스 재설치. 떠 있던 serve는 재시작 | `--latest`, `--dry-run`, `--force/-f`, `--restart/--no-restart` | `core/cli/commands/lifecycle.py` |
 | `geode uninstall` | 런타임 데이터와 CLI 제거 | `--dry-run`, `--force/-f`, `--keep-config`, `--keep-data` | `core/cli/commands/lifecycle.py` |
 | `geode init` | `.geode/` 프로젝트 골격 생성. 프로젝트 타입 자동 감지 | `--force/-f` | `core/cli/typer_init.py` |
@@ -7496,7 +7501,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/architecture/system-index
 | 측정값 | 현재 트리 |
 | --- | --- |
 | 프로덕션 Python 파일 | 602 |
-| 테스트 Python 파일 | 785 |
+| 테스트 Python 파일 | 788 |
 | 도구 정의 / 모델 실행 / 유효 스키마 / 정책 | 87 / 87 / 87 / 87 |
 | RuntimeEvent 멤버 | 57 |
 | 기본 LLM 어댑터 | 6 |

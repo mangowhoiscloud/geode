@@ -249,6 +249,10 @@ class SharedServices:
         from core.config import _resolve_provider, reload_settings_from_disk, settings
 
         reload_settings_from_disk()
+        from core.auth.auth_toml import load_auth_toml
+
+        if not load_auth_toml(clear_missing=True):
+            raise ValueError("Authentication configuration could not be loaded; run /login status")
 
         # Conversation context
         if conversation is None:
@@ -262,14 +266,13 @@ class SharedServices:
         # its separate opt-in; every other headless denial remains enforced.
         bound_tool_plan = self.bound_tool_plan
         profile_denied_tools: frozenset[str] = frozenset()
-        from core.llm.routing import infer_source
+        from core.config.session import resolve_initial_model
 
-        provider = _resolve_provider(settings.model)
-        source = infer_source(
-            provider,
-            model=settings.model,
+        model, source = resolve_initial_model(
+            settings,
             sources=(self.policy_sources or {}).get("provider_routing"),
         )
+        provider = _resolve_provider(model)
         if bound_tool_plan is not None:
             from core.agent.loop._tool_factory import project_bound_tool_plan
 
@@ -375,7 +378,7 @@ class SharedServices:
                 session_id=session_id,
                 user_profile=self.user_profile,
             ),
-            model=settings.model,
+            model=model,
             provider=provider,
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,

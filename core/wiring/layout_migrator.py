@@ -132,7 +132,8 @@ def ensure_project_layout(
     projects.mkdir(parents=True, exist_ok=True)
     with exclusive_file_lock(projects / ".workspace-layout.lock"):
         if legacy.exists() or any(
-            (local / name).exists() for name in ("session", "journal", "result_cache")
+            (local / name).exists()
+            for name in ("session", "journal", "result_cache", "tool-offload")
         ):
             _require_stopped_legacy(projects.parent)
         if target.is_symlink() or (target.exists() and not target.is_dir()):
@@ -185,6 +186,7 @@ def ensure_project_layout(
             ("session", "sessions"),
             ("journal", "journal"),
             ("result_cache", "result_cache"),
+            ("tool-offload", "tool-offload"),
         ):
             _move_workspace_directory(local / old, target / new)
 
@@ -196,11 +198,16 @@ def migrate_workspace_vault(workspace: Path, target: Path) -> None:
     local = workspace / ".geode"
     if local.is_symlink():
         raise WorkspaceMigrationError(f"Workspace data root is a symlink: {local}")
-    if not (local / "vault").exists() and not (local / "vault").is_symlink():
+    source = local / "vault"
+    # At the user's home, the workspace vault already is the global store.
+    # It must not enter either conflict handling or empty-source removal.
+    if not source.is_symlink() and source.resolve() == target.resolve():
+        return
+    if not source.exists() and not source.is_symlink():
         return
     with exclusive_file_lock(target.parent / ".vault-layout.lock"):
         _require_stopped_legacy(target.parent)
-        _move_workspace_directory(local / "vault", target)
+        _move_workspace_directory(source, target)
 
 
 # ---------------------------------------------------------------------------

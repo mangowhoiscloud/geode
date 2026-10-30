@@ -152,6 +152,7 @@ class PickerResult:
     cancelled: bool = False
     role: str = "primary"
     staged: tuple[tuple[str, str, str | None], ...] = ()
+    blocked_model_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -170,29 +171,45 @@ _KEY_SPACE = "SPACE"
 
 def _read_key() -> str:
     """Block until a single key press, return a normalised name."""
+    import os
+    import select
     import termios
+    import time
     import tty
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
-        tty.setraw(fd)
-        ch = sys.stdin.read(1)
-        if ch == "\x1b":
-            ch2 = sys.stdin.read(1)
-            if ch2 != "[":
-                return _KEY_QUIT
-            ch3 = sys.stdin.read(1)
-            return {"A": _KEY_UP, "B": _KEY_DOWN, "C": _KEY_RIGHT, "D": _KEY_LEFT}.get(ch3, "")
-        if ch in ("\r", "\n"):
-            return _KEY_ENTER
-        if ch == "\t":
-            return _KEY_TAB
-        if ch == " ":
-            return _KEY_SPACE
-        if ch in ("q", "Q"):
+        tty.setraw(fd, termios.TCSANOW)
+        # Read bytes directly so TextIO buffering cannot hide an arrow suffix
+        # from select or consume the next command after a bare Escape.
+        ch = os.read(fd, 1)
+        if ch == b"\x1b":
+            deadline = time.monotonic() + 0.1
+            for index in range(16):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not select.select([fd], [], [], remaining)[0]:
+                    return _KEY_QUIT
+                suffix = os.read(fd, 1)
+                if not suffix:
+                    return _KEY_QUIT
+                if index == 0:
+                    if suffix not in (b"[", b"O"):
+                        return _KEY_QUIT
+                elif b"@" <= suffix <= b"~":
+                    return {b"A": _KEY_UP, b"B": _KEY_DOWN, b"C": _KEY_RIGHT, b"D": _KEY_LEFT}.get(
+                        suffix, ""
+                    )
             return _KEY_QUIT
-        if ch == "\x03":
+        if ch in (b"\r", b"\n"):
+            return _KEY_ENTER
+        if ch == b"\t":
+            return _KEY_TAB
+        if ch == b" ":
+            return _KEY_SPACE
+        if ch in (b"q", b"Q", b""):
+            return _KEY_QUIT
+        if ch == b"\x03":
             raise KeyboardInterrupt
         return ""
     finally:
@@ -529,17 +546,15 @@ def pick_model_and_effort(
         if key == _KEY_ENTER:
             chosen_mid, chosen_prov, _label, _cost, available, _forced = profiles_for_role()[cursor]
             if not available:
-                # M5 — block the selection so the caller can render a
-                # "Login first" hint. Treat as cancellation so settings
-                # don't shift to a model the LLM call would reject.
-                # Staged picks are intentionally discarded — a cancel
-                # exit never half-applies.
+                # Preserve the attempted row separately from the saved model.
+                # Cancellation never applies staged picks.
                 _clear_lines(line_count)
                 return PickerResult(
                     model_id=current_model,
                     effort=current_effort,
                     cancelled=True,
                     role=role_names[role_cursor],
+                    blocked_model_id=chosen_mid,
                 )
             if not effort_is_selectable(chosen_mid, chosen_prov):
                 continue

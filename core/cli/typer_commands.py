@@ -174,6 +174,19 @@ def doctor(
         console.print(f"Unknown target: {target}. Available: bootstrap, slack")
 
 
+def stop(
+    force: bool = typer.Option(False, "--force", help="Force termination after the grace period"),
+    timeout: int = typer.Option(
+        30, "--timeout", min=1, help="Graceful shutdown timeout in seconds"
+    ),
+) -> None:
+    """Stop only the verified daemon for the current working directory."""
+    from core.cli.commands.lifecycle import stop_serve
+
+    if not stop_serve(force=force, timeout=timeout):
+        raise typer.Exit(1)
+
+
 def update(
     dry_run: bool = typer.Option(
         False,

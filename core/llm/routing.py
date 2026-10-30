@@ -224,17 +224,12 @@ def resolve_routing(
     candidates: list[tuple[int, AuthProfile, Plan]] = []
 
     def available(profile: AuthProfile) -> bool:
-        from core.auth.auth_toml import auth_toml_path
+        from core.auth.oauth_refresh import can_refresh_native_oauth
 
         return profile.is_available or (
             allow_refreshable
             and spec.credential.source == "subscription"
-            and profile.credential_type is CredentialType.OAUTH
-            and not profile.managed_by
-            and bool(profile.refresh_token.strip())
-            and not profile.disabled
-            and not profile.is_cooling_down
-            and store.file_profiles(str(auth_toml_path().absolute())).get(profile.name) is profile
+            and can_refresh_native_oauth(profile, store)
         )
 
     for index, plan in enumerate(plans):

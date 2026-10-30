@@ -119,7 +119,7 @@ def test_status_mcp_doctor_and_key_warning_see_auth_only_account(accounts, monke
     assert status["anthropic_configured"] is True
     assert status["openai_configured"] is False
     assert status["model_available"] is True
-    assert status["mode"] == "full_llm"
+    assert status["mode"] == "available"
     assert _check_profile_store().ok
     console = Mock()
     monkeypatch.setattr(commands, "console", console)
@@ -154,7 +154,7 @@ def test_status_uses_session_source_after_default_changes(accounts, monkeypatch)
     )
     assert status["scope"] == "session"
     assert status["model_available"] is True
-    assert status["mode"] == "full_llm"
+    assert status["mode"] == "available"
     assert status["openai_configured"] is False  # future-session default is disabled
 
 
