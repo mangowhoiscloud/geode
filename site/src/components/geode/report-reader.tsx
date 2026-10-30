@@ -2,10 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LocaleProvider, t, useLocale, useSetLocale } from "@/components/geode/locale-context";
-import { attachReaderSwipe } from "@/lib/reader-swipe.mjs";
-import { attachReaderWheel } from "@/lib/reader-wheel.mjs";
 import editions from "@/data/geode/report-pages.json";
 // The existing JEVDB presentation owns this shared reading workspace.
 import "./jevdb-review.css";
@@ -38,7 +36,6 @@ function ReportContent() {
   const sources = useRef<HTMLDialogElement>(null);
   const tocButton = useRef<HTMLButtonElement>(null);
   const sourceButton = useRef<HTMLButtonElement>(null);
-  const canvas = useRef<HTMLAnchorElement>(null);
   const page = edition.pages[index];
   const image = `${assets}${locale}/${page.image}`;
 
@@ -49,19 +46,7 @@ function ReportContent() {
     setText(false);
     window.history.pushState(window.history.state, "", `#${pageId(next)}`);
     toc.current?.close();
-    window.scrollTo({ top: 0, behavior: "instant" });
   }, []);
-
-  useEffect(() => {
-    if (!overview && canvas.current) return attachReaderSwipe(canvas.current, direction => select(index + direction));
-  }, [index, locale, overview, select]);
-
-  const canWheelNavigate = useEffectEvent((direction: -1 | 1) => index + direction >= 0 && index + direction < 92);
-  const onWheelNavigate = useEffectEvent((direction: -1 | 1) => select(index + direction));
-  useEffect(() => {
-    if (!overview && canvas.current) return attachReaderWheel(canvas.current,
-      direction => canWheelNavigate(direction), direction => onWheelNavigate(direction));
-  }, [overview]);
 
   useEffect(() => {
     const readHash = () => {
@@ -83,17 +68,10 @@ function ReportContent() {
   }, []);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (overview || sources.current?.open || toc.current?.open || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.target instanceof Element && event.target.closest("a,button,input,textarea,select,[contenteditable]")) return;
-      const next = { ArrowLeft: index - 1, ArrowRight: index + 1, PageUp: index - 1, PageDown: index + 1, Home: 0, End: 91 }[event.key];
-      if (next !== undefined) { event.preventDefault(); select(next); }
-    };
     const onResize = () => { if (window.matchMedia("(min-width: 1024px)").matches) toc.current?.close(); };
-    window.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("resize", onResize); };
-  }, [index, overview, select]);
+    return () => { window.removeEventListener("resize", onResize); };
+  }, []);
 
   const contents = () => <>
     <nav className="report-chapters" aria-label={t(locale, "리포트 구성", "Report chapters")}>
@@ -120,7 +98,7 @@ function ReportContent() {
           <div className="jevdb-pager"><button type="button" disabled={index === 0} onClick={() => select(index - 1)}>{t(locale, "이전", "Previous")}</button><span className="jevdb-counter" aria-live="polite">{index + 1} / 92</span><button type="button" disabled={index === 91} onClick={() => select(index + 1)}>{t(locale, "다음", "Next")}</button></div>
         </nav>
         {overview ? <div className="jevdb-overview" aria-label={t(locale, "전체 페이지", "All pages")}>{edition.pages.map(item => <button key={item.number} type="button" onClick={() => select(item.number - 1)} aria-label={`${item.number}. ${item.title}`}><Image src={`${assets}${locale}/${item.image}`} alt="" width={1600} height={900} /><span>{String(item.number).padStart(2, "0")} · {item.title}</span></button>)}</div> : <article className="report-page" data-page={index + 1}>
-          <a ref={canvas} className="jevdb-canvas" href={image} target="_blank" rel="noopener noreferrer" aria-label={t(locale, `${index + 1}쪽 원본 크게 보기`, `Open page ${index + 1} at full size`)}><Image key={image} src={image} alt={page.title} width={1600} height={900} priority={index === 0} /></a>
+          <a className="jevdb-canvas" href={image} target="_blank" rel="noopener noreferrer" aria-label={t(locale, `${index + 1}쪽 원본 크게 보기`, `Open page ${index + 1} at full size`)}><Image key={image} src={image} alt={page.title} width={1600} height={900} priority={index === 0} /></a>
           <div className="jevdb-caption-row"><span>{t(locale, "페이지별 도표·출처·측정 조건", "Page figures, sources, and measurement conditions")}</span><a href={image} target="_blank" rel="noopener noreferrer">{t(locale, "크게 보기 ↗", "Full size ↗")}</a></div>
           <section className="report-text"><button type="button" className="jevdb-transcript-button" aria-expanded={text} aria-controls="report-page-text" onClick={() => setText(!text)}>{t(locale, "본문 읽기", "Read page text")} {text ? "−" : "+"}</button><div id="report-page-text" hidden={!text}><p>{t(locale, "PDF에서 자동 추출한 텍스트입니다. 배치와 도표의 정본은 위 페이지와 PDF입니다.", "Text extracted automatically from the PDF. The page image and PDF are authoritative for layout and figures.")}</p><pre>{page.text}</pre></div></section>
         </article>}

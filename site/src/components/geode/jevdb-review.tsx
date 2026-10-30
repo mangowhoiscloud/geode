@@ -2,10 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LocaleProvider, t, useLocale, useSetLocale } from "@/components/geode/locale-context";
-import { attachReaderSwipe } from "@/lib/reader-swipe.mjs";
-import { attachReaderWheel } from "@/lib/reader-wheel.mjs";
 import scenes from "@/data/geode/jevdb-slides.json";
 import "./jevdb-review.css";
 
@@ -26,7 +24,6 @@ function ReviewContent() {
   const toc = useRef<HTMLDialogElement>(null);
   const sources = useRef<HTMLDialogElement>(null);
   const sourceButton = useRef<HTMLButtonElement>(null);
-  const canvas = useRef<HTMLAnchorElement>(null);
   const scene = scenes[index];
   const title = locale === "ko" ? scene.titleKo : scene.title;
 
@@ -37,19 +34,7 @@ function ReviewContent() {
     setTranscript(false);
     window.history.pushState(window.history.state, "", `#${sceneId(next)}`);
     toc.current?.close();
-    window.scrollTo({ top: 0, behavior: "instant" });
   }, []);
-
-  useEffect(() => {
-    if (!overview && canvas.current) return attachReaderSwipe(canvas.current, direction => selectScene(index + direction));
-  }, [index, locale, overview, selectScene]);
-
-  const canWheelNavigate = useEffectEvent((direction: -1 | 1) => index + direction >= 0 && index + direction < scenes.length);
-  const onWheelNavigate = useEffectEvent((direction: -1 | 1) => selectScene(index + direction));
-  useEffect(() => {
-    if (!overview && canvas.current) return attachReaderWheel(canvas.current,
-      direction => canWheelNavigate(direction), direction => onWheelNavigate(direction));
-  }, [overview]);
 
   useEffect(() => {
     const readHash = () => {
@@ -79,25 +64,14 @@ function ReviewContent() {
   }, []);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (overview || toc.current?.open || sources.current?.open || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.target instanceof Element && event.target.closest("a, button, input, textarea, select, [contenteditable]")) return;
-      const target = { ArrowLeft: index - 1, ArrowRight: index + 1, PageUp: index - 1, PageDown: index + 1, Home: 0, End: scenes.length - 1 }[event.key];
-      if (target !== undefined) {
-        event.preventDefault();
-        selectScene(target);
-      }
-    };
     const onResize = () => {
       if (window.matchMedia("(min-width: 1024px)").matches) toc.current?.close();
     };
-    window.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
     return () => {
-      window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onResize);
     };
-  }, [index, overview, selectScene]);
+  }, []);
 
   const sceneList = () => (
     <nav className="jevdb-scene-list" aria-label={t(locale, "장면", "Scenes")}>
@@ -151,7 +125,7 @@ function ReviewContent() {
               <span>{String(item.number).padStart(2, "0")} · {locale === "ko" ? item.titleKo : item.title}</span>
             </button>)}
           </div> : <article className="jevdb-scene" aria-label={title} data-scene={index + 1}>
-            <a ref={canvas} className="jevdb-canvas" href={`${assets}${scene.image}`} target="_blank" rel="noopener noreferrer" aria-label={t(locale, `${title}: 원본 이미지 크게 보기`, `${title}: open full-size slide`)}>
+            <a className="jevdb-canvas" href={`${assets}${scene.image}`} target="_blank" rel="noopener noreferrer" aria-label={t(locale, `${title}: 원본 이미지 크게 보기`, `${title}: open full-size slide`)}>
               <Image src={`${assets}${scene.image}`} alt={scene.title} width={1585} height={891} priority={index === 0} />
             </a>
             <div className="jevdb-caption-row"><span>{t(locale, "v25 · 원본 슬라이드의 도표·출처·조건을 보존합니다.", "v25 · Original figures, sources, and conditions are preserved.")}</span><a href={`${assets}${scene.image}`} target="_blank" rel="noopener noreferrer">{t(locale, "크게 보기 ↗", "Full size ↗")}</a></div>

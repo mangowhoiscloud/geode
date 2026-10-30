@@ -73,56 +73,21 @@ status and author/study attribution next to the relevant evidence. Consolidate
 repeated defensive prose into the existing measurement or source sections;
 removing a disclaimer cannot imply measured superiority or a new experiment.
 
-### Reader touch navigation (2026-10-13)
+### Reader native scrolling (operator-directed 2026-10-30)
 
-The artwork canvas accepts a single-finger horizontal swipe: left selects the
-next scene and right the previous scene, without wrapping at either boundary.
-GEODE/JEVDB use their existing selection functions; the Jev route projection
-uses `show()` for whole-scene swipes while its original pager keeps in-scene
-build navigation. The shared `src/lib/reader-swipe.mjs` owns recognition for
-all three readers. Frozen Jev source, PDFs, PPT and slide artwork stay intact.
+All three readers leave wheel, touch, and document scrolling keys to the
+browser. There is no gesture-to-scene navigation, scroll-to-top on selection,
+forced text scrolling, document scroll lock, or overscroll containment.
+Explicit pager buttons, scene links, overview, language selection and native
+source/contents dialogs remain. Tab focus and Escape in dialogs retain native
+accessibility behavior. Artwork cropping is independent of document scrolling.
 
-Start away from the outer 24px browser-navigation edges and move at least
-48–96 CSS pixels (12% of canvas width), within 650ms, with horizontal distance
-at least 1.5 times vertical distance. A vertical/diagonal onset, cancellation,
-second contact, scroll, selection or modal abandons the gesture. Only the
-artwork handles swipes; prose, controls, links within Jev scenes and overview
-thumbnails retain their native interactions. Tapping an image still opens it
-at full size. Swipes never add history at the first/last boundary.
-
-The canvas permits `pan-y pinch-zoom`; at a zoomed visual viewport it restores
-`auto` for panning. Do not disable selection, browser zoom or vertical scroll.
-No mouse drag interception applies. Buttons, keyboard,
-language links and accessible scene announcements remain available.
-
-### Reader desktop navigation (2026-10-13, local review)
-
-A fine-pointer horizontal wheel stroke on artwork selects one whole scene.
-`src/lib/reader-wheel.mjs` owns this optional desktop input; the existing touch
-recognizer is unchanged. React binds it for the canvas lifetime, using Effect
-Events to read the current scene without resetting the momentum lock on render.
-The frozen Jev projection uses the same recognizer and existing `show()` owner.
-
-Only cancelable pixel-mode events without modifiers or pressed buttons qualify.
-The stroke must start horizontally (at least 2:1), accumulate 96 wheel-delta
-pixels within 500ms, and retain its direction. One scene is selected per stroke;
-280ms without wheel input ends the stroke and a 650ms minimum interval prevents
-separated momentum tails from immediately advancing again. These are input
-heuristics, not hardware or OS gesture identification.
-
-Outside the artwork, at the first/last scene boundary, within the viewport's
-outer 24px, on nested controls or a horizontal scroller, input remains native.
-Vertical/diagonal onset, selection, dragging, a modal, zoom, or keyboard/history
-interruption cancels pending navigation. Modifier-wheel zoom is never captured.
-A claimed horizontal tail stays locked across the reader's own scroll-to-top.
-Do not add global overscroll suppression or mouse-drag navigation. WheelEvent
-has no standard physical-device or OS back/forward gesture identifier; do not
-claim this replaces testing on actual trackpads and target browsers.
-
-Existing pager buttons keep their position, 44px height, labels and blue focus
-ring. On fine pointers at widths of at least 768px, their minimum width is 72px
-and keyboard focus uses the existing neutral hover fill. No new controls,
-animation, palette, artwork, layout system or dependency is introduced.
+The Jev publication source and its PDF/media receipt remain frozen. Its existing
+route projection removes the historical input handlers and scroll restrictions
+for the live reader while preserving every scene and build. GEODE and JEVDB
+implement the same input contract in their source components. Validate the
+exported pages with real keyboard, wheel and touch input at mobile and desktop
+sizes; scroll input must never select another scene.
 
 ### Research route ownership (2026-10-12)
 
@@ -146,7 +111,7 @@ The old homepage Research hashes and `/resaerch/jev-system1-offloading/` use
 replacement navigation, preserving language and scene without a Back loop.
 The frozen Jev publication remains checked in at its historical location.
 `npm run build` runs `export-research-routes.mjs` after Next static export:
-it projects routes/history and touch/desktop navigation, and rebases file references to the old served
+it projects routes/history and native reader input, and rebases file references to the old served
 asset addresses. No PDF, scene source, font, image, or video is regenerated.
 Validate canonical and compatibility behavior against `site/out`, not Next dev.
 
@@ -185,7 +150,7 @@ these previews deliberately reproduce the requested source report covers.
 `/research/geode/` presents both existing 92-page PDFs in the Jev reading
 workspace. Language changes artwork, text, and PDF while preserving page.
 Chapter navigation, page search, full-size images, overview, extracted text,
-keyboard paging, focus view, and a native source sheet support reading.
+explicit paging controls, focus view, and a native source sheet support reading.
 Original page claims are historical, not reevaluated or relabeled as current.
 The Jev reader retains all 57 scenes and 81 builds; focus view and full-scene
 text reveal the original content without redrawing figures or changing results.
@@ -321,7 +286,7 @@ progressive builds remain unchanged. Keep the footer's source entry singular.
 At the user's request, sources open in a native modal right sheet: 600px on
 desktop and viewport-fit on mobile, with a fixed title/Close row and only the
 content scrolling. Escape, backdrop and Close return focus to the entry button;
-Tab stays inside, background scrolling and slide keyboard shortcuts are isolated.
+Tab stays inside through the native dialog. Document scroll input remains native.
 The `#readerSources` deep link opens the same sheet. This source panel separates
 pinned study records, TypeSafe documentation, related research, and design
 references. Use quiet ID/title columns, no citation pills or cards. Preserve
