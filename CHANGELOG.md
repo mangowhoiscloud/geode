@@ -75,6 +75,14 @@ functional change.
   three readers and the research collection menu. Explicit navigation and frozen
   research content remain intact.
 
+### Infrastructure
+
+- **Publication bundle release.** Every `main` push publishes the bundle as
+  assets of the `publication` prerelease using only `GITHUB_TOKEN`: the
+  content-addressed archive, its versioned manifest and a moving `manifest.json`
+  pointer. The pointer moves only after the archive is publicly downloadable,
+  unchanged content is skipped, and the newest 10 bundles are kept.
+
 ## [1.0.34] - 2026-10-30
 
 ### Added

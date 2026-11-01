@@ -7,8 +7,9 @@ and the constants that describe them. The consumer owns templates, generated
 pages, the Inspect viewer and hosting.
 
 Producer: [`scripts/build_publication_bundle.py`](../../scripts/build_publication_bundle.py).
-Tests: [`tests/scripts/test_build_publication_bundle.py`](../../tests/scripts/test_build_publication_bundle.py).
-Upload and CI wiring are not part of this step.
+Publisher: [`.github/workflows/publication-bundle.yml`](../../.github/workflows/publication-bundle.yml).
+Tests: [`tests/scripts/test_build_publication_bundle.py`](../../tests/scripts/test_build_publication_bundle.py)
+and [`tests/integration/test_publication_workflow.py`](../../tests/integration/test_publication_workflow.py).
 
 ## Build
 
@@ -112,6 +113,48 @@ structured records written by the campaign itself.
 - Consumers must reject a bundle whose `schema` is not `geode-publication-bundle`
   or whose versions they do not support.
 - Consumers must verify every `files[]` digest and `tree_sha256` before use.
+
+## Consumers
+
+Every push to `main` (and a manual dispatch) builds the bundle and publishes it
+as assets of the GitHub release tagged `publication`. The release is a
+prerelease and never marked latest, so it stays out of the `v<version>` PyPI
+releases and the "latest release" badge. The tag's commit has no meaning; each
+manifest names its own `source_commit`. All URLs work without authentication:
+
+| Asset | URL under `https://github.com/mangowhoiscloud/geode/releases/download/publication/` |
+|---|---|
+| Latest pointer | `manifest.json` |
+| Archive | `geode-publication-<sha256>.tar.gz` |
+| Versioned manifest | `manifest-<sha256>.json`, byte-identical to the archive's `manifest.json` |
+
+The latest pointer is the bundle manifest plus one key,
+`archive: {name, sha256, bytes, url}`. The publisher uploads and publicly
+re-downloads the archive before it moves the pointer, so the pointer never names
+a missing archive. The swap is an asset rename, so `manifest.json` can be absent
+for about one API call; retry a 404 briefly. A build whose `tree_sha256` equals
+the current pointer's publishes nothing. The archive name can change for the
+same `tree_sha256` when the runner's zlib changes, so compare content by
+`tree_sha256`, not by archive name.
+
+Retention: the newest 10 archives and their versioned manifests are kept, plus
+the one the pointer names. With 23 `main` pushes in the 30 days before
+2026-11-01, that is about two weeks of bundles at about 13 MB each, enough for
+an open sync PR or a rollback. Consumers must mirror the bundles they pin
+(mangowhois-site mirrors to R2) rather than rely on release retention.
+
+To verify a bundle:
+
+1. Read `archive.sha256` and `archive.name` from the pointer (or take a pinned
+   `<sha256>`).
+2. Download the archive and check that its SHA-256 equals `<sha256>`, which is
+   also the suffix of its name.
+3. Extract regular files only, rejecting absolute paths and `..` segments.
+   Check that the archive's `manifest.json` equals `manifest-<sha256>.json`
+   and that its `tree_sha256` equals the pointer's.
+4. Check `schema`, `schema_version` and `layout_version`. Then check every
+   `files[]` entry's `bytes` and `sha256`, and recompute `tree_sha256` from the
+   `"<sha256> <bytes> <path>\n"` lines.
 
 ## Published runtime snapshot
 
