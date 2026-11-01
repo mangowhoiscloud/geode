@@ -153,9 +153,9 @@ same `tree_sha256` when the runner's zlib changes, so compare content by
 
 Retention: the newest 10 archives and their versioned manifests are kept, plus
 the one the pointer names. With 23 `main` pushes in the 30 days before
-2026-11-01, that is about two weeks of bundles at about 13 MB each, enough for
-an open sync PR or a rollback. Consumers must mirror the bundles they pin
-(mangowhois-site mirrors to R2) rather than rely on release retention.
+2026-11-01, that is about two weeks of bundles at about 13 MB each. Consumers
+re-pin to the pointer (mangowhois-site checks hourly), so a pin stays inside
+that window. A consumer that must rebuild from older bundles keeps its own copy.
 
 To verify a bundle:
 

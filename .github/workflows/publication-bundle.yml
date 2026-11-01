@@ -21,8 +21,8 @@ concurrency:
 
 env:
   RELEASE_TAG: publication
-  # mangowhois-site mirrors the bundles it pins to R2; release retention only
-  # needs to outlive an open sync PR and leave room for a rollback.
+  # Consumers re-pin to the pointer, so retention only needs to cover the gap
+  # until their next sync and leave room for a rollback.
   KEEP_BUNDLES: "10"
 
 jobs:
