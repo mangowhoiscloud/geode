@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scripts import check_official_docs
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SYSTEM_INDEX = (
     REPO_ROOT / "site" / "src" / "app" / "docs" / "architecture" / "system-index" / "page.tsx"
@@ -43,8 +45,10 @@ def test_public_architecture_consumers_cannot_bypass_generated_drift_gates() -> 
         assert f"- '{path_filter}'" in CI_WORKFLOW
 
     assert "Verify committed public-doc generators are current" in PAGES_WORKFLOW
-    assert "git diff --exit-code --" in PAGES_WORKFLOW
-    assert "public/llms-full.txt" in PAGES_WORKFLOW
+    assert "scripts/check_official_docs.py --verify-generated" in PAGES_WORKFLOW
+    verify = check_official_docs.verify_generated_command()
+    assert verify.argv[1:4] == ("diff", "--exit-code", "--")
+    assert "site/public/llms-full.txt" in verify.argv
     assert "- 'CHANGELOG.md'" in CI_WORKFLOW
     assert '- "CHANGELOG.md"' in PAGES_WORKFLOW
 
