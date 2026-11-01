@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Publication bundle.** `scripts/build_publication_bundle.py` packs the
+  changelog, evaluation index, architecture inventory and raw self-improving hub
+  data into a deterministic, content-addressed archive with a manifest of file
+  digests and hub constants exported from GEODE modules. A downstream site can
+  render GEODE's pages from it; upload and CI wiring come later.
+
 ### Fixed
 
 - **Draft PR CI eligibility.** Defer aggregate Test and Gate jobs with their
