@@ -26,7 +26,9 @@ _LOG = (
 def _runtime(root: Path) -> Path:
     root.mkdir()
     (root / "baseline.json").write_text(
-        json.dumps({"ts_utc": "2026-06-01T00:00:00Z", "raw": {"eval_archive": "/Users/a/x.eval"}}),
+        json.dumps(
+            {"ts_utc": "2026-06-01T00:00:00Z", "raw": {"eval_archive": "/Users/user/x.eval"}}
+        ),
         encoding="utf-8",
     )
     (root / "campaign-progress.log").write_text(_LOG, encoding="utf-8")

@@ -31,7 +31,7 @@ _LEGACY_LOG = """\
 def test_scrub_drops_absolute_paths_but_keeps_urls_and_relative_paths() -> None:
     scrubbed = pub.scrub(
         {
-            "eval_archive": "/Users/someone/.geode/petri/logs/a_audit_x.eval",
+            "eval_archive": "/Users/user/.geode/petri/logs/a_audit_x.eval",
             "home": "~/.geode/self-improving/baseline.json",
             "url": "https://github.com/mangowhoiscloud/geode/blob/main/x.md",
             "relative": "docs/self-improving/run-1.md",
@@ -54,7 +54,7 @@ def test_publish_baseline_wraps_scrubs_and_skips_unchanged_rewrites(tmp_path: Pa
     source = tmp_path / "baseline.json"
     source.write_text(
         json.dumps(
-            {"ts_utc": "2026-06-01T20:24:47Z", "raw": {"eval_archive": "/Users/a/b/c.eval"}}
+            {"ts_utc": "2026-06-01T20:24:47Z", "raw": {"eval_archive": "/Users/user/b/c.eval"}}
         ),
         encoding="utf-8",
     )

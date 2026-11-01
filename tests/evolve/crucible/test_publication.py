@@ -23,7 +23,7 @@ def _attempt(campaign: str, outcome: str, tokens: int) -> dict[str, object]:
         "usage": {"tokens": tokens, "cost_usd": tokens / 1000, "calls": 3},
         "wall_seconds": 1.5,
         "reasons": ["private detail"],
-        "candidate_ref": "/Users/someone/worktree",
+        "candidate_ref": "/Users/user/worktree",
     }
 
 

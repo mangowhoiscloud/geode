@@ -135,7 +135,7 @@ def test_write_baseline_refreshes_published_mirror(isolated: Path) -> None:
     from evolve.scaffold_search import publication
 
     ledger._write_baseline(
-        {"broken_tool_use": 3.0}, {"broken_tool_use": 0.2}, eval_archive="/Users/a/logs/x.eval"
+        {"broken_tool_use": 3.0}, {"broken_tool_use": 0.2}, eval_archive="/Users/user/logs/x.eval"
     )
 
     anchor = json.loads((isolated / "baseline.json").read_text(encoding="utf-8"))
