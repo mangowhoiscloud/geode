@@ -1,8 +1,8 @@
 {
   "$comment": [
-    "Render-lint config for GitHub Pages-published markdown under",
+    "Render-lint config for the render-gated markdown under",
     "docs/audits/ and docs/self-improving/petri-bundle/README.md. The goal is to",
-    "catch syntax/structure issues that break Pages rendering — not",
+    "catch syntax/structure issues that break rendering — not",
     "to enforce English-prose cosmetics.",
     "",
     "Rules disabled (with rationale):",

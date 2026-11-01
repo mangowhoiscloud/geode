@@ -63,6 +63,17 @@ functional change.
   The publication bundle includes it, and each manifest file entry now records
   its last commit time.
 
+### Changed
+
+- **Old public addresses redirect.** GitHub Pages now serves only redirects:
+  one stub per frozen old page and a 404 fallback map
+  `mangowhoiscloud.github.io/geode/` addresses to the docs at
+  `mangowhois.ai/products/geode/`, the hub and research readers at
+  `tech.mangowhois.ai`, and retired hub operator docs on GitHub. Project URLs,
+  README and docs links, and the OpenRouter attribution header point to the new
+  addresses. The architecture inventory moved to
+  `docs/architecture/architecture-baseline.json`.
+
 ### Fixed
 
 - **Draft PR CI eligibility.** Defer aggregate Test and Gate jobs with their
@@ -75,6 +86,15 @@ functional change.
   document paging shortcuts, forced scroll movement and scroll locks from all
   three readers and the research collection menu. Explicit navigation and frozen
   research content remain intact.
+
+### Removed
+
+- **In-repo website and hub generator.** The Next.js site, the generated
+  self-improving hub pages, templates and both Inspect viewer copies,
+  `scripts/build_self_improving_hub.py` with `geode hub build`, and the
+  site-only scripts, hooks, tests and build checks are gone. mangowhois-site
+  builds the docs, hub and readers from the publication bundle; the raw hub
+  data and its producers stay here.
 
 ### Infrastructure
 

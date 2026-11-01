@@ -1,8 +1,9 @@
-"""Run the official GEODE documentation generation gate.
+"""Run the official GEODE documentation gate.
 
-This is the release-facing composition layer for the docs site. It regenerates
-the site SOT/Changelog/llms indexes, validates repo-local docs links and
-render-gated Markdown, then builds the static Next.js export.
+GEODE no longer builds a docs site; the downstream site renders GEODE's
+pages from the publication bundle (docs/architecture/publication-bundle.md).
+This gate checks the owner map and release surfaces, the generated
+architecture inventory and evaluation catalog, and render-gated Markdown.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tomllib
@@ -19,16 +19,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SITE_DIR = REPO_ROOT / "site"
 VENV_BIN = REPO_ROOT / ".venv" / "bin"
-GENERATED_DOCS = (
-    "site/src/data/geode/sot.ts",
-    "site/src/data/geode/changelog.ts",
-    "site/public/llms.txt",
-    "site/public/llms-full.txt",
-)
 PUBLIC_IDENTITY = "Autonomous Agent Runtime + Evaluation Substrate"
 OWNER_MAP = Path("docs/architecture/official-docs-generation.md")
+# Public guidance pages are built by mangowhois-site from the publication bundle.
+PUBLIC_DOCS_PREFIX = "https://mangowhois.ai/products/geode/docs/"
 
 
 @dataclass(frozen=True)
@@ -38,17 +33,8 @@ class DocsCommand:
     cwd: Path
 
 
-def _resolve_executable(name: str) -> str:
-    found = shutil.which(name)
-    if found is None:
-        raise SystemExit(f"missing required executable on PATH: {name}")
-    return found
-
-
-def build_docs_commands(*, skip_build: bool = False) -> list[DocsCommand]:
-    npm = _resolve_executable("npm")
-    git = _resolve_executable("git")
-    commands = [
+def build_docs_commands() -> list[DocsCommand]:
+    return [
         DocsCommand(
             "check generated architecture baseline",
             (sys.executable, "scripts/architecture_baseline.py", "--check"),
@@ -60,39 +46,11 @@ def build_docs_commands(*, skip_build: bool = False) -> list[DocsCommand]:
             REPO_ROOT,
         ),
         DocsCommand(
-            "sync site SOT, changelog, and llms index",
-            (npm, "run", "sync-stats"),
-            SITE_DIR,
-        ),
-        DocsCommand(
-            "check docs links",
-            (sys.executable, "scripts/check_docs_links.py", "--quiet"),
-            REPO_ROOT,
-        ),
-        DocsCommand(
             "lint render-gated markdown",
             ("/bin/bash", "scripts/lint_pages_markdown.sh"),
             REPO_ROOT,
         ),
     ]
-    if not skip_build:
-        commands.append(DocsCommand("build static docs site", (npm, "run", "build"), SITE_DIR))
-        commands.append(
-            DocsCommand(
-                "export docs markdown and llms-full index",
-                (npm, "run", "export-md"),
-                SITE_DIR,
-            )
-        )
-    checked_files = GENERATED_DOCS[:-1] if skip_build else GENERATED_DOCS
-    commands.append(
-        DocsCommand(
-            "verify generated docs are committed",
-            (git, "diff", "--exit-code", "--", *checked_files),
-            REPO_ROOT,
-        )
-    )
-    return commands
 
 
 def _project_version() -> str:
@@ -121,13 +79,15 @@ def check_owner_map() -> None:
         cells = row.strip("|").split("|")
         if len(cells) != 4:
             raise SystemExit(f"{OWNER_MAP}: owner row must have four columns: {row}")
-        for cell in cells[1:]:
+        for column, cell in enumerate(cells[1:], start=1):
             links = re.findall(r"\]\(([^)\s]+)\)", cell)
             if not links:
                 raise SystemExit(
                     f"{OWNER_MAP}: missing code, guidance, or verification link: {row}"
                 )
             for link in links:
+                if column == 2 and link.startswith(PUBLIC_DOCS_PREFIX):
+                    continue
                 target = (document.parent / link.split("#", 1)[0]).resolve()
                 if not target.is_relative_to(REPO_ROOT.resolve()) or not target.is_file():
                     raise SystemExit(f"{OWNER_MAP}: missing or non-repository owner path: {link}")
@@ -175,7 +135,6 @@ def _command_env() -> dict[str, str]:
     env = os.environ.copy()
     if VENV_BIN.exists():
         env["PATH"] = f"{VENV_BIN}{os.pathsep}{env.get('PATH', '')}"
-    env.setdefault("GEODE_REPO", str(REPO_ROOT))
     return env
 
 
@@ -193,11 +152,6 @@ def run_docs_gate(commands: Sequence[DocsCommand]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--skip-build",
-        action="store_true",
-        help="Regenerate and validate docs without running the Next.js production build.",
-    )
-    parser.add_argument(
         "--check-map",
         action="store_true",
         help="Only check declared code, documentation owner, and verification file links.",
@@ -206,7 +160,7 @@ def main() -> None:
     if args.check_map:
         check_owner_map()
     else:
-        run_docs_gate(build_docs_commands(skip_build=args.skip_build))
+        run_docs_gate(build_docs_commands())
 
 
 if __name__ == "__main__":

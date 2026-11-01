@@ -11,7 +11,7 @@ related:
   - docs/architecture/package-classification.md
   - docs/workflow.md
   - pyproject.toml
-  - site/src/data/geode/architecture-baseline.json
+  - docs/architecture/architecture-baseline.json
 ---
 
 # GEODE code conventions
@@ -79,7 +79,7 @@ requirements or independent verification. See the
 
 The 2026-08-25 scan used the synchronized v1.0.26 tree after the Crucible module
 rename. Exact generated inventory remains owned by
-`site/src/data/geode/architecture-baseline.json`; this table explains the
+`docs/architecture/architecture-baseline.json`; this table explains the
 measured shape that informed the conventions.
 
 | Surface | Measured shape |
@@ -119,7 +119,7 @@ evolve  ->  evals  ->  core
 | `evals/` | measurement, Petri, benchmarks, seed generation, GEO | `core`, `evals` |
 | `evolve/` | Crucible, scaffold search, campaign state, promotion | `core`, `evals`, `evolve` |
 | `scripts/` | repository operations, validation, generation, release support | canonical package APIs; it is not a fourth product layer |
-| `site/` | static public documentation and portfolio | generated data and public contracts; runtime code never imports it |
+| `github-pages/` | redirect-only GitHub Pages site for old public addresses | its frozen paths and redirect rules; runtime code never imports it |
 | `tests/` | mirrored unit, integration, script, and visualization checks | the surface under test |
 
 `core` never imports `evals` or `evolve`; `evals` never imports `evolve`.
@@ -280,17 +280,6 @@ base implementation, not used merely to make inheritance possible.
   than one enum per state.
 - Do not expand a stable public hook or tool surface merely to mirror an
   internal implementation detail.
-
-### 2.6 TypeScript and React names
-
-- Non-route `.ts` and `.tsx` filenames use kebab-case.
-- React components and exported types use `PascalCase`; functions and values
-  use `camelCase`; constants may use `UPPER_SNAKE_CASE` when truly fixed.
-- Next.js route modules use framework names and default-export their page or
-  layout component. Shared components use named exports.
-- Prefer `type` for unions, props, and data shapes. Use `interface` only when
-  declaration merging or extension is the point. The measured tree has 76
-  type declarations, 7 interfaces, and 6 classes.
 
 ## 3. Python typing and class design
 
@@ -486,25 +475,17 @@ separate axes; never advance one as a proxy for another.
 
 Required verification is risk-scaled but reports the exact commands run.
 Python changes normally exercise targeted pytest, Ruff check/format, strict
-mypy for touched production roots, and import-linter. Site changes exercise
-ESLint, TypeScript/Next build, and the relevant export or render gate.
+mypy for touched production roots, and import-linter. Redirect-site changes
+run its Node build and contract tests.
 
-## 8. Site conventions
+## 8. Redirect site conventions
 
-The public site is a private Next.js application, not a second GEODE product
-version. Its `package.json` version stays independent; public GEODE version
-data comes from `pyproject.toml` through `site/scripts/sync-stats.mjs`.
-
-- TypeScript remains `strict`, `noEmit`, and `isolatedModules`.
-- Use the `@/*` alias for cross-directory `site/src` imports and local relative
-  imports for close siblings.
-- Default to server components. Add `"use client"` only for hooks, browser APIs,
-  or interactive state.
-- Use function components; do not introduce React component classes.
-- Follow `site/DESIGN.md` for layout, tokens, accessibility, motion, and visual
-  constraints. Code convention does not override the design SOT.
-- `site/src/data/geode/sot.ts`, `changelog.ts`, public `llms*.txt`, and exported
-  markdown are generated views. Do not hand-edit them.
+GEODE no longer builds a public site; mangowhois-site renders GEODE's pages
+from the publication bundle. The only web code here is the redirect-only GitHub
+Pages site: `github-pages/rules.js` (a frozen copy of the canonical URL rules,
+plain ES modules, no dependencies) and `scripts/build_pages_redirects.mjs`.
+Change a redirect target by updating the rules from mangowhois-site's canonical
+source, never by hand-editing generated stubs.
 
 ## 9. Versioning and compatibility
 
@@ -519,9 +500,8 @@ version in five reviewed source locations:
 4. `README.md`;
 5. `README.ko.md`.
 
-Then regenerate `uv.lock`, `site/src/data/geode/sot.ts`,
-`site/src/data/geode/changelog.ts`, `site/public/llms.txt`, and
-`site/public/llms-full.txt` through their owning commands. Do not hand-stamp a
+Then regenerate `uv.lock` through its owning command. The downstream site takes
+the version and changelog from the next publication bundle; do not hand-stamp a
 generated mirror.
 
 Post-1.0 routine releases, including features, default to PATCH. MINOR and

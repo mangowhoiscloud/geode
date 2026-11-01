@@ -94,7 +94,7 @@ def test_provider_composition_is_explicit_and_attributed() -> None:
     assert spec.transport.native_capabilities == frozenset({"text_completion"})
     assert spec.extra_headers_factory is not None
     assert spec.extra_headers_factory("ignored") == {
-        "HTTP-Referer": "https://mangowhoiscloud.github.io/geode/",
+        "HTTP-Referer": "https://mangowhois.ai/products/geode/",
         "X-OpenRouter-Title": "GEODE",
         "X-OpenRouter-Metadata": "enabled",
     }

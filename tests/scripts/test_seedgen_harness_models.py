@@ -1,12 +1,8 @@
-"""Guard: seed-gen table chips reflect the run's REAL models, not a hardcode.
+"""Guard: the seeds listing records each run's REAL models, not a hardcode.
 
 A seed-gen run is multi-model (a Claude drafter/evolver + gpt-5.5 critics). The
-hub formerly hardcoded a single ``claude-cli/claude-opus-4-7`` chip in every
-seedgen row/detail, so a run executed with opus-4-8 + gpt-5.5 was mislabeled as
-the retired Claude CLI on the wrong version, hiding the Codex half (operator report:
-``payg:opus-4-8`` / ``payg:gpt-5-5`` runs shown as "claude code"). The fix
-derives ``harness_models`` from each run's ``sub_agents/*/`` and renders one
-chip per actual model.
+listing derives ``harness_models`` from each run's ``sub_agents/*/`` so the
+downstream hub can render one chip per model actually used.
 """
 
 from __future__ import annotations
@@ -15,7 +11,6 @@ import json
 from pathlib import Path
 
 from scripts.build_seeds_listing import _build_row, _run_harness_models
-from scripts.build_self_improving_hub import seedgen_harness_chips
 
 
 def _make_subagent(parent: Path, name: str, model: str, provider: str, *, cli: bool) -> None:
@@ -83,24 +78,3 @@ def test_build_row_includes_harness_models(tmp_path: Path) -> None:
     row = _build_row(run)
     assert row is not None
     assert row["harness_models"] == ["openai-codex/gpt-5.5"]
-
-
-def test_chips_render_real_models_not_hardcoded_claude_code() -> None:
-    html = seedgen_harness_chips(
-        ["claude-cli/claude-opus-4-8", "openai-codex/gpt-5.5", "anthropic/claude-opus-4-8"]
-    )
-    # the actual models appear...
-    assert "claude-opus-4-8" in html
-    assert "gpt-5.5" in html
-    # ...with the right chips: historical Claude CLI, ChatGPT
-    # (openai-codex subscription lane), and PAYG (anthropic).
-    assert "Legacy Claude CLI" in html
-    assert "ChatGPT" in html
-    assert "Codex" not in html  # the openai-codex lane reveals the ChatGPT subscription
-    assert "PAYG" in html
-    # regression: the former hardcoded wrong version must NOT appear
-    assert "claude-opus-4-7" not in html
-
-
-def test_chips_empty_degrades_to_muted_dot() -> None:
-    assert seedgen_harness_chips([]) == '<span class="muted">.</span>'

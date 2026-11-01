@@ -75,8 +75,8 @@ view vX.Y.Z` (errors with not-found), and the exact-version PyPI JSON
 `https://pypi.org/pypi/geode-agent/X.Y.Z/json` (404). Once any tag/release/artifact exists, the number is
 burned — correct forward with the next free number instead. To reclaim:
 rename the CHANGELOG heading in place with a retraction blurb, restamp the
-5 locations + site SoT (`sync-stats.mjs` + `check_llms_version.py --fix`)
-+ `uv.lock`, and land through the
+5 locations + `uv.lock` (the downstream site picks the version up from the next
+publication bundle), and land through the
 normal PR chain.
 
 ## Scope Rules — What to Record / What Not to Record

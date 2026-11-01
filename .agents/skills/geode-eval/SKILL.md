@@ -42,7 +42,7 @@ deduplication, lineage-safe splits, and label quality pass.
    - best-of-N, repair depth, replication, or promotion authority:
      `.claude/skills/stanford-test-time-compute/`
 
-Do not scan every eval document or load `site/public/llms-full.txt` by default.
+Do not scan every eval document or load the public `llms-full.txt` by default.
 
 For token/cache/cost evidence, read the
 [usage accounting contract](../../../docs/architecture/usage-accounting.md).

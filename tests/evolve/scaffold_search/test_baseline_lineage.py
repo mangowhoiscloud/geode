@@ -12,9 +12,7 @@ production-logic epoch). This pins:
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -120,40 +118,3 @@ def test_epoch_label_map_records_vanilla() -> None:
     rows = {r["id"]: r for r in _committed_rows()}
     v = rows["baseline-2605-1"]
     assert label_map.get(v["epoch_hash"]) == "be-001"
-
-
-# --- hub renders the versioned lineage ---------------------------------------
-
-
-def _load_hub() -> Any:
-    spec = importlib.util.spec_from_file_location(
-        "_hub_lineage", REPO_ROOT / "scripts" / "build_self_improving_hub.py"
-    )
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def test_hub_renders_two_epoch_versioned_lineage() -> None:
-    hub = _load_hub()
-    vanilla = {r["id"]: r for r in _committed_rows()}["baseline-2605-1"]
-    live = {
-        **vanilla,
-        "id": "baseline-2606-1",
-        "ts_utc": "2026-06-01T00:00:00Z",
-        "epoch_hash": "501d6d8de4ef",
-        "epoch_label": "be-002",
-        "promote_policy": "gate",
-        "baseline_spec": {
-            **vanilla["baseline_spec"],
-            "margin_rule": "fitness-stderr",
-            "promote_policy": "gate",
-        },
-    }
-    html = hub._render_baseline_registry_index([vanilla, live])
-    assert "be-001" in html and "be-002" in html
-    assert "pre-epoch (backfill pending)" not in html  # vanilla is properly tagged
-    assert html.count('class="namespace-block"') == 2  # two distinct stacked epochs
-    assert "policy <code>legacy</code>" in html  # the version marker is visible

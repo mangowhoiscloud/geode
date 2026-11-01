@@ -1,47 +1,25 @@
-name: Deploy site to GitHub Pages
+name: Deploy redirect site to GitHub Pages
 
-# Builds the Next.js static export under `site/` and deploys it to GitHub
-# Pages. Site URL after deploy: https://mangowhoiscloud.github.io/geode/
+# GEODE's docs, self-improving hub and research readers moved to
+# https://mangowhois.ai/products/geode/ and https://tech.mangowhois.ai/.
+# mangowhoiscloud.github.io/geode/ now serves redirects only: one stub per
+# frozen old page (github-pages/redirect-paths.json) and a 404 page that maps
+# any other old address with the same rules (github-pages/rules.js).
+# See docs/architecture/official-docs-generation.md#github-pages-redirects.
 #
-# Since the move to mangowhois.ai, the landing (/geode/) and the docs (/geode/docs/**) are deployed
-# here as redirect pages to https://mangowhois.ai/products/geode/ ; see the last build steps.
-#
-# Triggers on changes to `site/**`, the self-improving hub under
-# `docs/self-improving/**` (copied into `site/out/self-improving/` at build
-# time), this workflow, or any of the SOT files that `sync-stats` reads
-# (CHANGELOG.md, pyproject.toml, CLAUDE.md). A docs page like
-# `/docs/reference/changelog` therefore stays in sync with CHANGELOG.md
-# without a separate commit to `site/`, and a hub rebuild (seed-generation /
-# mutations / autoresearch HTML) deploys without needing a `site/` touch.
-#
-# Daily 09:00 KST cron also runs as a safety net so the docs page can never
-# fall more than 24 hours behind even if Pages settings get changed by an
-# accidental admin action.
-#
-# Prerequisite: enable Pages once via repo Settings → Pages → Source =
-# "GitHub Actions". The deploy action handles the rest.
+# Prerequisite: Pages source = "GitHub Actions" (repo Settings → Pages).
 
 on:
   push:
     branches: [main]
     paths:
-      - "site/**"
-      - "docs/self-improving/**"
-      - "docs/audits/**"
-      - "evals/petri/judge_dims/**"
-      - "CHANGELOG.md"
-      - "pyproject.toml"
-      - "CLAUDE.md"
-      - ".pymarkdown.json"
-      - ".yamllint.yaml"
+      - "github-pages/**"
+      - "scripts/build_pages_redirects.mjs"
       - ".github/workflows/pages.yml"
   pull_request:
-    # Required checks must also exist for PRs without site changes.
+    # Required checks must also exist for PRs that do not touch the redirects.
     branches: [main, develop]
     types: [opened, reopened, synchronize, ready_for_review]
-  schedule:
-    # 09:00 KST = 00:00 UTC. Daily safety-net rebuild.
-    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
@@ -54,9 +32,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Render-lint gate — fails fast on malformed markdown/YAML/JSON
-  # before we burn the full Next.js build. See
-  # docs/architecture/render-lint.md for the rule rationale.
+  # Render-lint gate — malformed markdown/YAML/JSON in the render-gated docs
+  # and the petri bundle data. See docs/architecture/render-lint.md.
   lint:
     name: Render lint (markdown + YAML + JSON)
     runs-on: ubuntu-latest
@@ -112,207 +89,26 @@ jobs:
         shell: bash
 
   build:
-    name: Build (Next.js static export)
+    name: Build (redirect site)
     needs: lint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: site
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: site/package-lock.json
 
-      # Run the petri ratchet BEFORE npm install/build. A corrupt bundle
-      # must fail fast and independently of the Next.js build — that way a
-      # site build failure (unrelated to petri) doesn't mask a regression
-      # in the published archives, and a bundle regression doesn't waste a
-      # full site build. See .github/workflows/petri-publish.yml for the
-      # PR-gate counterpart.
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          enable-cache: true
-
-      - name: Sync dev group (zipfile-zstd for validator)
-        working-directory: ${{ github.workspace }}
-        run: uv sync --locked
-
-      - name: Validate docs/self-improving/petri-bundle (deep — pre-build gate)
-        working-directory: ${{ github.workspace }}
-        run: uv run python scripts/validate_petri_bundle.py
-
-      - name: Build literature listing.json (CSP-14)
-        working-directory: ${{ github.workspace }}
-        run: uv run python scripts/build_literature_listing.py
-
-      - name: Build seeds listing.json (CSP-14)
-        working-directory: ${{ github.workspace }}
-        run: uv run python scripts/build_seeds_listing.py
-
-      - name: Sync GEODE stats into site SOT
-        run: npm run sync-stats
-        env:
-          GEODE_REPO: ${{ github.workspace }}
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint site source
-        run: npm run lint
-
-      - name: Type-check site source
-        run: npm run typecheck
-
-      - name: Audit locked site dependencies
-        run: npm audit --audit-level=moderate
-
-      - name: Install ffprobe for replay stream verification
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg
-
-      - name: Build static export
-        run: npm run build
-
-      - name: Verify structured metadata and visible citations
-        run: npm run verify-metadata
-
-      # llms.txt convention, publication side step 2 (PR-LLMS-TXT-MD-TWINS):
-      # markdown twins for every docs page (rendered URL + ".md") and the
-      # true full-content llms-full.txt. Runs after build because the twins
-      # are converted from the static-export HTML.
-      - name: Export docs markdown twins + llms-full.txt
-        run: npm run export-md
-
-      - name: Verify committed public-doc generators are current
-        run: >-
-          git diff --exit-code --
-          public/llms.txt
-          public/llms-full.txt
-          src/data/geode/sot.ts
-          src/data/geode/changelog.ts
-
-      - name: Copy docs/self-improving into site/out (hub root + petri-bundle)
-        working-directory: ${{ github.workspace }}
-        run: |
-          if [ -d docs/self-improving ]; then
-            mkdir -p site/out/self-improving
-            cp -R docs/self-improving/. site/out/self-improving/
-            echo "self-improving copied to site/out/self-improving/"
-            find site/out/self-improving -maxdepth 1 -print
-          else
-            echo "docs/self-improving missing — skipping copy"
-          fi
-          # Legacy URL redirect: /geode/petri-bundle/ -> /geode/self-improving/petri-bundle/
-          # Single static index.html with meta-refresh; preserves SPA #hash deep links.
-          if [ -d docs/petri-bundle ]; then
-            mkdir -p site/out/petri-bundle
-            cp -R docs/petri-bundle/. site/out/petri-bundle/
-            echo "legacy petri-bundle redirect copied to site/out/petri-bundle/"
-            find site/out/petri-bundle -maxdepth 1 -print
-          fi
-
-      # Source-level internal link gate (no network, fast). Catches broken
-      # /docs nav, anchors, and basePath-missing hrefs before deploy.
-      - name: Internal link audit (source)
-        working-directory: ${{ github.workspace }}
-        run: uv run python scripts/check_docs_links.py
-
-      # Content-canon gate: the self-improving loop is selection over a
-      # scaffold, not ML (site/CONTENT-CANON.md §2). Blocks banned vocabulary
-      # ("ML loop", "RL", "fine-tuning", ...) on the docs surface.
-      - name: Docs canon audit (banned terms)
-        working-directory: ${{ github.workspace }}
-        run: uv run python scripts/check_docs_canon.py
-
-      # Resolve the /geode basePath for the external checker: the built files
-      # live in site/out but ship under /geode/..., so symlink _lc/geode ->
-      # site/out and point lychee's --root-dir at _lc. The symlink lives outside
-      # the scanned globs, so there is no recursive globbing.
-      - name: Stage built HTML for link checking
-        working-directory: ${{ github.workspace }}
-        run: |
-          mkdir -p _lc
-          ln -sfn "${{ github.workspace }}/site/out" _lc/geode
-
-      # External broken-link checker (lychee) over the ACTUAL built HTML that
-      # ships to Pages: internal nav, anchors, and outbound links.
-      # BLOCKING since 2026-06-11 (operator promotion): the 2026-06-11 summary
-      # read 501 errors, all of them link targets inside the vendored/generated
-      # hub surfaces (petri-bundle viewer, self-improving hub) plus 7 site-side
-      # rots fixed in the same PR. Hub targets are excluded below; the hub has
-      # its own validator (petri-publish.yml). Everything else now blocks.
-      # Transient-5xx recheck: lychee v0.24.2 re-requests a rejected status
-      # only for 429, so --max-retries never retries a 503/504. The first
-      # pass therefore records its exit code; any
-      # non-zero result waits two minutes and reruns the same arguments as the
-      # blocking gate. .lycheecache keeps first-pass successes and never
-      # errors, so only links that did not pass are requested again.
-      - name: Broken-link check on built HTML (lychee, first pass)
-        id: lychee
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
-        with:
-          args: &lychee-args >-
-            --root-dir ${{ github.workspace }}/_lc
-            --fallback-extensions html
-            --remap '^https://mangowhoiscloud\.github\.io/geode/(.*)/$ file://${{ github.workspace }}/_lc/geode/$1/index.html'
-            --cache --max-cache-age 1d
-            --max-retries 2 --retry-wait-time 2 --timeout 20
-            --accept 200,206,403,429
-            --exclude 'petri-bundle'
-            --exclude 'self-improving'
-            --exclude 'linkedin\.com'
-            site/out/index.html
-            site/out/about/index.html
-            'site/out/docs/**/*.html'
-            'site/out/portfolio/**/*.html'
-            'site/out/research/**/*.html'
-            'site/out/resaerch/jev-system1-offloading/**/*.html'
-          fail: false
-          jobSummary: true
-          output: lychee-report.md
-
-      - name: Wait before rechecking failed links
-        if: steps.lychee.outputs.exit_code != '0'
-        run: sleep 120
-
-      - name: Recheck failed links on built HTML (lychee, blocking)
-        if: steps.lychee.outputs.exit_code != '0'
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
-        with:
-          args: *lychee-args
-          fail: true
-          jobSummary: true
-          output: lychee-report.md
-
-      # The landing and docs moved to https://mangowhois.ai/products/geode/ (mangowhois-site
-      # evidence/v33/pages-migration/PLAN.md). mangowhois.ai imports the full static export, so it is
-      # uploaded whole first; then every moved route in site/out becomes a redirect page
-      # (site/scripts/redirect-to-mangowhois.mjs, map: site/redirect-map.json). Research readers, the
-      # replay, the self-improving hub and the PDFs are deployed unchanged.
-      - name: Upload the full static export (source for mangowhois.ai)
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: geode-site-export
-          path: site/out
-          retention-days: 90
-
-      - name: Replace moved routes with redirect pages to mangowhois.ai
-        working-directory: ${{ github.workspace }}/site
-        run: |
-          node scripts/test-redirect-to-mangowhois.mjs
-          node scripts/redirect-to-mangowhois.mjs out redirect-map.json
+      - name: Build redirect stubs and the 404 fallback
+        run: node scripts/build_pages_redirects.mjs --out "$RUNNER_TEMP/pages"
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        if: github.event_name != 'pull_request'
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: github.event_name != 'pull_request'
         with:
-          path: site/out
+          path: ${{ runner.temp }}/pages
 
   deploy:
     name: Deploy to GitHub Pages

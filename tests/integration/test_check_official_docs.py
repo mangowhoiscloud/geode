@@ -2,74 +2,23 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
-from scripts import check_docs_links, check_official_docs
+from scripts import check_official_docs
 
 
-def test_build_docs_commands_orders_generation_before_validation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        check_official_docs,
-        "_resolve_executable",
-        lambda name: f"/usr/bin/{name}",
-    )
-
+def test_build_docs_commands_check_generated_sources_and_markdown() -> None:
     commands = check_official_docs.build_docs_commands()
 
     assert [command.label for command in commands] == [
         "check generated architecture baseline",
         "check generated evaluation catalog",
-        "sync site SOT, changelog, and llms index",
-        "check docs links",
         "lint render-gated markdown",
-        "build static docs site",
-        "export docs markdown and llms-full index",
-        "verify generated docs are committed",
     ]
     assert commands[0].argv[1:] == ("scripts/architecture_baseline.py", "--check")
     assert commands[1].argv[1:] == ("scripts/eval/contract.py", "catalog", "--check")
-    assert commands[2].argv == ("/usr/bin/npm", "run", "sync-stats")
-    assert commands[3].argv[1:] == ("scripts/check_docs_links.py", "--quiet")
-    assert commands[4].argv == ("/bin/bash", "scripts/lint_pages_markdown.sh")
-    assert commands[5].argv == ("/usr/bin/npm", "run", "build")
-    assert commands[6].argv == ("/usr/bin/npm", "run", "export-md")
-    assert commands[7].argv == (
-        "/usr/bin/git",
-        "diff",
-        "--exit-code",
-        "--",
-        *check_official_docs.GENERATED_DOCS,
-    )
-
-
-def test_build_docs_commands_can_skip_site_build(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        check_official_docs,
-        "_resolve_executable",
-        lambda name: f"/usr/bin/{name}",
-    )
-
-    commands = check_official_docs.build_docs_commands(skip_build=True)
-
-    assert [command.label for command in commands] == [
-        "check generated architecture baseline",
-        "check generated evaluation catalog",
-        "sync site SOT, changelog, and llms index",
-        "check docs links",
-        "lint render-gated markdown",
-        "verify generated docs are committed",
-    ]
-    assert commands[5].argv == (
-        "/usr/bin/git",
-        "diff",
-        "--exit-code",
-        "--",
-        *check_official_docs.GENERATED_DOCS[:-1],
-    )
+    assert commands[2].argv == ("/bin/bash", "scripts/lint_pages_markdown.sh")
 
 
 def test_run_docs_gate_uses_repo_env(
@@ -103,7 +52,6 @@ def test_run_docs_gate_uses_repo_env(
     check_official_docs.run_docs_gate([command])
 
     assert calls == [(("demo",), check_official_docs.REPO_ROOT, calls[0][2])]
-    assert calls[0][2]["GEODE_REPO"] == str(check_official_docs.REPO_ROOT)
     assert calls[0][2]["PATH"].startswith(f"{venv_bin}:")
 
 
@@ -136,6 +84,31 @@ def test_owner_map_rejects_missing_code_guidance_or_test(
         check_official_docs.check_owner_map()
 
 
+@pytest.mark.parametrize("column", ["code", "guide", "test"])
+def test_public_docs_url_counts_only_as_guidance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, column: str
+) -> None:
+    monkeypatch.setattr(check_official_docs, "REPO_ROOT", tmp_path)
+    document = tmp_path / check_official_docs.OWNER_MAP
+    document.parent.mkdir(parents=True)
+    for name in ("code.py", "test.py"):
+        (tmp_path / name).touch()
+    public = f"[page]({check_official_docs.PUBLIC_DOCS_PREFIX}run/providers/)"
+    cells = {"code": "[code](../../code.py)", "guide": public, "test": "[test](../../test.py)"}
+    cells[column] = public
+    document.write_text(
+        "## Code and documentation owners\n\n"
+        "| Surface | Code | Guide | Test |\n|---|---|---|---|\n"
+        f"| Fixture | {cells['code']} | {cells['guide']} | {cells['test']} |\n",
+        encoding="utf-8",
+    )
+    if column == "guide":
+        check_official_docs.check_owner_map()
+    else:
+        with pytest.raises(SystemExit, match="missing or non-repository owner path"):
+            check_official_docs.check_owner_map()
+
+
 @pytest.mark.parametrize(
     "table",
     [
@@ -157,32 +130,6 @@ def test_owner_map_rejects_absent_or_unlinked_table(
     document.write_text("## Code and documentation owners\n\n" + table, encoding="utf-8")
     with pytest.raises(SystemExit):
         check_official_docs.check_owner_map()
-
-
-def test_http_audit_missing_dependency_cannot_write_success_receipt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    page = tmp_path / "site/src/app/page.tsx"
-    page.parent.mkdir(parents=True)
-    page.write_text('<a href="https://unqueried.invalid/">fixture</a>', encoding="utf-8")
-    receipt = tmp_path / "receipt.json"
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "check_docs_links.py",
-            "--base",
-            str(tmp_path / "site"),
-            "--http",
-            "--receipt",
-            str(receipt),
-        ],
-    )
-    monkeypatch.setitem(sys.modules, "requests", None)
-    with pytest.raises(SystemExit, match="no external URLs were checked"):
-        check_docs_links.main()
-    assert not receipt.exists()
-    assert "all external URLs reachable" not in capsys.readouterr().out
 
 
 def test_check_release_surfaces_rejects_stale_security_policy(

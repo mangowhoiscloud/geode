@@ -199,7 +199,7 @@ def _codex_extra_headers(_access_token: str) -> dict[str, str]:
 def _openrouter_extra_headers(_api_key: str) -> dict[str, str]:
     """Documented app attribution plus bounded router-decision evidence."""
     return {
-        "HTTP-Referer": "https://mangowhoiscloud.github.io/geode/",
+        "HTTP-Referer": "https://mangowhois.ai/products/geode/",
         "X-OpenRouter-Title": "GEODE",
         "X-OpenRouter-Metadata": "enabled",
     }

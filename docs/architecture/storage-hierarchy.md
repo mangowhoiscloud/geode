@@ -66,7 +66,7 @@ Read order and write targets are intentionally asymmetric:
   keys that widen capability apply only in a trusted folder;
   `geode config trust` records trust in the global `config.toml` under
   `[projects."<path>"]` (see
-  [project trust](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)).
+  [project trust](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust)).
 - Runtime data that is user-private or machine-local stays under
   `~/.geode/`. Project context stays under `<workspace>/.geode/`, which
   bootstrap adds to the workspace `.gitignore`.

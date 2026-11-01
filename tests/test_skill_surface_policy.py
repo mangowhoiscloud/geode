@@ -112,7 +112,7 @@ def test_code_conventions_skill_routes_the_sot_progressively() -> None:
         ),
         f"{sot_path}#6-imports-and-dependencies": "## 6. Imports and dependencies",
         f"{sot_path}#7-tests-and-verification": "## 7. Tests and verification",
-        f"{sot_path}#8-site-conventions": "## 8. Site conventions",
+        f"{sot_path}#8-redirect-site-conventions": "## 8. Redirect site conventions",
         f"{sot_path}#9-versioning-and-compatibility": "## 9. Versioning and compatibility",
         f"{sot_path}#10-review-checklist": "## 10. Review checklist",
     }

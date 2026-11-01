@@ -32,7 +32,7 @@
 └── user_profile/            # Tier 0.5: 사용자 아이덴티티 + 선호 설정
 ```
 
-`config.toml`의 MCP 서버, gateway 바인딩, 권한을 넓히는 키는 해당 폴더에서 `geode config trust`를 실행한 뒤에만 적용됩니다. 자세한 내용은 [프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)를 참고하세요.
+`config.toml`의 MCP 서버, gateway 바인딩, 권한을 넓히는 키는 해당 폴더에서 `geode config trust`를 실행한 뒤에만 적용됩니다. 자세한 내용은 [프로젝트 신뢰](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust)를 참고하세요.
 
 ## Context 계층 구조
 

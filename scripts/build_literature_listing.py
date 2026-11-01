@@ -1,6 +1,8 @@
 """Build ``docs/self-improving/petri-bundle/literature/listing.json`` from individual snapshots.
 
-Run from Pages workflow (and locally via ``uv run python scripts/build_literature_listing.py``).
+Run locally via ``uv run python scripts/build_literature_listing.py``. The
+publication bundle ships its inputs (snapshots, mutations, seed candidates) to
+the downstream site.
 
 Algorithm (per ``docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`` § 6):
 

@@ -44,7 +44,7 @@ processing, not public publication or completed copyright checks. Local MP4
 SHA-256: `3dfb301a8a3ca0705294ebe3459e74e570fa12ea7409d7a9680059f1f408defb`.
 Fresh follow-up traces do not fill historical behavior gaps in place.
 
-The [bilingual project accounting section](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench/#project-status-accounting)
+The [bilingual project accounting section](https://mangowhois.ai/products/geode/docs/benchmarks/terminal-bench/#project-status-accounting)
 records **5,111,157,232 input-plus-output tokens** reconstructed from the root
 production conversation, 34 linked subagents, historical fullsuite and
 preparatory attempts, G-code candidates and two observation smokes plus a canary.
@@ -66,7 +66,7 @@ No original run spec, raw result, trajectory or selected reward changed.
 ## Historical Sol paired replay
 
 The frozen `terminalbench21-sol-max-fullsuite-paired-20260827t190300z` run
-has a [public paired replay](https://mangowhoiscloud.github.io/geode/benchmarks/terminal-bench/replay/).
+has a [public paired replay](https://mangowhois.ai/products/geode/benchmarks/terminal-bench/replay/).
 The reviewed bytes and receipts are pinned to
 [artifact commit 52b7d0e](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/52b7d0eab37ec9122492ec51d77e1502d5b9e085/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/replay-v19-20260905)
 from artifact PR #42. Public HTML SHA-256:
@@ -91,8 +91,8 @@ native cells remain infrastructure-invalid. None are silently turned into
 passes or semantic zeroes.
 
 The official replay now uses a native Next.js App Router page with a React
-client player and TypeScript projection types at
-`site/src/app/benchmarks/terminal-bench/replay/`. The unchanged v19 metadata
+client player and TypeScript projection types, now built by mangowhois-site at
+`geode/src/app/benchmarks/terminal-bench/replay/`. The unchanged v19 metadata
 JSON is published separately at
 [artifact commit dd547bd](https://github.com/mangowhoiscloud/geode-eval-artifacts/tree/dd547bdf892581fabd6cb89a440b0dedb44691c4/terminal-bench/terminalbench21-sol-max-fullsuite-paired-20260827t190300z/recording/replay-data-v19-20260906)
 from artifact PR #43. Its SHA-256 is
@@ -102,9 +102,9 @@ This is the existing public projection, not a new raw store or eval schema.
 The client fetches those pinned bytes without credentials, verifies SHA-256,
 then renders text through React. A failed download or digest blocks playback.
 No external HTML, iframe or artifact script runs. The legacy `replay.html`
-link redirects while retaining its pair/language query. The site remains
-statically exported to GitHub Pages; no server or new dependency is required.
-`site/scripts/verify-terminal-replay.mjs` checks digest rejection, fetch
+link redirects while retaining its pair/language query. The page remains a
+static export; no server or new dependency is required. mangowhois-site's
+`geode/scripts/verify-terminal-replay.mjs` checks digest rejection, fetch
 failure, playback transitions, KST formatting and the compatibility redirect
 in every build. Its optional JSON argument audits every consumed field across
 all 445 pairs. Original HTML, video and Astra smoke evidence remain unchanged.

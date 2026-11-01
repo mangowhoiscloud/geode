@@ -19,7 +19,7 @@ skill.
   - `core/` — agent loop, tools, MCP, memory, hooks, wiring, CLI, server, gateway.
   - `evals/` — Petri audits, benchmarks, seed generation, and GEO measurement.
   - `evolve/` — scaffold search and Crucible experiment supervision.
-- `site/` is the public Next.js docs/site, not a Python package.
+- Public docs and the self-improving hub are built by a separate site repository from GEODE's publication bundle; `github-pages/` only redirects old addresses.
 - Dependency direction is `evolve -> evals -> core`; reverse imports are forbidden.
 
 ## Runtime Boundaries
@@ -52,7 +52,7 @@ permission to guess from this skill or prior replies.
 | Where do limits and rate estimates come from? | `core/llm/model_pricing.toml` supplies catalog limits/rates; `core/llm/model_catalog.py` and provider adapters consume model metadata. Catalog context is not the runtime's remaining context budget; API rates are not subscription billing. Verify current vendor documentation when freshness matters. |
 | Does this account have access? | Picker availability checks a local credential route, not remote entitlement. A model ID in the catalog, a default binding or a configured credential does not establish successful provider access. Live probes need explicit approval. |
 
-See the [provider guide](https://mangowhoiscloud.github.io/geode/docs/run/providers/)
+See the [provider guide](https://mangowhois.ai/products/geode/docs/run/providers/)
 for operator configuration. In a source checkout, use the existing
 [model-onboarding skill](../../../.agents/skills/model-onboarding/SKILL.md) for
 implementation changes; that development scaffold is not bundled with the runtime.
@@ -70,5 +70,5 @@ Never copy a versioned model/spec table into this skill or the SOUL.
   `core.self_improving` packages. Evaluation and evolution stay explicit outer
   consumers of `core`.
 - Do not describe GEODE as a fixed Plan-and-Execute DAG, fixed StateGraph, or confidence-threshold pipeline.
-- Do not cite LangSmith as current observability; GEODE uses its own hooks, audit diagnostics, run logs, and site/docs gates.
+- Do not cite LangSmith as current observability; GEODE uses its own hooks, audit diagnostics, run logs, and docs gates.
 - Do not hard-code deprecated model names. Use the provider registries and token/cost tables.

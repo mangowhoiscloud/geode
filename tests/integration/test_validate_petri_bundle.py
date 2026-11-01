@@ -1,6 +1,6 @@
 """Unit tests for scripts/validate_petri_bundle.py ratchet.
 
-Validator gates the GitHub Pages deploy of docs/self-improving/petri-bundle/. Failure modes
+Validator gates publication of docs/self-improving/petri-bundle/. Failure modes
 exercised here mirror the regressions that previously broke the live viewer
 (PR #1129 partial archive, PR #1130 error archive, results=None TypeError).
 """
@@ -49,10 +49,6 @@ def _scaffold_bundle(root: Path, listing: dict[str, dict[str, object]]) -> Path:
     """Build a minimal docs/self-improving/petri-bundle/ scaffold under root."""
     bundle = root / "docs" / "self-improving/petri-bundle"
     (bundle / "logs").mkdir(parents=True)
-    (bundle / "assets").mkdir(parents=True)
-    (bundle / "index.html").write_text("<html></html>")
-    (bundle / "assets" / "index.js").write_text("// noop")
-    (bundle / "assets" / "index.css").write_text("/* noop */")
     (bundle / "logs" / "listing.json").write_text(json.dumps(listing))
     return bundle
 
@@ -114,12 +110,11 @@ def test_missing_eval_file_fails(tmp_path: Path) -> None:
     assert "missing on disk" in result.stdout
 
 
-def test_missing_asset_fails(tmp_path: Path) -> None:
-    bundle = _scaffold_bundle(tmp_path, {})
-    (bundle / "index.html").unlink()
+def test_viewer_assets_are_not_required(tmp_path: Path) -> None:
+    _scaffold_bundle(tmp_path, {})
     result = run_validator(tmp_path)
-    assert result.returncode == 1
-    assert "asset missing" in result.stdout
+    assert result.returncode == 0, result.stdout
+    assert "asset" not in result.stdout
 
 
 def test_valid_bundle_passes(tmp_path: Path) -> None:
