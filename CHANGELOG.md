@@ -59,6 +59,11 @@ functional change.
   document paging shortcuts, forced scroll movement and scroll locks from all
   three readers and the research collection menu. Explicit navigation and frozen
   research content remain intact.
+- **Site dependency audit.** Pin the site's lint-only `minimatch` to 11.0.3 and
+  `glob` to 14.0.3 through npm overrides (GHSA-g3hv-75wg-m249,
+  GHSA-3g3m-2fjr-6pw4, published 2026-10-30), so the Pages build's
+  `npm audit --audit-level=moderate` passes again. ESLint and the vendored
+  Next.js plugin's pattern checks pass on the new versions.
 
 ## [1.0.34] - 2026-10-30
 
