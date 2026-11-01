@@ -1052,6 +1052,120 @@ def test_dry_run_end_to_end_smoke(
 
 
 # ---------------------------------------------------------------------------
+# published campaign snapshot — structured twin of the progress log
+# ---------------------------------------------------------------------------
+
+
+class _AttributingRunner(_RecordingRunner):
+    """Writes one attribution row per applied proposal so cycles carry a signal."""
+
+    def __init__(self, *, mutations: Path, delta: float, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.mutations = mutations
+        self.delta = delta
+
+    def apply_proposal(self, proposal: Proposal) -> Mutation:
+        _write_attribution(
+            self.mutations,
+            held_out=0.7,
+            fitness=0.8,
+            delta=self.delta,
+            promote_policy=self.arm,
+            source="mutator",
+        )
+        return super().apply_proposal(proposal)
+
+
+def test_real_campaign_publishes_structured_twin_of_its_progress_log(
+    campaign_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from core.audit import inspect_cache
+    from evolve.scaffold_search import publication
+
+    monkeypatch.setattr(inspect_cache, "purge_inspect_cache", lambda: True)
+    (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
+    campaign_state["baseline"].write_text(
+        json.dumps({"ts_utc": "2026-06-01T00:00:00Z", "raw": {"fitness_stderr": 0.0123}}),
+        encoding="utf-8",
+    )
+    mutations = campaign_state["mutations"]
+
+    def fake_train(*, env: dict[str, str], dry_run: bool) -> SimpleNamespace:
+        _write_attribution(mutations, held_out=0.81, fitness=0.66, source="manual")
+        return SimpleNamespace(returncode=0, stdout="")
+
+    def factory(*, arm: str, env: dict[str, str], dry_run: bool) -> _RecordingRunner:
+        if arm == "never":  # no new attribution row -> NO-SIGNAL cycles
+            return _RecordingRunner(arm=arm, env=dict(env), commit_enabled=False)
+        delta = 0.01234 if arm == "gate" else -0.02
+        return _AttributingRunner(
+            mutations=mutations, delta=delta, arm=arm, env=dict(env), commit_enabled=arm == "gate"
+        )
+
+    published = tmp_path / "published"
+    rc.run_campaign(
+        n=2,
+        k=2,
+        arms=("never", "random", "gate"),
+        dry_run=False,
+        progress_path=campaign_state["progress"],
+        snapshot_dir=campaign_state["snapshot"],
+        train_runner=fake_train,
+        runner_factory=factory,
+        guard_fn=lambda _s: rc.GuardResult(ok=True, reason="ok"),
+        published_dir=published,
+    )
+
+    snapshot = json.loads((published / publication.CAMPAIGN_PROGRESS_NAME).read_text("utf-8"))
+    log_text = campaign_state["progress"].read_text(encoding="utf-8")
+    assert snapshot == publication.parse_campaign_progress_log(log_text)
+    assert [(c["arm"], c["verdict"]) for c in snapshot["cycles"]] == [
+        ("never", "no-signal"),
+        ("never", "no-signal"),
+        ("random", "reject"),
+        ("random", "reject"),
+        ("gate", "promote"),
+        ("gate", "promote"),
+    ]
+    assert snapshot["cycles"][-1]["delta"] == 0.0123
+    assert [(g["sel"], g["held"]) for g in snapshot["gen0"]] == [(0.66, 0.81), (0.66, 0.81)]
+    assert [(b["k"], b["mean"]) for b in snapshot["noise"]] == [(2, 0.81)]
+    gen0 = json.loads((published / publication.GEN0_FITNESS_STDERR_NAME).read_text("utf-8"))
+    assert gen0["fitness_stderr"] == 0.0123
+    # Each arm reset restores the runtime baseline and refreshes its mirror.
+    mirrored = publication.published_state_dir() / publication.PUBLISHED_BASELINE_NAME
+    assert json.loads(mirrored.read_text("utf-8"))["captured_at"] == "2026-06-01T00:00:00Z"
+
+
+def test_dry_run_campaign_publishes_nothing(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
+    mutations = campaign_state["mutations"]
+
+    def fake_train(*, env: dict[str, str], dry_run: bool) -> SimpleNamespace:
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        return SimpleNamespace(returncode=0)
+
+    published = tmp_path / "published"
+    rc.run_campaign(
+        n=1,
+        k=1,
+        arms=("never",),
+        dry_run=True,
+        progress_path=campaign_state["progress"],
+        snapshot_dir=campaign_state["snapshot"],
+        train_runner=fake_train,
+        runner_factory=lambda **kw: _RecordingRunner(
+            arm=kw["arm"], env=dict(kw["env"]), commit_enabled=False
+        ),
+        published_dir=published,
+    )
+
+    assert not published.exists()
+
+
+# ---------------------------------------------------------------------------
 # inspect-cache purge — real campaign purges, --dry-run does NOT
 # ---------------------------------------------------------------------------
 

@@ -21,7 +21,9 @@ uv run python scripts/build_publication_bundle.py --check            # build twi
 `manifest.json`. `<sha256>` is the digest of the archive bytes. The same
 manifest bytes are also the first archive member. The CLI refuses to build when
 a bundled file is untracked or differs from `HEAD`, so `source_commit`
-identifies the bundled bytes.
+identifies the bundled bytes. It also needs full git history (CI checkouts use
+`fetch-depth: 0`); a shallow clone is refused because per-file commit times
+would be wrong.
 
 ## Determinism
 
@@ -52,6 +54,7 @@ should compare content with it rather than with the archive name.
 | `hub/autoresearch/baseline/transcripts.json` | `docs/self-improving/autoresearch/baseline/` | no |
 | `hub/run-*.md` | `docs/self-improving/run-*.md` | no |
 | `hub/state/{mutations.jsonl,results.tsv,results.jsonl,baseline_archive.jsonl,policies/*.json}` | `evolve/scaffold_search/state/` | no |
+| `hub/state/published/{baseline.json,campaign-progress.json,gen0-fitness-stderr.json,crucible-attempts.jsonl}` | `evolve/scaffold_search/state/published/` (see below) | no |
 | `hub/audits/eval-logs/{MANIFEST.jsonl,*.summary.yaml}` | `docs/audits/eval-logs/` | no |
 | `hub/seed-candidates/seeds_gen*/**/*.md` | `evals/petri/seeds_gen*/` (literature listing input) | no |
 
@@ -78,7 +81,8 @@ repeats it as `sources`.
 | `optional_absent[]` | Optional `source_dir/pattern` entries that matched nothing |
 | `hub_constants` | Values the hub generator previously mirrored by hand (below) |
 | `file_count`, `total_bytes` | Totals over `files[]` |
-| `files[]` | `{path, bytes, sha256}` in sorted path order, excluding `manifest.json` |
+| `files[]` | `{path, bytes, sha256, committed_at}` in sorted path order, excluding `manifest.json` |
+| `files[].committed_at` | UTC ISO 8601 committer time of the last non-merge commit that changed the source file; use it instead of file mtimes |
 | `tree_sha256` | SHA-256 of the lines `"<sha256> <bytes> <path>\n"`, one per file in `files[]` order |
 
 `hub_constants` is computed by importing GEODE modules, never from copied
@@ -93,9 +97,10 @@ literals:
 | `promote_policies` | `evolve.scaffold_search.gate._VALID_PROMOTE_POLICIES` |
 | `baseline_registry_kind` | `evolve.scaffold_search.ledger._BASELINE_REGISTRY_KIND` |
 
-The heatmap abbreviations for judge dimensions and the campaign progress-log
-regex have no GEODE source. The abbreviations are consumer presentation. The
-log line format is written by f-strings in `evolve/scaffold_search/campaign.py`.
+The heatmap abbreviations for judge dimensions have no GEODE source; they are
+consumer presentation. The campaign progress-log regex is no longer needed:
+`hub/state/published/campaign-progress.json` carries the same events as
+structured records written by the campaign itself.
 
 ## Versioning
 
@@ -108,10 +113,41 @@ log line format is written by f-strings in `evolve/scaffold_search/campaign.py`.
   or whose versions they do not support.
 - Consumers must verify every `files[]` digest and `tree_sha256` before use.
 
-## Not yet in the bundle
+## Published runtime snapshot
 
-The hub generator also reads runtime-only inputs: `~/.geode/self-improving/`
-(`baseline.json`, `campaign-progress.log` and the gen-0 snapshot) and the
-gitignored crucible ledgers under `artifacts/eval/runs/crucible/campaigns/`.
-Pages built only from the bundle show their absent states until GEODE publishes
-committed snapshots of those inputs.
+The hub also shows evidence that exists only on the operator's machine. Its
+producers keep a committed, path-scrubbed copy in
+`core.paths.PUBLISHED_STATE_DIR` (`evolve/scaffold_search/state/published/`):
+
+| File | Producer and refresh point | Content |
+|---|---|---|
+| `baseline.json` | Every runtime `baseline.json` write: `ledger._write_baseline`, `campaign.write_kmean_baseline`, `campaign.restore_sot` | `{schema_version, stale, source, captured_at, baseline}`; `captured_at` is the baseline's own `ts_utc` or `null` |
+| `campaign-progress.json` | `campaign.ProgressLog.emit`, with the same timestamp as the text line, for real campaigns only | `{schema_version, cycles[], gen0[], noise[]}` |
+| `gen0-fitness-stderr.json` | `run_campaign`, right after the post-gen-0 SoT snapshot | `{schema_version, fitness_stderr, captured_at}` |
+| `crucible-attempts.jsonl` | Crucible supervisor, after each `train_attempt` ledger append | one `{campaign_id, outcome, tokens, cost_usd, wall_seconds}` row per attempt, grouped by campaign |
+
+Campaign records:
+
+- `cycles[]`: `{ts, arm, n, total, skip, verdict, sel, held, delta}`. `verdict`
+  is `promote`, `reject` or `no-signal`, and `null` exactly when `skip` is true.
+  Numbers are `null` when the cycle recorded none.
+- `gen0[]`: `{ts, n, total, sel, held}` per sequential gen-0 repeat.
+- `noise[]`: `{ts, k, mean, stderr}` per gen-0 noise band (sequential or async),
+  rounded to the four decimals the log prints. Control-arm floors are excluded.
+- Dry-run campaigns publish nothing.
+
+The previous log regex produced the same data with three differences. It
+dropped cycles whose delta prints with a `+` sign, which are all promote
+cycles. It kept `SKIP` lines from dry-run campaigns. It also exposed only the
+first noise band. A consumer that wants the old view takes the first `noise[]`
+entry with a non-null `mean`.
+
+Producer failures are logged and never interrupt a campaign. Writes are atomic,
+JSON keys are sorted, an unchanged file is not rewritten, absolute paths are
+reduced to their final component, and known secret formats are redacted.
+
+`scripts/refresh_published_state.py` rebuilds the snapshot from existing
+runtime files (`--runtime-dir`, `--crucible-campaigns-dir`, `--out`). A missing
+source leaves its published file untouched and is reported. Logs written
+before the structured sink existed are parsed once, by a parser that lives
+with the writer.

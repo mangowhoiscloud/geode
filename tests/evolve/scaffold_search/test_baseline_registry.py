@@ -131,6 +131,21 @@ def test_write_baseline_appends_registry_row(isolated: Path) -> None:
     assert row["eval_archive"] == "x.eval"  # basename only (no leaked abs path)
 
 
+def test_write_baseline_refreshes_published_mirror(isolated: Path) -> None:
+    from evolve.scaffold_search import publication
+
+    ledger._write_baseline(
+        {"broken_tool_use": 3.0}, {"broken_tool_use": 0.2}, eval_archive="/Users/a/logs/x.eval"
+    )
+
+    anchor = json.loads((isolated / "baseline.json").read_text(encoding="utf-8"))
+    mirror = publication.published_state_dir() / publication.PUBLISHED_BASELINE_NAME
+    published = json.loads(mirror.read_text(encoding="utf-8"))
+    assert published["baseline"]["baseline_id"] == anchor["baseline_id"]
+    assert published["captured_at"] == anchor["ts_utc"]
+    assert "/Users/" not in mirror.read_text(encoding="utf-8")
+
+
 def test_write_baseline_stamps_id_into_anchor(isolated: Path) -> None:
     ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
     anchor = json.loads((isolated / "baseline.json").read_text(encoding="utf-8"))

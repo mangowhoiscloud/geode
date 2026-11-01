@@ -663,6 +663,20 @@ def test_standalone_loop_advances_only_private_search_ref_on_train_keep(
     assert summary.usage.cost_usd == pytest.approx(1.8)
 
 
+def test_each_train_attempt_refreshes_the_published_attempt_rows(tmp_path: Path) -> None:
+    from evolve.crucible import publication
+
+    config, _baseline = _config(tmp_path)
+    PromotionSupervisor(
+        config, producer=_Producer(), evaluator=_Evaluator(["KEEP", "REJECT", "INVALID"])
+    ).run()
+
+    published = publication.published_attempts_path().read_text(encoding="utf-8")
+    rows = [json.loads(line) for line in published.splitlines()]
+    assert rows == publication.attempt_rows(config.state_dir / "ledger.jsonl", config.campaign_id)
+    assert [row["outcome"] for row in rows] == ["KEEP", "REJECT", "INVALID"]
+
+
 def test_invalid_evidence_feedback_is_not_forwarded(tmp_path: Path) -> None:
     config, _baseline = _config(tmp_path, attempts=2)
     producer = _Producer()

@@ -54,6 +54,13 @@ functional change.
   data into a deterministic, content-addressed archive with a manifest of file
   digests and hub constants exported from GEODE modules. A downstream site can
   render GEODE's pages from it; upload and CI wiring come later.
+- **Published self-improving state.** Campaign, baseline and crucible producers
+  keep a committed, path-scrubbed snapshot of their runtime evidence (latest
+  baseline, structured campaign progress, gen-0 fitness stderr, crucible attempt
+  rows) under `evolve/scaffold_search/state/published/`, and
+  `scripts/refresh_published_state.py` rebuilds it from existing runtime files.
+  The publication bundle includes it, and each manifest file entry now records
+  its last commit time.
 
 ### Fixed
 

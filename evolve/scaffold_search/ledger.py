@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from evolve.scaffold_search import fitness as fitness_spec
 from evolve.scaffold_search import gate, measure
+from evolve.scaffold_search.publication import refresh_published_baseline
 
 if TYPE_CHECKING:
     from evolve.scaffold_search.bench_means import BenchProvenance
@@ -1197,6 +1198,7 @@ def _write_baseline(
         json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    refresh_published_baseline(BASELINE_PATH)
     # PR-BASELINE-REGISTRY (2026-05-30) — append the registry row only AFTER the
     # anchor write succeeds, so the registry never lists a baseline whose anchor
     # write failed. margin_rule = the current code's gate rule (fitness-stderr);

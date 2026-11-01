@@ -39,12 +39,14 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from core.paths import AUTORESEARCH_STATE_DIR, GEODE_REPO_URL
+from core.paths import AUTORESEARCH_STATE_DIR, GEODE_REPO_URL, PUBLISHED_STATE_DIR
 from evals.petri.judge_dims import DEFAULT_DIM_SET, resolve_dim_set
+from evolve.crucible.publication import CRUCIBLE_ATTEMPTS_NAME
 from evolve.scaffold_search.gate import _VALID_PROMOTE_POLICIES
 from evolve.scaffold_search.ledger import _BASELINE_REGISTRY_KIND, RESULTS_TSV_HEADER
 from evolve.scaffold_search.loop.mutate.policies import _KIND_TO_PATH
 from evolve.scaffold_search.loop.observe import statistical_power
+from evolve.scaffold_search.publication import PUBLISHED_STATE_FILES
 
 from scripts.architecture_baseline import OUTPUT_FILE as ARCHITECTURE_BASELINE_FILE
 from scripts.build_literature_listing import LITERATURE_DIR, SEED_GLOB
@@ -72,6 +74,7 @@ _EXCLUDED_SUFFIXES = frozenset({".html", ".htm", ".template"})
 _EXCLUDED_DIR_NAMES = frozenset({"assets"})
 
 _STATE_DIR = AUTORESEARCH_STATE_DIR.relative_to(REPO_ROOT).as_posix()
+_PUBLISHED_DIR = PUBLISHED_STATE_DIR.relative_to(AUTORESEARCH_STATE_DIR).as_posix()
 _SEED_CANDIDATE_ROOT = "evals/petri"
 if not SEED_GLOB.startswith(f"{_SEED_CANDIDATE_ROOT}/"):
     raise RuntimeError(f"literature seed glob moved outside {_SEED_CANDIDATE_ROOT}: {SEED_GLOB}")
@@ -157,6 +160,10 @@ BUNDLE_SOURCES: tuple[BundleSource, ...] = (
             "results.jsonl",
             "baseline_archive.jsonl",
             "policies/*.json",
+            *(
+                f"{_PUBLISHED_DIR}/{name}"
+                for name in (*PUBLISHED_STATE_FILES, CRUCIBLE_ATTEMPTS_NAME)
+            ),
         ),
     ),
     BundleSource(
@@ -292,9 +299,14 @@ def tree_sha256(entries: Sequence[BundleEntry]) -> str:
     return _sha256(lines.encode("utf-8"))
 
 
+def _iso_utc(epoch: int) -> str:
+    return datetime.fromtimestamp(epoch, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def build_manifest(
     entries: Sequence[BundleEntry],
     *,
+    commit_times: Mapping[str, int],
     optional_absent: Sequence[str],
     geode_version: str,
     source_commit: str,
@@ -310,9 +322,7 @@ def build_manifest(
         "geode_version": geode_version,
         "source_commit": source_commit,
         "source_date_epoch": source_date_epoch,
-        "generated_at": datetime.fromtimestamp(source_date_epoch, UTC).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        ),
+        "generated_at": _iso_utc(source_date_epoch),
         "repository_url": GEODE_REPO_URL,
         "sources": [
             {
@@ -329,7 +339,12 @@ def build_manifest(
         "total_bytes": sum(len(entry.data) for entry in ordered),
         "tree_sha256": tree_sha256(ordered),
         "files": [
-            {"path": entry.path, "bytes": len(entry.data), "sha256": entry.sha256}
+            {
+                "path": entry.path,
+                "bytes": len(entry.data),
+                "sha256": entry.sha256,
+                "committed_at": _iso_utc(commit_times[entry.source]),
+            }
             for entry in ordered
         ],
     }
@@ -386,6 +401,7 @@ def build_bundle(
         assert_inputs_committed(repo_root, [entry.source for entry in entries] + ["pyproject.toml"])
     manifest = build_manifest(
         entries,
+        commit_times=resolve_commit_times(repo_root, [entry.source for entry in entries]),
         optional_absent=optional_absent,
         geode_version=read_geode_version(repo_root),
         source_commit=source_commit,
@@ -443,6 +459,29 @@ def resolve_source_date_epoch(repo_root: Path, environ: Mapping[str, str] = os.e
     if not raw.isdigit():
         raise BundleInputError(f"source date epoch is not a non-negative integer: {raw!r}")
     return int(raw)
+
+
+def resolve_commit_times(repo_root: Path, sources: Sequence[str]) -> dict[str, int]:
+    """Latest committer time of each source path; needs full (non-shallow) history."""
+    if _git_stdout(repo_root, ["rev-parse", "--is-shallow-repository"]).strip() == "true":
+        raise BundleInputError("shallow clone: per-file committed_at needs full git history")
+    wanted = set(sources)
+    pathspecs = sorted({path.rsplit("/", 1)[0] if "/" in path else path for path in wanted})
+    log_args = ["-c", "core.quotepath=off", "log", "--format=@@%ct", "--name-only", "HEAD"]
+    output = _git_stdout(repo_root, [*log_args, "--", *pathspecs])
+    times: dict[str, int] = {}
+    current = 0
+    for line in output.splitlines():
+        if line.startswith("@@"):
+            current = int(line[2:])
+        elif line in wanted and current > times.get(line, -1):
+            times[line] = current
+    missing = sorted(wanted - times.keys())
+    if missing:
+        raise BundleInputError(
+            f"{len(missing)} bundle input(s) have no commit history: {', '.join(missing[:5])}"
+        )
+    return times
 
 
 def assert_inputs_committed(repo_root: Path, sources: Sequence[str]) -> None:

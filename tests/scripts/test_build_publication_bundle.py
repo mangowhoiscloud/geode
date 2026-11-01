@@ -40,6 +40,8 @@ _HUB = {
     "docs/self-improving/run-2606-demo.md": "# run\n",
     "evolve/scaffold_search/state/mutations.jsonl": "{}\n",
     "evolve/scaffold_search/state/policies/tool-policy.json": "{}\n",
+    "evolve/scaffold_search/state/published/baseline.json": '{"stale": false}\n',
+    "evolve/scaffold_search/state/published/campaign-progress.json": '{"cycles": []}\n',
     "docs/audits/eval-logs/MANIFEST.jsonl": "{}\n",
     "docs/audits/eval-logs/x.summary.yaml": "dims: {}\n",
     "evals/petri/seeds_gen1/seed.md": "---\nreferences: []\n---\n",
@@ -63,6 +65,21 @@ def _write(root: Path, files: dict[str, str]) -> None:
         path.write_text(text, encoding="utf-8")
 
 
+def _git(root: Path, *args: str) -> None:
+    result = run_git(["-c", "user.name=t", "-c", "user.email=t@example.invalid", *args], cwd=root)
+    assert result.returncode == 0, result.stderr
+
+
+def _commit(root: Path, epoch: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Commit everything with a fixed committer date (git reads it from the env)."""
+    monkeypatch.setenv("GIT_COMMITTER_DATE", f"@{epoch} +0000")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", f"@{epoch} +0000")
+    if not (root / ".git").exists():
+        _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", "fixture")
+
+
 def _build(root: Path) -> bundle.BuiltBundle:
     return bundle.build_bundle(root, source_commit=_COMMIT, source_date_epoch=_EPOCH)
 
@@ -78,15 +95,17 @@ def _members(archive: bytes) -> list[tuple[tarfile.TarInfo, bytes]]:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Path:
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "repo"
     _write(root, {**_REQUIRED, **_HUB, **_RENDERED})
+    _commit(root, _EPOCH - 86_400, monkeypatch)
     return root
 
 
 def test_rebuild_with_different_mtimes_is_byte_identical(repo: Path, tmp_path: Path) -> None:
     first = _build(repo)
-    for index, path in enumerate(sorted(p for p in repo.rglob("*") if p.is_file())):
+    files = sorted(p for p in repo.rglob("*") if p.is_file() and ".git" not in p.parts)
+    for index, path in enumerate(files):
         os.utime(path, (1_000_000 + index, 1_000_000 + index))
     second = _build(repo)
 
@@ -149,8 +168,11 @@ def test_rendered_pages_templates_and_viewer_assets_are_excluded(repo: Path) -> 
     assert "hub/petri-bundle/seeds/run-1/state.json" in paths
 
 
-def test_missing_optional_inputs_are_listed_not_fatal(tmp_path: Path) -> None:
+def test_missing_optional_inputs_are_listed_not_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _write(tmp_path, _REQUIRED)
+    _commit(tmp_path, _EPOCH, monkeypatch)
 
     manifest = _build(tmp_path).manifest
 
@@ -231,6 +253,7 @@ def test_real_checkout_bundles_raw_hub_data_only() -> None:
     assert "architecture/architecture-baseline.json" in paths
     assert "hub/petri-bundle/seeds/listing.json" in paths
     assert "hub/state/mutations.jsonl" in paths
+    assert "hub/state/published/campaign-progress.json" in paths
     assert not [p for p in paths if p.endswith((".html", ".template")) or "/assets/" in p]
 
 
@@ -240,17 +263,45 @@ def test_source_date_epoch_env_overrides_commit_time(tmp_path: Path) -> None:
         bundle.resolve_source_date_epoch(tmp_path, {"SOURCE_DATE_EPOCH": "-1"})
 
 
-def _git(root: Path, *args: str) -> None:
-    result = run_git(["-c", "user.name=t", "-c", "user.email=t@example.invalid", *args], cwd=root)
+def test_manifest_records_each_file_last_commit_time(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (repo / "docs" / "self-improving" / "run-2606-demo.md").write_text("# edited\n")
+    _commit(repo, _EPOCH, monkeypatch)
+
+    files = {f["path"]: f["committed_at"] for f in _build(repo).manifest["files"]}
+
+    assert files["hub/run-2606-demo.md"] == "2026-09-21T14:13:20Z"
+    assert files["changelog/CHANGELOG.md"] == "2026-09-20T14:13:20Z"
+    assert set(files.values()) == {"2026-09-20T14:13:20Z", "2026-09-21T14:13:20Z"}
+
+
+def test_shallow_clone_cannot_report_commit_times(repo: Path, tmp_path: Path) -> None:
+    shallow = tmp_path / "shallow"
+    result = run_git(["clone", "-q", "--depth", "1", f"file://{repo}", str(shallow)])
     assert result.returncode == 0, result.stderr
+
+    with pytest.raises(bundle.BundleInputError, match="shallow clone"):
+        _build(shallow)
+
+
+def test_published_state_snapshot_is_bundled_under_hub_state(repo: Path) -> None:
+    manifest = _build(repo).manifest
+    paths = {f["path"] for f in manifest["files"]}
+
+    assert {
+        "hub/state/published/baseline.json",
+        "hub/state/published/campaign-progress.json",
+    } <= paths
+    assert {
+        "evolve/scaffold_search/state/published/gen0-fitness-stderr.json",
+        "evolve/scaffold_search/state/published/crucible-attempts.jsonl",
+    } <= set(manifest["optional_absent"])
 
 
 def test_cli_checks_reproducibility_and_rejects_uncommitted_inputs(
     repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _git(repo, "init", "-q")
-    _git(repo, "add", "-A")
-    _git(repo, "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", "fixture")
     monkeypatch.setattr(bundle, "REPO_ROOT", repo)
     monkeypatch.delenv("SOURCE_DATE_EPOCH", raising=False)
     out = tmp_path / "out"
