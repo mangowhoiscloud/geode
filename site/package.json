@@ -56,7 +56,6 @@
   "overrides": {
     "postcss": "8.5.26",
     "@next/eslint-plugin-next": "$@next/eslint-plugin-next",
-    "minimatch": "11.0.3",
-    "glob": "14.0.3"
+    "minimatch": "11.0.3"
   }
 }

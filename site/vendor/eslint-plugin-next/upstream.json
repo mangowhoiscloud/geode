@@ -68,7 +68,7 @@
     "url": "https://api.github.com/repos/vercel/next.js/git/commits/b0fad0d45eb4c4430fda5eeeb442e8a5af08a5f6"
   },
   "patchedSha256": {
-    "package.json": "3155e8996c198db9180c1680d93fb262330feced29854282de0bddce0f382e22",
+    "package.json": "7b62ddd41046d65040a95f7d647648df03d59baba9b0639bc9255450cac15d45",
     "dist/utils/get-root-dirs.js": "46a1a41f897a32b700f8fbb3bd5f0095ce7591e05a005ec66794983ff2b885f5",
     "dist/utils/node-attributes.js": "b968ee63b6a3ca76f6f7b7171e155ba733e9ff1956a38a060266b4792b4526d0"
   },
