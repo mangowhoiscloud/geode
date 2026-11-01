@@ -41,11 +41,19 @@ from typing import Any
 import yaml
 from core.paths import AUTORESEARCH_STATE_DIR, GEODE_REPO_URL, PUBLISHED_STATE_DIR
 from evals.petri.judge_dims import DEFAULT_DIM_SET, resolve_dim_set
+from evals.seed_generation.orchestrator import _TASK_PREFIX_TO_PHASE
 from evolve.crucible.publication import CRUCIBLE_ATTEMPTS_NAME
-from evolve.scaffold_search.gate import _VALID_PROMOTE_POLICIES
+from evolve.scaffold_search.gate import (
+    _FITNESS_MARGIN_FLOOR_DEFAULT,
+    _MARGIN_GAIN_SIGMA,
+    _VALID_PROMOTE_POLICIES,
+    MARGIN_LOGIC_VERSION,
+    N1_FITNESS_MARGIN_FLOOR,
+)
 from evolve.scaffold_search.ledger import _BASELINE_REGISTRY_KIND, RESULTS_TSV_HEADER
 from evolve.scaffold_search.loop.mutate.policies import _KIND_TO_PATH
 from evolve.scaffold_search.loop.observe import statistical_power
+from evolve.scaffold_search.loop.observe.role_provenance import _SOURCE_TO_LANE
 from evolve.scaffold_search.publication import PUBLISHED_STATE_FILES
 
 from scripts.architecture_baseline import OUTPUT_FILE as ARCHITECTURE_BASELINE_FILE
@@ -287,6 +295,17 @@ def collect_hub_constants() -> dict[str, Any]:
         },
         "promote_policies": sorted(_VALID_PROMOTE_POLICIES),
         "baseline_registry_kind": _BASELINE_REGISTRY_KIND,
+        # margin = max(gain_sigma * sqrt(sigma_prior^2 + sigma_current^2), floor),
+        # with n1_critical_floor replacing floor for an N=1 critical baseline dim.
+        "promote_margin": {
+            "gain_sigma": _MARGIN_GAIN_SIGMA,
+            "floor": _FITNESS_MARGIN_FLOOR_DEFAULT,
+            "n1_critical_floor": N1_FITNESS_MARGIN_FLOOR,
+            "logic_version": MARGIN_LOGIC_VERSION,
+        },
+        "credential_source_lanes": dict(sorted(_SOURCE_TO_LANE.items())),
+        # Ordered: the first matching task_id prefix wins.
+        "task_prefix_phases": [[prefix, phase] for prefix, phase in _TASK_PREFIX_TO_PHASE],
     }
 
 

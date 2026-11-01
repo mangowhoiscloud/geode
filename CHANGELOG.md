@@ -52,8 +52,9 @@ functional change.
 - **Publication bundle.** `scripts/build_publication_bundle.py` packs the
   changelog, evaluation index, architecture inventory and raw self-improving hub
   data into a deterministic, content-addressed archive with a manifest of file
-  digests and hub constants exported from GEODE modules. A downstream site can
-  render GEODE's pages from it; upload and CI wiring come later.
+  digests and hub constants exported from GEODE modules (including the promote
+  margin parameters, credential-source lanes and seed-generation task phases).
+  A downstream site can render GEODE's pages from it.
 - **Published self-improving state.** Campaign, baseline and crucible producers
   keep a committed, path-scrubbed snapshot of their runtime evidence (latest
   baseline, structured campaign progress, gen-0 fitness stderr, crucible attempt

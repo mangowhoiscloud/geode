@@ -14,10 +14,13 @@ import pytest
 import yaml
 from core.paths import AUTORESEARCH_STATE_DIR
 from evals.petri.judge_dims import BUILTIN_DIM_SETS, DEFAULT_DIM_SET
+from evals.seed_generation.orchestrator import _TASK_PREFIX_TO_PHASE
+from evolve.scaffold_search import gate
 from evolve.scaffold_search.gate import _VALID_PROMOTE_POLICIES
 from evolve.scaffold_search.ledger import _BASELINE_REGISTRY_KIND, RESULTS_TSV_HEADER
 from evolve.scaffold_search.loop.mutate.policies import _KIND_TO_PATH
 from evolve.scaffold_search.loop.observe import statistical_power
+from evolve.scaffold_search.loop.observe.role_provenance import source_to_lane
 from scripts import build_publication_bundle as bundle
 from scripts.architecture_baseline import OUTPUT_FILE as ARCHITECTURE_BASELINE_FILE
 from scripts.git_command import run_git
@@ -225,6 +228,15 @@ def test_hub_constants_export_geode_module_values() -> None:
     }
     assert constants["promote_policies"] == sorted(_VALID_PROMOTE_POLICIES)
     assert constants["baseline_registry_kind"] == _BASELINE_REGISTRY_KIND
+    assert constants["promote_margin"] == {
+        "gain_sigma": gate._MARGIN_GAIN_SIGMA,
+        "floor": gate._FITNESS_MARGIN_FLOOR_DEFAULT,
+        "n1_critical_floor": gate.N1_FITNESS_MARGIN_FLOOR,
+        "logic_version": gate.MARGIN_LOGIC_VERSION,
+    }
+    lanes = constants["credential_source_lanes"]
+    assert lanes and all(source_to_lane(source) == lane for source, lane in lanes.items())
+    assert constants["task_prefix_phases"] == [list(pair) for pair in _TASK_PREFIX_TO_PHASE]
 
 
 def test_hub_constants_cover_the_generator_mirrors() -> None:
@@ -243,6 +255,14 @@ def test_hub_constants_cover_the_generator_mirrors() -> None:
     assert set(hub._PILOT_DIM_ABBR) <= set(constants["judge_dimensions"]["names"])
     assert {arm for arm, _label in hub._EVIDENCE_ARMS} == set(constants["promote_policies"])
     assert constants["baseline_registry_kind"] == hub._BASELINE_REGISTRY_ROW_KIND
+    assert constants["task_prefix_phases"] == [list(pair) for pair in hub._TASK_PREFIX_TO_PHASE]
+    # Chip prefixes that are GEODE credential sources take their lane from GEODE.
+    assert {"claude-cli", "openai-codex"} <= set(constants["credential_source_lanes"])
+    assert {"claude-cli", "openai-codex"} <= set(hub.HARNESS_MAP)
+    margin = constants["promote_margin"]
+    rule = hub._render_campaign_margin_rule(None, {})
+    assert f"max({margin['gain_sigma']}&middot;" in rule
+    assert f"{margin['floor']} floor, {margin['n1_critical_floor']} if baseline N=1" in rule
 
 
 def test_real_checkout_bundles_raw_hub_data_only() -> None:

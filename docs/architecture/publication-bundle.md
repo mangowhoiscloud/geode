@@ -97,9 +97,23 @@ literals:
 | `judge_dimensions` | Names in the default set resolved by `evals.petri.judge_dims.resolve_dim_set` |
 | `promote_policies` | `evolve.scaffold_search.gate._VALID_PROMOTE_POLICIES` |
 | `baseline_registry_kind` | `evolve.scaffold_search.ledger._BASELINE_REGISTRY_KIND` |
+| `promote_margin` | `{gain_sigma, floor, n1_critical_floor, logic_version}` from `_MARGIN_GAIN_SIGMA`, `_FITNESS_MARGIN_FLOOR_DEFAULT`, `N1_FITNESS_MARGIN_FLOOR` and `MARGIN_LOGIC_VERSION` in `evolve.scaffold_search.gate`. The margin is `max(gain_sigma * sqrt(sigma_prior^2 + sigma_current^2), floor)`, and `n1_critical_floor` replaces `floor` when a critical baseline dim has N=1 samples. `logic_version` changes when the rule does |
+| `credential_source_lanes` | `evolve.scaffold_search.loop.observe.role_provenance._SOURCE_TO_LANE` (credential source to lane, the same lanes recorded in `role_provenance` rows) |
+| `task_prefix_phases` | Ordered `[prefix, phase]` pairs from `evals.seed_generation.orchestrator._TASK_PREFIX_TO_PHASE`; the first matching prefix wins |
 
-The heatmap abbreviations for judge dimensions have no GEODE source; they are
-consumer presentation. The campaign progress-log regex is no longer needed:
+Some values stay with the consumer because GEODE code does not own them:
+
+- **Judge-dimension heatmap abbreviations, harness chip classes and labels, and
+  the rule's display text.** These are presentation. A model prefix that is not
+  a credential source is a provider id on the API-key (PAYG) route.
+- **The default mutator model.** GEODE has no default; the mutator inherits the
+  operator's configured model. The model actually used is recorded per baseline
+  in `hub/state/baseline_archive.jsonl` under `role_provenance.mutator`.
+- **The gate-recipe boundary timestamp.** This is a historical cutover (the
+  PR-GATE-RECIPE merge time). No GEODE code holds it, and attribution rows carry
+  no recipe marker.
+
+The campaign progress-log regex is no longer needed:
 `hub/state/published/campaign-progress.json` carries the same events as
 structured records written by the campaign itself.
 
