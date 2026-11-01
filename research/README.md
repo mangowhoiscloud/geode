@@ -32,7 +32,7 @@ assets, study conditions, and PDF bytes remain unchanged by the reader update.
 
 [Read the paper review](https://tech.mangowhois.ai/jev/jevdb/) ·
 [Watch the paper review video](https://youtu.be/KKiEyGjGUIo) ·
-[Download the review slides (PPTX)](jevdb-seminar-v25.pptx)
+[Download the review slides (PPTX)](https://tech.mangowhois.ai/research/jevdb-seminar-v25.pptx)
 
 Jihwan Ryu's review of **Prune First, Decide Fast: Scalable Semantic Query
 Processing with JEVDB**, by Zhengle Wang, Hanxu Yan, Fuheng Zhao, and Chunwei
@@ -53,9 +53,9 @@ benchmark reproduction.
   notices. Presenter examples and personal experiments are identified separately.
 
 Only the reviewed PPTX is published, at
-<https://tech.mangowhois.ai/research/jevdb-seminar-v25.pptx>; internal review
-records and other submission materials are not included. The source file
-remains unchanged.
+<https://tech.mangowhois.ai/research/jevdb-seminar-v25.pptx>; mangowhois-site
+holds the single copy. Internal review records and other submission materials
+are not included. The file remains unchanged.
 
 ### v25 web reader
 

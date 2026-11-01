@@ -19,7 +19,6 @@ eval_contracts:
   - docs/eval/schemas/geo-host-preflight-v2.schema.json
   - docs/eval/schemas/geo-claim-universe.schema.json
   - docs/eval/schemas/geo-human-calibration.schema.json
-  - docs/eval/schemas/geo-link-audit.schema.json
   - docs/eval/schemas/geo-live-approval.schema.json
   - docs/eval/schemas/geo-native-results.schema.json
   - docs/eval/schemas/geo-outcome.schema.json
@@ -201,7 +200,6 @@ with frozen baseline and treatment arms.
      --run-spec <run-dir>/run-spec.json \
      --workload <run-dir>/workload.json \
      --site-preflight <run-dir>/site-preflight.json \
-     --link-audit <run-dir>/link-audit.json \
      --host-preflight <run-dir>/host-preflight.json \
      --out <run-dir>/native-results.json
 

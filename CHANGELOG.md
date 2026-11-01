@@ -95,6 +95,10 @@ functional change.
   site-only scripts, hooks, tests and build checks are gone. mangowhois-site
   builds the docs, hub and readers from the publication bundle; the raw hub
   data and its producers stay here.
+- **Duplicated site resources.** The hub design docs and the JEVDB review
+  PPTX now live only in mangowhois-site, and the GEO visibility benchmark no
+  longer accepts the docs link-audit receipt that only the removed site link
+  checker produced.
 
 ### Infrastructure
 
