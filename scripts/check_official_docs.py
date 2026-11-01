@@ -31,11 +31,21 @@ PUBLIC_IDENTITY = "Autonomous Agent Runtime + Evaluation Substrate"
 OWNER_MAP = Path("docs/architecture/official-docs-generation.md")
 
 
+# Printed when the committed generated docs drift (this gate and the Pages build).
+REGENERATE_DOCS_HINT = (
+    "Regenerate the committed mirrors with `cd site && npm run sync-stats` "
+    "(sot.ts, changelog.ts, llms.txt; the site-generated-mirrors pre-commit hook "
+    "runs it on commit) and llms-full.txt with `npm run build && npm run export-md`, "
+    "then commit the outputs."
+)
+
+
 @dataclass(frozen=True)
 class DocsCommand:
     label: str
     argv: tuple[str, ...]
     cwd: Path
+    remedy: str = ""
 
 
 def _resolve_executable(name: str) -> str:
@@ -47,7 +57,6 @@ def _resolve_executable(name: str) -> str:
 
 def build_docs_commands(*, skip_build: bool = False) -> list[DocsCommand]:
     npm = _resolve_executable("npm")
-    git = _resolve_executable("git")
     commands = [
         DocsCommand(
             "check generated architecture baseline",
@@ -84,15 +93,19 @@ def build_docs_commands(*, skip_build: bool = False) -> list[DocsCommand]:
                 SITE_DIR,
             )
         )
-    checked_files = GENERATED_DOCS[:-1] if skip_build else GENERATED_DOCS
-    commands.append(
-        DocsCommand(
-            "verify generated docs are committed",
-            (git, "diff", "--exit-code", "--", *checked_files),
-            REPO_ROOT,
-        )
-    )
+    commands.append(verify_generated_command(skip_build=skip_build))
     return commands
+
+
+def verify_generated_command(*, skip_build: bool = False) -> DocsCommand:
+    """Diff the committed generated docs; llms-full.txt needs a site build first."""
+    checked_files = GENERATED_DOCS[:-1] if skip_build else GENERATED_DOCS
+    return DocsCommand(
+        "verify generated docs are committed",
+        (_resolve_executable("git"), "diff", "--exit-code", "--", *checked_files),
+        REPO_ROOT,
+        REGENERATE_DOCS_HINT,
+    )
 
 
 def _project_version() -> str:
@@ -186,8 +199,17 @@ def run_docs_gate(commands: Sequence[DocsCommand]) -> None:
     print("==> check release surfaces")
     check_release_surfaces()
     for command in commands:
-        print(f"==> {command.label}")
+        run_command(command, env)
+
+
+def run_command(command: DocsCommand, env: dict[str, str]) -> None:
+    print(f"==> {command.label}")
+    try:
         subprocess.run(command.argv, cwd=command.cwd, env=env, check=True)  # noqa: S603
+    except subprocess.CalledProcessError as exc:
+        if command.remedy:
+            print(f"error: {command.label} failed. {command.remedy}", file=sys.stderr)
+        raise SystemExit(exc.returncode) from exc
 
 
 def main() -> None:
@@ -198,6 +220,11 @@ def main() -> None:
         help="Regenerate and validate docs without running the Next.js production build.",
     )
     parser.add_argument(
+        "--verify-generated",
+        action="store_true",
+        help="Only diff the committed generated docs after an external build and export.",
+    )
+    parser.add_argument(
         "--check-map",
         action="store_true",
         help="Only check declared code, documentation owner, and verification file links.",
@@ -205,6 +232,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.check_map:
         check_owner_map()
+    elif args.verify_generated:
+        run_command(verify_generated_command(), _command_env())
     else:
         run_docs_gate(build_docs_commands(skip_build=args.skip_build))
 

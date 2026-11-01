@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -105,6 +106,30 @@ def test_run_docs_gate_uses_repo_env(
     assert calls == [(("demo",), check_official_docs.REPO_ROOT, calls[0][2])]
     assert calls[0][2]["GEODE_REPO"] == str(check_official_docs.REPO_ROOT)
     assert calls[0][2]["PATH"].startswith(f"{venv_bin}:")
+
+
+def test_generated_docs_drift_reports_regeneration_commands(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(check_official_docs, "_resolve_executable", lambda name: f"/usr/bin/{name}")
+
+    def drifted(argv: tuple[str, ...], **_kwargs: object) -> None:
+        raise subprocess.CalledProcessError(1, argv)
+
+    monkeypatch.setattr("scripts.check_official_docs.subprocess.run", drifted)
+    command = check_official_docs.verify_generated_command()
+
+    assert command.argv[-len(check_official_docs.GENERATED_DOCS) :] == (
+        check_official_docs.GENERATED_DOCS
+    )
+    with pytest.raises(SystemExit) as raised:
+        check_official_docs.run_command(command, {})
+
+    assert raised.value.code == 1
+    error = capsys.readouterr().err
+    assert "npm run sync-stats" in error
+    assert "npm run export-md" in error
 
 
 def test_check_release_surfaces_accepts_current_release() -> None:

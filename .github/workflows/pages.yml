@@ -188,13 +188,11 @@ jobs:
       - name: Export docs markdown twins + llms-full.txt
         run: npm run export-md
 
+      # The gate script owns the generated-file list and prints the regeneration
+      # commands when the committed copies drift.
       - name: Verify committed public-doc generators are current
-        run: >-
-          git diff --exit-code --
-          public/llms.txt
-          public/llms-full.txt
-          src/data/geode/sot.ts
-          src/data/geode/changelog.ts
+        working-directory: ${{ github.workspace }}
+        run: uv run python scripts/check_official_docs.py --verify-generated
 
       - name: Copy docs/self-improving into site/out (hub root + petri-bundle)
         working-directory: ${{ github.workspace }}

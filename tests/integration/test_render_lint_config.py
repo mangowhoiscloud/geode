@@ -87,6 +87,35 @@ def test_precommit_wires_render_lint_hooks() -> None:
     )
 
 
+def _sync_stats_inputs() -> set[str]:
+    """Repository paths that site/scripts/sync-stats.mjs reads to build its mirrors."""
+    script = REPO_ROOT / "site" / "scripts" / "sync-stats.mjs"
+    source = script.read_text(encoding="utf-8")
+    inputs = {"site/scripts/sync-stats.mjs"}
+    inputs |= set(re.findall(r'resolve\(\s*GEODE_REPO,\s*"([^"]+)"\s*\)', source))
+    inputs |= {f"site/scripts/{name}" for name in re.findall(r'from "\./([^"]+)"', source)}
+    site_files = dict(re.findall(r'const (\w+) = resolve\(\s*SITE_ROOT,\s*"([^"]+)"', source))
+    written = set(re.findall(r"writeFileSync\(\s*(\w+)", source))
+    inputs |= {f"site/{path}" for name, path in site_files.items() if name not in written}
+    return {path for path in inputs if (REPO_ROOT / path).is_file()}
+
+
+def test_precommit_regenerates_sync_stats_mirrors_for_every_input() -> None:
+    """A change to any sync-stats input must regenerate its committed mirrors on commit."""
+
+    data = yaml.safe_load(PRECOMMIT_CONFIG.read_text(encoding="utf-8"))
+    hooks = {hook["id"]: hook for entry in data["repos"] for hook in entry.get("hooks", [])}
+    hook = hooks["site-generated-mirrors"]
+    assert hook["pass_filenames"] is False
+    assert "site/scripts/sync-stats.mjs" in hook["entry"]
+    files = re.compile(hook["files"])
+
+    inputs = _sync_stats_inputs()
+    assert {"CHANGELOG.md", "pyproject.toml"} <= inputs
+    missed = sorted(path for path in inputs if not files.search(path))
+    assert not missed, f"site-generated-mirrors hook does not watch sync-stats inputs: {missed}"
+
+
 def test_lint_script_exists_and_executable() -> None:
     """The script that drives the render-lint hook must exist."""
 

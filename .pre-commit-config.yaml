@@ -108,6 +108,19 @@ repos:
         pass_filenames: false
         files: ^(site/public/(report(?:-en)?\.pdf$|research/(geode-report|previews)/)|site/src/data/geode/report-pages\.json$|site/scripts/(export-geode-report\.py|verify-report-pages\.mjs)$|\.pre-commit-config\.yaml$)
 
+      # Regenerates the committed mirrors owned by site/scripts/sync-stats.mjs
+      # (sot.ts, changelog.ts, llms.txt) whenever one of its inputs changes, so
+      # a CHANGELOG or version edit cannot reach CI without its mirrors. Like a
+      # formatter, a rewritten mirror fails the commit until it is staged.
+      # tests/integration/test_render_lint_config.py keeps `files` in step with
+      # the inputs the script reads.
+      - id: site-generated-mirrors
+        name: site generated mirrors (sync-stats)
+        entry: env GEODE_REPO=. node site/scripts/sync-stats.mjs
+        language: system
+        pass_filenames: false
+        files: ^(CHANGELOG\.md|pyproject\.toml|site/src/data/geode/architecture-baseline\.json|site/src/lib/geode-docs/sitemap\.ts|site/scripts/(sync-stats|sitemap-pages)\.mjs|\.pre-commit-config\.yaml)$
+
       - id: automation-contracts
         name: workflow and shell contracts
         entry: scripts/lint_automation.sh

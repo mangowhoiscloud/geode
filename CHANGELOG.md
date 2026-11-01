@@ -47,6 +47,16 @@ functional change.
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Generated docs drift guard.** A `site-generated-mirrors` pre-commit hook
+  regenerates `sot.ts`, `changelog.ts` and `llms.txt` whenever a `sync-stats`
+  input such as `CHANGELOG.md` or `pyproject.toml` is staged, and a test keeps
+  the hook's pattern aligned with the inputs the script reads. The docs gate and
+  the Pages build now share one generated-file list
+  (`check_official_docs.py --verify-generated`) and print the regeneration
+  commands when the committed copies drift, instead of a bare diff exit code.
+
 ### Fixed
 
 - **Draft PR CI eligibility.** Defer aggregate Test and Gate jobs with their

@@ -119,6 +119,13 @@ After the site build, `site/scripts/export-docs-md.mjs` owns
 
 If any source input changes (`pyproject.toml`, `CHANGELOG.md`, site docs, or
 public docs metadata), regenerate and commit the outputs in the same change.
+The `site-generated-mirrors` pre-commit hook runs `sync-stats` whenever one of
+its inputs is staged and fails the commit until the rewritten mirrors are
+staged; `tests/integration/test_render_lint_config.py` keeps the hook's file
+pattern in step with the inputs the script reads. `llms-full.txt` still needs
+the site build and `npm run export-md`. Both CI checks (this gate and the Pages
+build, through `scripts/check_official_docs.py --verify-generated`) diff the
+same `GENERATED_DOCS` list and print these regeneration commands on drift.
 
 ## Next Automation Targets
 
