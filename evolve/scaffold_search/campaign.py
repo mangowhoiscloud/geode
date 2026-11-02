@@ -108,6 +108,18 @@ from core.paths import CYCLE_INPUT_POOL as _CYCLE_INPUT_POOL  # PR-CLEANUP-D2
 from core.paths import HELD_OUT_BENCH_POOL as _HELD_OUT_BENCH_POOL  # PR-CLEANUP-D2
 from core.paths import PETRI_LOGS_DIR as _PETRI_LOGS_DIR  # PR-CLEANUP-D2
 
+from evolve.scaffold_search.publication import (
+    CAMPAIGN_PROGRESS_NAME,
+    PublishedStateError,
+    append_campaign_record,
+    cycle_record,
+    gen0_record,
+    noise_record,
+    publish_gen0_fitness_stderr,
+    published_state_dir,
+    refresh_published_baseline,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -206,9 +218,14 @@ class ProgressLog:
     Per the long-task-watcher skill: emit a *flushed* line per event so an
     operator tailing the file (``tail -F``) sees live progress, never a buffered
     blob at the end. Each ``emit`` is timestamped and ``flush()``-ed immediately.
+
+    ``snapshot_path`` (real campaigns only) receives the structured twin of each
+    cycle / gen-0 / noise-band line, stamped with the same timestamp, for the
+    published campaign-progress snapshot.
     """
 
     path: Path
+    snapshot_path: Path | None = None
     _fh: Any = field(default=None, init=False, repr=False)
 
     def __enter__(self) -> ProgressLog:
@@ -222,13 +239,24 @@ class ProgressLog:
             self._fh.close()
             self._fh = None
 
-    def emit(self, message: str) -> None:
-        """Write one timestamped line to the log file + stdout, flushed."""
-        line = f"{_utc_now_iso()} {message}"
+    def emit(self, message: str, *, record: tuple[str, dict[str, Any]] | None = None) -> None:
+        """Write one timestamped line to the log file + stdout, flushed.
+
+        ``record`` is ``(group, fields)`` for the published snapshot; a snapshot
+        write failure is logged and never interrupts the campaign.
+        """
+        ts = _utc_now_iso()
+        line = f"{ts} {message}"
         print(line, flush=True)
         if self._fh is not None:
             self._fh.write(line + "\n")
             self._fh.flush()
+        if record is not None and self.snapshot_path is not None:
+            group, fields = record
+            try:
+                append_campaign_record(self.snapshot_path, group, {"ts": ts, **fields})
+            except (OSError, PublishedStateError) as exc:
+                log.warning("published campaign progress append failed: %s", exc)
 
 
 def _utc_now_iso() -> str:
@@ -422,6 +450,7 @@ def restore_sot(snapshot_dir: Path) -> list[Path]:
         BASELINE_JSON.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(baseline_src, BASELINE_JSON)
         restored.append(BASELINE_JSON)
+        refresh_published_baseline(BASELINE_JSON)
     return restored
 
 
@@ -734,6 +763,10 @@ class NoiseBand:
             f"stderr={self.stderr:.4f} values={[round(v, 4) for v in self.held_out_values]}"
         )
 
+    def record(self) -> dict[str, Any]:
+        """Structured twin of :meth:`summary` for the published snapshot."""
+        return noise_record(k=self.k, mean=self.mean, stderr=self.stderr)
+
 
 def compute_noise_band(
     held_out_values: Sequence[float],
@@ -847,6 +880,7 @@ def write_kmean_baseline(
     from core.memory.atomic_write import atomic_write_text
 
     atomic_write_text(target, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    refresh_published_baseline(target)
     return True
 
 
@@ -911,10 +945,19 @@ def run_gen0_baseline(
         progress.emit(
             f"gen-0 baseline repeat {i}/{k}: held_out={signal.held_out_fitness} "
             f"fitness={signal.fitness} source={signal.source} "
-            f"dims_parsed={len(measure_dims) if measure_dims else 0}"
+            f"dims_parsed={len(measure_dims) if measure_dims else 0}",
+            record=(
+                "gen0",
+                gen0_record(
+                    n=i,
+                    total=k,
+                    sel=_optional_float(signal.fitness),
+                    held=_optional_float(signal.held_out_fitness),
+                ),
+            ),
         )
     band = compute_noise_band(held_out_values, fitness_values, k=k)
-    progress.emit(band.summary())
+    progress.emit(band.summary(), record=("noise", band.record()))
     # CORE FIX — rewrite baseline.json's raw.dim_means to the K-mean dims (and
     # raw.dim_stderr to the across-K per-dim sample stderr), so prior_raw =
     # compute_fitness(mean_dims) is a robust central estimate, not the single
@@ -1688,7 +1731,8 @@ async def run_gen0_baseline_async(
     progress.emit(
         f"gen-0 baseline (async): {len(successful)}/{k} workers ok "
         f"({len(already_done)} resumed + {len(fresh_ok)} fresh), "
-        f"{len(dropped)} dropped; " + band.summary()
+        f"{len(dropped)} dropped; " + band.summary(),
+        record=("noise", band.record()),
     )
     if dry_run:
         progress.emit(
@@ -2127,7 +2171,10 @@ def run_arm(
             )
             if proposal is None:
                 cycles_skipped += 1
-                progress.emit(f"arm '{arm}' cycle {cycle}/{n}: SKIP (propose-guard exhausted)")
+                progress.emit(
+                    f"arm '{arm}' cycle {cycle}/{n}: SKIP (propose-guard exhausted)",
+                    record=("cycles", cycle_record(arm=arm, n=cycle, total=n, skip=True)),
+                )
                 continue
             rows_before = count_attribution_rows()
             runner.apply_proposal(proposal)
@@ -2139,7 +2186,10 @@ def run_arm(
             if promoted:
                 promotes += 1
             guard_result = guard(signal)
-            progress.emit(_cycle_line(arm=arm, cycle=cycle, n=n, signal=signal, guard=guard_result))
+            progress.emit(
+                _cycle_line(arm=arm, cycle=cycle, n=n, signal=signal, guard=guard_result),
+                record=("cycles", _cycle_record(arm=arm, cycle=cycle, n=n, signal=signal)),
+            )
             if not guard_result.ok:
                 progress.emit(
                     f"HALT arm '{arm}' cycle {cycle}/{n}: degenerate audit — {guard_result.reason}"
@@ -2170,6 +2220,25 @@ def _promoted_this_cycle(signal: CycleSignal | None) -> bool:
     if signal is None or signal.fitness_delta is None:
         return False
     return signal.fitness_delta > 0.0
+
+
+def _optional_float(value: float | None) -> float | None:
+    return None if value is None else float(value)
+
+
+def _cycle_record(*, arm: str, cycle: int, n: int, signal: CycleSignal | None) -> dict[str, Any]:
+    """Structured twin of :func:`_cycle_line` (delta rounded as the line prints it)."""
+    if signal is None:
+        return cycle_record(arm=arm, n=cycle, total=n, verdict="no-signal")
+    return cycle_record(
+        arm=arm,
+        n=cycle,
+        total=n,
+        verdict="promote" if _promoted_this_cycle(signal) else "reject",
+        sel=_optional_float(signal.fitness),
+        held=_optional_float(signal.held_out_fitness),
+        delta=None if signal.fitness_delta is None else round(float(signal.fitness_delta), 4),
+    )
 
 
 def _cycle_line(
@@ -2244,6 +2313,7 @@ def run_campaign(
     runner_factory: Any | None = None,
     guard_fn: Any | None = None,
     async_first: bool = True,
+    published_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Run the full campaign: gen-0 K-repeat baseline → snapshot → 3-arm loop.
 
@@ -2257,11 +2327,17 @@ def run_campaign(
     ``arm_summaries`` are emitted in the ORIGINAL ``arms`` order. The injected
     ``train_runner`` / ``runner_factory`` / ``guard_fn`` keep the whole thing
     unit-testable with NO live audit.
+
+    ``published_dir`` (the CLI passes ``core.paths.PUBLISHED_STATE_DIR``) receives
+    the structured campaign progress and the gen-0 ``fitness_stderr`` of a real
+    campaign; dry runs never publish.
     """
     _validate_arms(arms)
     if not dry_run:
         require_evolve_workspace()
-    with ProgressLog(progress_path) as progress:
+    publish_to = None if dry_run else published_dir
+    snapshot_path = publish_to / CAMPAIGN_PROGRESS_NAME if publish_to is not None else None
+    with ProgressLog(progress_path, snapshot_path=snapshot_path) as progress:
         progress.emit(
             f"campaign start: n={n} k={k} arms={list(arms)} dry_run={dry_run} "
             f"audit_max_samples={audit_max_samples} audit_max_connections={audit_max_connections}"
@@ -2361,6 +2437,11 @@ def run_campaign(
         # against) — this is the matched reset every arm restores from.
         snapshot_written = snapshot_sot(snapshot_dir)
         progress.emit(f"gen-0 SoT snapshot: {len(snapshot_written)} files → {snapshot_dir}")
+        if publish_to is not None:
+            try:
+                publish_gen0_fitness_stderr(snapshot_dir / "baseline.json", out_dir=publish_to)
+            except (OSError, PublishedStateError) as exc:
+                progress.emit(f"WARN: gen-0 fitness_stderr not published — {exc}")
         # Per-arm summaries keyed by arm so the control fan-out + the sequential gate
         # write into the SAME map regardless of dispatch order; emitted at the end in
         # the ORIGINAL ``arms`` order (digest stability).
@@ -2540,6 +2621,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         audit_max_samples=args.audit_max_samples,
         audit_max_connections=args.audit_max_connections,
         dry_run=args.dry_run,
+        published_dir=published_state_dir(),
     )
     return 0
 

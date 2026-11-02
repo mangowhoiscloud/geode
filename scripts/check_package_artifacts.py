@@ -42,6 +42,10 @@ MUTABLE_STATE_PATHS = {
     "evolve/scaffold_search/state/mutations.jsonl",
     "evolve/scaffold_search/state/results.jsonl",
     "evolve/scaffold_search/state/results.tsv",
+    "evolve/scaffold_search/state/published/baseline.json",
+    "evolve/scaffold_search/state/published/campaign-progress.json",
+    "evolve/scaffold_search/state/published/gen0-fitness-stderr.json",
+    "evolve/scaffold_search/state/published/crucible-attempts.jsonl",
 }
 
 BUNDLED_SKILL_PATHS = {

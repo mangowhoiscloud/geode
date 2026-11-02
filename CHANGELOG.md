@@ -47,6 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Publication bundle.** `scripts/build_publication_bundle.py` packs the
+  changelog, evaluation index, architecture inventory and raw self-improving hub
+  data into a deterministic, content-addressed archive with a manifest of file
+  digests and hub constants exported from GEODE modules (including the promote
+  margin parameters, credential-source lanes and seed-generation task phases).
+  A downstream site can render GEODE's pages from it.
+- **Published self-improving state.** Campaign, baseline and crucible producers
+  keep a committed, path-scrubbed snapshot of their runtime evidence (latest
+  baseline, structured campaign progress, gen-0 fitness stderr, crucible attempt
+  rows) under `evolve/scaffold_search/state/published/`, and
+  `scripts/refresh_published_state.py` rebuilds it from existing runtime files.
+  The publication bundle includes it, and each manifest file entry now records
+  its last commit time.
+
 ### Fixed
 
 - **Draft PR CI eligibility.** Defer aggregate Test and Gate jobs with their
@@ -66,6 +82,14 @@ functional change.
   plugin pins `glob@14.0.3` (its recorded `package.json` digest updated), and an
   npm override pins ESLint's `minimatch` to 11.0.3. The plugin's pattern and
   integrity checks and the site lint pass on the new versions.
+
+### Infrastructure
+
+- **Publication bundle release.** Every `main` push publishes the bundle as
+  assets of the `publication` prerelease using only `GITHUB_TOKEN`: the
+  content-addressed archive, its versioned manifest and a moving `manifest.json`
+  pointer. The pointer moves only after the archive is publicly downloadable,
+  unchanged content is skipped, and the newest 10 bundles are kept.
 
 ## [1.0.34] - 2026-10-30
 

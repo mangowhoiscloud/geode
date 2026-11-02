@@ -520,6 +520,10 @@ BASELINE_ARCHIVE_PATH = AUTORESEARCH_STATE_DIR / "baseline_archive.jsonl"
 BASELINE_EPOCHS_PATH = AUTORESEARCH_STATE_DIR / "baseline_epochs.json"
 RESULTS_TSV_PATH = AUTORESEARCH_STATE_DIR / "results.tsv"
 RESULTS_JSONL_PATH = AUTORESEARCH_STATE_DIR / "results.jsonl"
+#   PUBLISHED (in-repo) — path-scrubbed snapshots of the runtime evidence below
+#   (latest baseline, campaign progress, gen-0 stderr) plus crucible attempt rows,
+#   refreshed by their producers so the publication bundle needs no ~/.geode.
+PUBLISHED_STATE_DIR = AUTORESEARCH_STATE_DIR / "published"
 #   RUNTIME (~/.geode) — per-run scratch, never versioned:
 BASELINE_JSON_PATH = RUNTIME_ROOT / "baseline.json"  # LATEST (vs tracked archive)
 CAMPAIGN_PROGRESS_LOG_PATH = RUNTIME_ROOT / "campaign-progress.log"

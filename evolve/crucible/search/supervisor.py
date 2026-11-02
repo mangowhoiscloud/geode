@@ -46,6 +46,7 @@ from evolve.crucible.contract import (
 )
 from evolve.crucible.evidence import EvidenceEnvelope, ResourceUsage, load_evidence
 from evolve.crucible.promotion import SCREENING_FAILURE, PromotionVerdict, decide
+from evolve.crucible.publication import refresh_published_attempts
 
 from .candidate_dedup import (
     CANDIDATE_FINGERPRINT_OBSERVATION_SCHEMA,
@@ -1759,6 +1760,7 @@ class PromotionSupervisor:
             else:
                 workspace.assert_head(head)
             append_jsonl(config.state_dir / "ledger.jsonl", record)
+            refresh_published_attempts(config.state_dir / "ledger.jsonl", config.campaign_id)
             previous_record = record_id
             counts["attempts"] += 1
             if outcome == "KEEP":

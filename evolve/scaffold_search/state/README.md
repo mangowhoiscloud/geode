@@ -22,6 +22,10 @@ evolve/scaffold_search/state/
 ├── results.tsv                rolling 12-column run results (S10 + P1a)
 ├── results.jsonl              rolling raw 18-dim per-row results
 ├── policies/                  mutation-target SoT JSONs (wrapper-sections, tool-policy, …)
+├── published/                 path-scrubbed snapshots of runtime evidence for the
+│                              publication bundle (baseline, campaign progress,
+│                              gen-0 fitness_stderr, crucible attempts); refreshed by
+│                              their producers or scripts/refresh_published_state.py
 ├── seed_pools/                repo-pinned LOCATION for campaign INPUT pools
 │                              (cycle-input/ + held-out/ assembled by
 │                              scripts/assemble_seed_pool.py; committed when pinned)
@@ -52,6 +56,7 @@ evolve/scaffold_search/state/
 | `SEED_POOLS_DIR` | TRACKED (always repo-pinned) | `evolve/scaffold_search/state/seed_pools/` |
 | `RUNTIME_ROOT` | RUNTIME | `~/.geode/self-improving/` |
 | `BASELINE_JSON_PATH` | RUNTIME | `~/.geode/self-improving/baseline.json` |
+| `PUBLISHED_STATE_DIR` | TRACKED (published snapshot) | `evolve/scaffold_search/state/published/` |
 
 ## `GEODE_STATE_ROOT` — worker isolation
 
