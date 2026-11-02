@@ -17,7 +17,7 @@ advisory exclusions and all 22 lint rules/configurations are unchanged.
 The website does not set `settings.next.rootDir`; its existing default cwd
 behavior is unchanged. This is build tooling, not code shipped in the browser.
 
-`dist/utils/get-root-dirs.js` uses the official registry packages `glob@13.0.6`,
+`dist/utils/get-root-dirs.js` uses the official registry packages `glob@14.0.3`,
 `brace-expansion@5.0.12` and `picomatch@4.0.4`. Brace expansion precedes per-input
 positive/negative pattern separation. Filesystem discovery follows directory
 symlinks and remains case-sensitive. Matching retains dot-directory and extglob
