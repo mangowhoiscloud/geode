@@ -193,6 +193,7 @@ exclude = [
     "/evolve/scaffold_search/state/mutations.jsonl",
     "/evolve/scaffold_search/state/results.jsonl",
     "/evolve/scaffold_search/state/results.tsv",
+    "/evolve/scaffold_search/state/published",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
@@ -235,6 +236,7 @@ exclude = [
     "/evolve/scaffold_search/state/mutations.jsonl",
     "/evolve/scaffold_search/state/results.jsonl",
     "/evolve/scaffold_search/state/results.tsv",
+    "/evolve/scaffold_search/state/published",
 ]
 
 [tool.pytest.ini_options]
