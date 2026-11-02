@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [1.0.35] - 2026-11-02
+
 ### Added
 
 - **Publication bundle.** `scripts/build_publication_bundle.py` packs the
