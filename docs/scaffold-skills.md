@@ -79,7 +79,7 @@ Codex still separates its bounded [skill metadata renderer](https://github.com/o
 from [registry-backed tool search](https://github.com/openai/codex/blob/a5290028a2936b91ec9305f6de7780463620ca70/codex-rs/core/src/tools/handlers/tool_search.rs).
 Claude Code likewise loads [skill descriptions before bodies](https://code.claude.com/docs/en/skills#control-who-invokes-a-skill).
 Sources checked 2026-09-20. GEODE's current provider/endpoint decisions and
-replay contract live in the [tool protocol guide](../site/src/app/docs/runtime/tools/protocol/page.tsx),
+replay contract live in the [tool protocol guide](https://mangowhois.ai/products/geode/docs/runtime/tools/protocol/),
 not another catalog service or development-skill copy.
 
 These contracts are loadable by `core/skills/`. Eight are immutable wheel
