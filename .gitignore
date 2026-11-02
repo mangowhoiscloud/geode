@@ -34,7 +34,8 @@ media/
 # SOT 는 docs/audits/<date>-petri-*.md 보고서. logs 자체는 너무 크고 PII /
 # transcript 가 있을 수 있어 git 제외.
 logs/
-# Exception: docs/petri-bundle/logs/ is the Pages-published audit bundle.
+# Exception: docs/self-improving/petri-bundle/logs/ is the published audit
+# bundle (shipped to the downstream site in the publication bundle).
 # bundle_sync (plugins/petri_audit/bundle_sync.py) auto-copies finished
 # .eval archives here from ~/.geode/petri/logs/, and the validator
 # (scripts/validate_petri_bundle.py) treats the path as part of the
@@ -42,8 +43,6 @@ logs/
 # drop every newly-synced .eval — the same anti-pattern as PR-G5b
 # #1350 (MUTATION_AUDIT_LOG_PATH). Keep this exception colocated with
 # the rule it negates.
-!docs/petri-bundle/logs/
-!docs/petri-bundle/logs/**
 !docs/self-improving/petri-bundle/logs/
 !docs/self-improving/petri-bundle/logs/**
 # Exception: seed-generation inspect bundle ("별도 뎁스"). The seedgen phase
@@ -52,31 +51,20 @@ logs/
 # rationale as the petri-bundle logs above.
 !docs/self-improving/seed-generation/bundle/logs/
 !docs/self-improving/seed-generation/bundle/logs/**
-# Exception: self-improving hub E2E fixture. The hub builder
-# (scripts/build_self_improving_hub.py) reads listing.json from
-# this path during tests/test_self_improving_hub_e2e.py; without
-# this negation CI clones the repo without the fixture and the
-# audit-row assertions fail (same anti-pattern as PR-G5b #1350).
-!tests/fixtures/self_improving_hub/petri-bundle/logs/
-!tests/fixtures/self_improving_hub/petri-bundle/logs/**
-# CSP-14 (2026-05-23) — Pages-published seed-generation bundle. Same
+# CSP-14 (2026-05-23) — published seed-generation bundle. Same
 # bundle_sync pattern as the audit logs above: ``plugins/seed_generation/
 # bundle_sync.py`` auto-copies finished run artefacts (state.json,
 # survivors.json, meta_review.json, candidates/*.md) from
 # ``state/seed_generation/<run_id>/`` here. Without this exception
 # the gitignored ``state/*`` rule below would silently drop the
 # synced files (same anti-pattern as PR-G5b #1350).
-!docs/petri-bundle/seeds/
-!docs/petri-bundle/seeds/**
 !docs/self-improving/petri-bundle/seeds/
 !docs/self-improving/petri-bundle/seeds/**
-# CSP-14 (2026-05-23) — Pages-published literature snapshots.
+# CSP-14 (2026-05-23) — published literature snapshots.
 # ``core/tools/literature_snapshot.py:FreezePaperSnapshotTool`` writes
 # directly to this directory; if the literature dir is ever moved
 # under a gitignored path the writer thinks it persisted but git
 # won't track it.
-!docs/petri-bundle/literature/
-!docs/petri-bundle/literature/**
 !docs/self-improving/petri-bundle/literature/
 !docs/self-improving/petri-bundle/literature/**
 optimized_prompts/
@@ -157,9 +145,9 @@ geode_checkpoints.db-wal
 tmp/
 pilot_stderr.log
 /node_modules/
-# Root npm scratch — node tooling (site/scripts/*.mjs) run from the repo root
-# auto-creates a stray root package.json/lock (name=<dir basename>); ignore so
-# `git add -A` never commits it. The real Next.js manifests live at site/.
+# Root npm scratch — node tooling run from the repo root auto-creates a stray
+# root package.json/lock (name=<dir basename>); ignore so `git add -A` never
+# commits it.
 /package.json
 /package-lock.json
 reports/
@@ -209,20 +197,9 @@ artifacts/
 # Reversible (user can `mv` back or `rm -rf`). Never tracked.
 .geode/_archive/
 
-# Next.js site (site/) build + install artifacts. The site/ tree itself is
-# tracked; only generated contents are excluded.
-site/node_modules/
-site/.next/
-site/out/
-site/tsconfig.tsbuildinfo
-
-# Un-ignore PNG/HTML inside site/public/ — the root .gitignore blanket
-# rejects *.png and *.html, but the site needs its mascot art + static
-# assets shipped to GitHub Pages.
-!site/public/**/*.png
-!site/public/**/*.html
-!site/public/**/*.svg
-!site/public/**/*.ico
+# The redirect-only GitHub Pages site (github-pages/) ships its 404 page; the
+# root blanket rule rejects *.html.
+!github-pages/*.html
 
 .claude/scratch/
 

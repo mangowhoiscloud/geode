@@ -8,12 +8,12 @@
 </p>
 
 <p align="center">
-  <a href="https://mangowhoiscloud.github.io/geode/docs/">문서</a> ·
+  <a href="https://mangowhois.ai/products/geode/docs/">문서</a> ·
   <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">평가 아티팩트</a> ·
   <a href="README.md">English</a>
 </p>
 
-# GEODE v1.0.34 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.35 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE는 리서치, 파일 작업, 예약 작업을 위한 Python 에이전트 런타임입니다.
 에이전트는 도구를 호출하고 결과를 읽으며 작업을 이어갑니다.
@@ -74,8 +74,8 @@ GEODE가 관리하는 제공자 키와 OAuth 계정은 `~/.geode/auth.toml`에 �
 외부에서 주입한 환경변수 자격 증명도 사용할 수 있습니다.
 
 소스 선택, 자격 증명 우선순위, 계정 라우팅은
-[제공자 설정](https://mangowhoiscloud.github.io/geode/docs/run/providers/)과
-[인증 가이드](https://mangowhoiscloud.github.io/geode/docs/ops/oauth/)를 참고하세요.
+[제공자 설정](https://mangowhois.ai/products/geode/docs/run/providers/)과
+[인증 가이드](https://mangowhois.ai/products/geode/docs/ops/oauth/)를 참고하세요.
 
 ### Jev 판정 선택
 
@@ -92,8 +92,8 @@ GEODE는 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
 판정 경로를 바꿔도 생성 모델과 effort는 유지됩니다. 키 등록만으로 Jev가
 활성화되지는 않습니다. Reflection은 런타임 보호 조건에 따라 도구 결과를
 받은 라운드와 최종 응답 전에 수행합니다. 자격 증명, 사용량, 판정 범위는
-[판정 설정](https://mangowhoiscloud.github.io/geode/docs/config/reference/)과
-[검증·평가 가이드](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation/)를
+[판정 설정](https://mangowhois.ai/products/geode/docs/config/reference/)과
+[검증·평가 가이드](https://mangowhois.ai/products/geode/docs/verification/evaluation/)를
 참고하세요.
 
 ## 설정과 운영
@@ -111,11 +111,11 @@ GEODE는 TypeSafe 또는 OpenRouter를 통한 Jev 판정을 지원합니다.
 프로젝트 동작 설정은 사용자 기본값보다 우선합니다. 저장소에 들어 있는 `.env`,
 MCP 서버, 게이트웨이 설정, 권한을 넓히는 키(샌드박스, computer use, 웹훅,
 저장 경로)는 그 폴더에서 `geode config trust`를 실행한 뒤에만 적용됩니다.
-전체 우선순위는 [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics/)에
+전체 우선순위는 [설정 기초](https://mangowhois.ai/products/geode/docs/config/basics/)에
 있습니다. 자격 증명은 선택한
 모델·소스·계정에 따라서도 결정되므로 모든 설정을 하나의 우선순위 목록으로
 설명할 수는 없습니다. Google Workspace OAuth는 별도의
-[계정·키링 저장소](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace/)를
+[계정·키링 저장소](https://mangowhois.ai/products/geode/docs/run/google-workspace/)를
 사용합니다.
 
 ```bash
@@ -166,7 +166,7 @@ Gateway 세션의 원격 컴퓨터 사용은 명시적으로 허용하기 전까
 **MCP 클라이언트.** GEODE의 MCP 설정으로 외부 도구 서버를 연결합니다.
 번들되지 않은 서버는 `~/.geode/extension-policy.json`에서 승인해야 로드되고,
 프로젝트에 정의한 서버는 신뢰한 폴더에서만 로드됩니다.
-[MCP 가이드](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp/)를
+[MCP 가이드](https://mangowhois.ai/products/geode/docs/runtime/tools/mcp/)를
 참고하세요.
 
 **MCP 서버.** MCP 클라이언트의 stdio 실행 명령을 `geode-mcp`로 설정합니다.
@@ -190,7 +190,7 @@ HTTP 연결은 `geode-mcp --http`를 사용하며 `GEODE_MCP_TOKEN`으로 bearer
 SIL과 Crucible은 **실험 단계**입니다. 모델 가중치를 바꾸지 않고 프롬프트,
 도구 등 스캐폴드의 변경을 평가합니다. 안전성 감사와 벤치마크는 서로 다른
 수락 기준을 사용합니다. 공개 기록은 아직 지속적인 자기개선을 입증하지 않습니다.
-[Self-improving 허브](https://mangowhoiscloud.github.io/geode/self-improving/)와
+[Self-improving 허브](https://tech.mangowhois.ai/self-improving/)와
 [캠페인 가이드](docs/self-improving/campaign-quick-start.md)에서 시작할 수 있습니다.
 
 ## 평가 증거
@@ -201,10 +201,10 @@ verifier의 결과는 서로 다른 관측입니다.
 
 | 트랙 | 확인할 범위 |
 |---|---|
-| [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2/) | Native-user·GEODE-user 구분, 실행 완결성, 사용 한도 영향 |
-| [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark/) | 포함된 서비스, 동일 조건의 비교 관측, full-Verified 한계 |
-| [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench/) | 특정 계정의 단일 과제 스모크와 전체 과제 집합 결과의 차이 |
-| [Jev 판정](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation/) | 판정 품질, 완료 판단 시점, 전체 과제 수행 결과 |
+| [Tau2](https://mangowhois.ai/products/geode/docs/benchmarks/tau2/) | Native-user·GEODE-user 구분, 실행 완결성, 사용 한도 영향 |
+| [MCPMark](https://mangowhois.ai/products/geode/docs/benchmarks/mcpmark/) | 포함된 서비스, 동일 조건의 비교 관측, full-Verified 한계 |
+| [Terminal-Bench 2.1](https://mangowhois.ai/products/geode/docs/benchmarks/terminal-bench/) | 특정 계정의 단일 과제 스모크와 전체 과제 집합 결과의 차이 |
+| [Jev 판정](https://mangowhois.ai/products/geode/docs/verification/evaluation/) | 판정 품질, 완료 판단 시점, 전체 과제 수행 결과 |
 
 실행 기록과 개인정보 검토를 통과한 trajectory는
 [평가 아티팩트 저장소](https://github.com/mangowhoiscloud/geode-eval-artifacts)에
@@ -226,7 +226,7 @@ uv run geode version
 
 개발 지침인 `.agents/skills/`와 런타임 스킬인 `.geode/skills/`는 별개입니다.
 런타임 프롬프트의 지침도 실행 코드의 권한 검사를 대체하지 않습니다.
-[프롬프트 조립](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system/)에서
+[프롬프트 조립](https://mangowhois.ai/products/geode/docs/runtime/llm/prompt-system/)에서
 적용 경로를 확인할 수 있습니다.
 
 [변경 이력](CHANGELOG.md) · [보안 정책](SECURITY.md) · [Apache 2.0 라이선스](LICENSE)

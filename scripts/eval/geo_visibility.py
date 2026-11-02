@@ -231,20 +231,15 @@ def _fetch_metric(results_path: Path, context: dict[str, Any] | None) -> dict[st
         return _not_measured(
             "F",
             phase="preflight",
-            finding="Digest-bound site and internal-link preflight receipts were not supplied.",
+            finding="A digest-bound site preflight receipt was not supplied.",
         )
     site = _load_bound_receipt(results_path, context["site"], kind="geo-site-preflight")
-    links_receipt = _load_bound_receipt(results_path, context["links"], kind="geo-link-audit")
-    if not isinstance(site, dict) or not isinstance(links_receipt, dict):
-        raise ValueError("GEO preflight receipts must be objects")
+    if not isinstance(site, dict):
+        raise ValueError("GEO site preflight receipt must be an object")
     _validate_schema(site, "geo-preflight.schema.json", label="site preflight")
-    _validate_schema(links_receipt, "geo-link-audit.schema.json", label="link audit")
     checks = site["checks"]
     if any(row["numerator"] != row["denominator"] for row in checks.values()):
         raise ValueError("GEO site preflight pass receipt contains an incomplete check")
-    links = links_receipt["internal_links"]
-    if links["numerator"] != links["denominator"] or links["broken"]:
-        raise ValueError("GEO link-audit pass receipt contains a broken link")
     pages = int(checks["export"]["denominator"])
     host_ref = context["host"]
     host: dict[str, Any] | None = None
@@ -272,7 +267,7 @@ def _fetch_metric(results_path: Path, context: dict[str, Any] | None) -> dict[st
         expected_denominator=pages,
         finding=(
             f"All {pages} exported pages passed sitemap, self-canonical, indexability, "
-            f"and LLM-index checks; {links['denominator']} internal link occurrences passed; "
+            "and LLM-index checks; "
             + (
                 (
                     "the public host receipt matched every URL and fetch gate."
@@ -287,11 +282,7 @@ def _fetch_metric(results_path: Path, context: dict[str, Any] | None) -> dict[st
                 else "public-host fetch eligibility was not supplied."
             )
         ),
-        evidence=[
-            str(ref["path"])
-            for ref in (context["site"], context["links"], host_ref)
-            if ref is not None
-        ],
+        evidence=[str(ref["path"]) for ref in (context["site"], host_ref) if ref is not None],
     )
     if host is None or host["status"] == "fail":
         metric["status"] = "partial"

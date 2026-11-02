@@ -196,8 +196,8 @@ AUTORESEARCH_HANDOFF_DIR = RUNTIME_ROOT / "handoff"
 # run.log). Default ``~/.geode/self-improving/seed_generation/``.
 # PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation`` to
 # match the plugin package ``evals/seed_generation/`` (no hyphen/underscore
-# twin). The Pages-served bundle dir (``docs/self-improving/seed-generation/``)
-# keeps its hyphen URL — only the READ/state path goes snake.
+# twin). The published bundle dir (``docs/self-improving/seed-generation/``)
+# keeps its hyphen name — only the READ/state path goes snake.
 STATE_SEED_GENERATION_DIR = RUNTIME_ROOT / "seed_generation"
 
 # Single forward-pointer JSON file the seed-generation orchestrator
@@ -804,10 +804,7 @@ def ensure_directories() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Published-surface URL anchors (hardcoding sweep, 2026-06-11). The docs
-# site + repo URLs appeared as scattered literals (hub builder, docs-link
-# checker, sync-stats.mjs); python consumers import these two, the JS side
-# mirrors them as file-level consts in site/scripts/sync-stats.mjs.
+# Published-surface URL anchor (hardcoding sweep, 2026-06-11). Python consumers
+# import the repository URL instead of repeating the literal.
 # ---------------------------------------------------------------------------
-GEODE_PAGES_BASE_URL = "https://mangowhoiscloud.github.io/geode"
 GEODE_REPO_URL = "https://github.com/mangowhoiscloud/geode"

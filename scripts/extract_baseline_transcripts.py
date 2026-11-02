@@ -7,11 +7,11 @@ everything the baseline hub page needs to *show its work*: the seed scenario
 bodies, the auditor↔target conversation per seed, and the judge's 22-dim scores
 that aggregate into the promoted ``dim_means``.
 
-This script reads that ``.eval`` once (it depends on ``inspect_ai``, which the
-Pages CI does not install) and writes a self-contained, git-tracked
-``transcripts.json`` next to the rendered page. ``build_self_improving_hub.py``
-then renders from that JSON alone — no ``inspect_ai`` import on the build path,
-no dependence on a local ``.eval`` that other machines lack.
+This script reads that ``.eval`` once (it depends on ``inspect_ai``, which CI
+does not install) and writes a self-contained, git-tracked ``transcripts.json``
+that the publication bundle ships to the downstream hub, which renders from that
+JSON alone — no ``inspect_ai`` import and no dependence on a local ``.eval``
+that other machines lack.
 
 Run locally after a baseline ``--promote``::
 

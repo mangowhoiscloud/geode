@@ -32,7 +32,7 @@ The `.geode/` directory is the project-local persistent store for the agent. It 
 └── user_profile/            # Tier 0.5: User identity + preferences
 ```
 
-MCP servers, gateway bindings and capability-widening keys in `config.toml` apply only after `geode config trust` in that folder; see [project trust](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust).
+MCP servers, gateway bindings and capability-widening keys in `config.toml` apply only after `geode config trust` in that folder; see [project trust](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust).
 
 ## Context Hierarchy
 

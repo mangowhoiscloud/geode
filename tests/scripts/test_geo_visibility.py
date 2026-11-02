@@ -354,7 +354,6 @@ def test_geo_visibility_emits_vector_without_aggregate_score(tmp_path: Path) -> 
 def test_geo_visibility_requires_public_host_for_complete_fetch(tmp_path: Path) -> None:
     run_spec, workload, results = _fixture(tmp_path)
     site_receipt = tmp_path / "site-preflight.json"
-    link_receipt = tmp_path / "link-audit.json"
     host_receipt = tmp_path / "host-preflight.json"
     urlset_sha256 = "0" * 64
     _write_json(
@@ -409,21 +408,9 @@ def test_geo_visibility_requires_public_host_for_complete_fetch(tmp_path: Path) 
             },
         },
     )
-    _write_json(
-        link_receipt,
-        {
-            "schema": "geode.docs-link-audit.v1",
-            "generated_at": "2026-08-23T00:01:00Z",
-            "status": "pass",
-            "internal_links": {"numerator": 577, "denominator": 577, "broken": 0},
-            "external_links": {"audited": 0, "broken": 0},
-            "unresolved": 4,
-        },
-    )
     payload = json.loads(results.read_text(encoding="utf-8"))
     payload["preflight_context"] = {
         "site": {"path": site_receipt.name, "sha256": _sha256(site_receipt)},
-        "links": {"path": link_receipt.name, "sha256": _sha256(link_receipt)},
         "host": None,
     }
     _write_json(results, payload)
@@ -448,7 +435,7 @@ def test_geo_visibility_requires_public_host_for_complete_fetch(tmp_path: Path) 
 
     assert measured["vector"]["F"]["status"] == "measured"
     assert measured["vector"]["F"]["numerator"] == 78
-    assert "577 internal link occurrences" in measured["vector"]["F"]["finding"]
+    assert "internal link" not in measured["vector"]["F"]["finding"]
 
     failed_host = json.loads(host_receipt.read_text(encoding="utf-8"))
     failed_host["status"] = "fail"

@@ -32,7 +32,7 @@ REQUIRED_WORKFLOWS = {
     ),
     ".github/workflows/pages.yml": (
         "Render lint (markdown + YAML + JSON)",
-        "Build (Next.js static export)",
+        "Build (redirect site)",
     ),
 }
 REQUIRED_CHECKS = tuple(name for names in REQUIRED_WORKFLOWS.values() for name in names)

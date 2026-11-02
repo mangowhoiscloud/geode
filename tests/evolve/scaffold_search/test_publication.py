@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 from pathlib import Path
 
@@ -139,38 +138,6 @@ def test_legacy_log_parser_records_real_campaign_events_only() -> None:
         ("2026-05-31T06:03:00Z", 0.81, 0.0),
         ("2026-06-02T00:01:00Z", None, None),
     ]
-
-
-def test_legacy_parser_view_matches_hub_reader_except_positive_deltas(tmp_path: Path) -> None:
-    hub = importlib.import_module("scripts.build_self_improving_hub")
-    (tmp_path / "campaign-progress.log").write_text(_LEGACY_LOG, encoding="utf-8")
-    expected = hub._load_campaign_progress(tmp_path)
-    data = pub.parse_campaign_progress_log(_LEGACY_LOG)
-
-    def hub_view(cycle: dict) -> dict:
-        keys = ("arm", "n", "total", "ts", "skip")
-        if not cycle["skip"]:
-            keys += ("sel", "held", "delta", "verdict")
-        return {key: cycle[key] for key in keys}
-
-    numeric = [
-        hub_view(c)
-        for c in data["cycles"]
-        if c["skip"] or (c["verdict"] != "no-signal" and None not in (c["sel"], c["held"]))
-    ]
-    # The hub regex cannot read "+0.0025", so it silently drops promote cycles,
-    # and it cannot tell dry-run campaigns apart, so it keeps their SKIP lines.
-    assert [c for c in numeric if c not in expected["cycles"]] == [numeric[2]]
-    assert [c for c in expected["cycles"] if c not in numeric] == [
-        {"arm": "never", "n": 1, "total": 1, "ts": "2026-06-01T00:02:00Z", "skip": True}
-    ]
-    assert [
-        {k: g[k] for k in ("n", "total", "sel", "held")}
-        for g in data["gen0"]
-        if g["held"] is not None
-    ] == expected["gen0"]
-    first_band = next(b for b in data["noise"] if b["mean"] is not None)
-    assert {k: first_band[k] for k in ("k", "mean", "stderr")} == expected["noise"]
 
 
 def test_append_campaign_record_rejects_unknown_group_and_malformed_snapshot(

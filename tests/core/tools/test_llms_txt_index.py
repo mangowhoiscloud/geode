@@ -2,11 +2,7 @@
 
 PR-LLMS-TXT-TOOL (2026-06-12). Dedicated-tool upgrade of the
 instruction-level llms.txt-first heuristic (PR-LLMS-TXT, v0.99.156),
-following the mcpdoc convergence (explicit tool + prompt rule). The
-consumption parser is pinned against the repo's own published index
-(``site/public/llms.txt``) so the publication shape (guarded by
-``tests/core/llm/test_llms_txt_discovery.py``) and the consumption
-parser cannot drift apart.
+following the mcpdoc convergence (explicit tool + prompt rule).
 """
 
 from __future__ import annotations
@@ -25,7 +21,6 @@ from core.tools.llms_txt import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PUBLISHED_LLMS_TXT = REPO_ROOT / "site" / "public" / "llms.txt"
 
 SAMPLE_INDEX = """\
 # Sample Docs
@@ -144,22 +139,6 @@ def test_parse_same_origin_requires_matching_scheme() -> None:
     )
     assert downgraded is not None
     assert downgraded["sections"][0]["links"][0]["same_origin"] is False
-
-
-def test_parse_accepts_published_site_index() -> None:
-    """Publication-consumption pin: the index GEODE itself publishes must
-    parse with the consumption parser (same llmstxt.org spec, both ends)."""
-    published = PUBLISHED_LLMS_TXT.read_text(encoding="utf-8")
-    index = parse_llms_txt(published, base_url="https://mangowhoiscloud.github.io/geode/llms.txt")
-    assert index is not None
-    assert index["title"] == "GEODE"
-    assert index["summary"], "blockquote summary must survive parsing"
-    section_names = [s["name"] for s in index["sections"]]
-    assert len(section_names) >= 3
-    assert "Optional" in section_names
-    for section in index["sections"]:
-        for link in section["links"]:
-            assert link["url"].startswith("http"), link
 
 
 # ---------------------------------------------------------------------------

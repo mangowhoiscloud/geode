@@ -77,7 +77,7 @@ chmod 600 ~/.geode/.env
 ```
 
 export한 변수, `~/.geode/.env`, 프로젝트 `.env`, `config.toml`의 적용 순서는
-[설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics/)를
+[설정 기초](https://mangowhois.ai/products/geode/docs/config/basics/)를
 참고하세요.
 
 ### 2. 프로젝트 설정
@@ -93,7 +93,7 @@ touch .geode/config.toml
 
 프로젝트 `.env`, 그리고 `.geode/config.toml`에서 에이전트 권한을 넓히는 설정은
 해당 폴더에서 `geode config trust`를 실행한 뒤에만 적용됩니다.
-[프로젝트 신뢰](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)를
+[프로젝트 신뢰](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust)를
 참고하세요.
 
 ### 3. Global CLI 설치
@@ -199,11 +199,11 @@ geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect 
 `~/.geode/config.toml`에 `[gateway] enabled = true`를 넣어 gateway를 켜고,
 응답할 Slack 채널마다 같은 파일이나 프로젝트 `.geode/config.toml`에
 `[[gateway.bindings.rules]]` 항목을 추가하세요. 규칙 형식은
-[바인딩 설정](https://mangowhoiscloud.github.io/geode/docs/guides/binding/)에
+[바인딩 설정](https://mangowhois.ai/products/geode/docs/guides/binding/)에
 있습니다. `[gateway]` 테이블이 이미 있다면 중복 선언하지 말고 해당 테이블을
 수정하세요. Slack에서 채널 이름을 클릭하면 열리는 창 맨 아래에 채널 ID가
 있습니다. 프로젝트 `[gateway]` 테이블은
-[신뢰한 폴더](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)에서만
+[신뢰한 폴더](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust)에서만
 적용됩니다.
 
 ### 3. 확인
@@ -334,8 +334,8 @@ geode serve [-p 3.0]                   # Headless daemon
 ## 설정 레퍼런스
 
 어떤 파일이 무엇을 담는지와
-[프로젝트 파일이 언제 적용되는지](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust)는
-[설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics/)에서,
+[프로젝트 파일이 언제 적용되는지](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust)는
+[설정 기초](https://mangowhois.ai/products/geode/docs/config/basics/)에서,
 전체 디스크 구조는 [storage-hierarchy.md](architecture/storage-hierarchy.md)에서
 다룹니다.
 
@@ -348,7 +348,7 @@ geode serve [-p 3.0]                   # Headless daemon
 | `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `OPENROUTER_API_KEY` | | OpenRouter 크레딧 기반 API key; `openrouter/<publisher>/<model>` 형태로 정확한 모델 참조 선택 |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
-| `GEODE_MODEL` | [routing 기본값](https://mangowhoiscloud.github.io/geode/docs/run/providers/) | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
+| `GEODE_MODEL` | [routing 기본값](https://mangowhois.ai/products/geode/docs/run/providers/) | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
 | `GEODE_ENSEMBLE_MODE` | `single` | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
 | **Gateway** | | |
 | `GEODE_GATEWAY_ENABLED` | `false` | 수동 session override; 지속 설정은 `config.toml` 의 `[gateway] enabled = true` 권장 |

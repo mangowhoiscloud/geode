@@ -20,11 +20,12 @@ def test_cmd_star_modules_are_gone() -> None:
         assert (REPO_ROOT / "core" / "cli" / "commands" / f"{name}.py").is_file(), name
 
 
-def test_seeds_and_hub_subcommands_registered() -> None:
+def test_seeds_subcommand_registered_and_hub_retired() -> None:
     from core.cli import app
 
     registered = {grp.name for grp in app.registered_groups}
-    assert {"seeds", "hub"} <= registered
+    assert "seeds" in registered
+    assert "hub" not in registered
 
 
 def test_promoted_wrappers_pass_args_verbatim(monkeypatch) -> None:

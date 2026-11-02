@@ -55,7 +55,6 @@ The security review and handling contracts are recorded in
 | `long-task-watcher` | monitor, wait, progress, background task | Thin development router to the runtime long-task monitoring contract |
 | `manim-scene-craft` | manim, scene, 영상, 비디오, 1080p60, EN/KO 렌더, GEODE_HERO_LANG | Manim Community Scene 작성 표준 — EN/KO 다국어 lang, Helvetica Neue + Pretendard 폰트 페어링, Anthropic-style 팔레트, layout ratchet + CI 가드. 4 검증 scene (`geode_hero` / `autoresearch_filewalk` / `autoresearch_compare` / `critical_floor`) 의 공통 패턴. |
 | `viz-frame-audit` | 노이즈, slop, 프레임 검수, 영상 audit, 글자 깨짐, 패딩 침범, frame extract, naive arrow | 영상 노이즈/slop 검수 워크플로우 — ffmpeg 프레임 추출 + Read 시각 확인 + 4 카테고리 결함 식별 (naive 화살표 / 패딩 침범 / 글자 깨짐 / 프레임 순서). 12+ 사례 카탈로그 (filewalk 7 + hero 7). |
-| `docs-link-audit` | broken link, 404, docs link, hyperlink, 링크 점검, 링크 깨짐, audit links, link checker | Docs-site (`site/` Next.js) body / JSX / markdown link audit. `scripts/check_docs_links.py` validates 4 categories (internal /docs / internal /other / anchor / external), build-time copy awareness, and exit-code-based CI guard wiring. Includes PR #1157/#1161 case studies. |
 | `baseline-epoch-partition` | baseline epoch, baseline 아카이빙, epoch partition, spec hash, content-addressed, margin_rule namespace, production logic 구분, baseline 하위 서빙 | Content-addressed baseline-archive epoch 분할 — baseline 산출+측정 명세(margin_rule + logic version tag + 4-role model/source + rubric/dim-set + bench + seed-pool identity)를 canonical 해시 → epoch 구분자. spec vs instance 분리, version-tag(소스해시 아님), write-time frozen hash + spec_schema_version, hash+label 병기. hub baseline-하위 epoch 적재(gen-* 미러). |
 | `codex-mcp-verify` | Codex MCP, second opinion, cross-check | Read-only second-opinion protocol with local reproduction and no credential access |
 | `model-onboarding` | model, provider, capability, pricing, context | Primary-source and call-site checklist without a duplicated, fast-staling model catalog |
@@ -80,7 +79,7 @@ Codex still separates its bounded [skill metadata renderer](https://github.com/o
 from [registry-backed tool search](https://github.com/openai/codex/blob/a5290028a2936b91ec9305f6de7780463620ca70/codex-rs/core/src/tools/handlers/tool_search.rs).
 Claude Code likewise loads [skill descriptions before bodies](https://code.claude.com/docs/en/skills#control-who-invokes-a-skill).
 Sources checked 2026-09-20. GEODE's current provider/endpoint decisions and
-replay contract live in the [tool protocol guide](../site/src/app/docs/runtime/tools/protocol/page.tsx),
+replay contract live in the [tool protocol guide](https://mangowhois.ai/products/geode/docs/runtime/tools/protocol/),
 not another catalog service or development-skill copy.
 
 These contracts are loadable by `core/skills/`. Eight are immutable wheel

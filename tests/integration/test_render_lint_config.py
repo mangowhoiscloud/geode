@@ -1,11 +1,11 @@
 """Render-lint config integrity tests.
 
-The Pages publish workflow (`.github/workflows/pages.yml`) gates the
-deploy on a render-lint job that uses three config files at repo
+The Pages workflow (`.github/workflows/pages.yml`) runs a required
+render-lint job that uses three config files at repo
 root: ``.pymarkdown.json`` (markdown), ``.yamllint.yaml`` (YAML), and
 ``.pre-commit-config.yaml`` (mirror for local runs). If any of those
 go missing or stop parsing, the gate silently degrades to a no-op and
-malformed markdown can ship to GitHub Pages. Catch that here so a CI
+malformed markdown can ship in the publication bundle. Catch that here so a CI
 ratchet fails on the regression.
 
 This test deliberately does **not** invoke the linters themselves —
@@ -117,20 +117,6 @@ def test_pages_workflow_has_lint_gate() -> None:
     )
 
 
-def test_pages_build_runs_site_lint_after_install() -> None:
-    data = yaml.safe_load(PAGES_WORKFLOW.read_text(encoding="utf-8"))
-    build = data["jobs"]["build"]
-    assert build["defaults"]["run"]["working-directory"] == "site"
-    steps = build["steps"]
-    commands = [step.get("run") for step in steps]
-    assert (
-        commands.index("npm ci") < commands.index("npm run lint") < commands.index("npm run build")
-    )
-    lint = steps[commands.index("npm run lint")]
-    assert not lint.get("continue-on-error", False)
-    assert "if" not in lint
-
-
 @pytest.mark.parametrize(
     "path",
     [
@@ -225,17 +211,12 @@ _DOCS_ONLY_PATHS = (
     "docs/scaffold-skills.md",
     "docs/architecture/official-docs-generation.md",
     "docs/architecture/extensibility-roadmap.md",
-    "site/src/data/geode/sot.ts",
-    "site/src/data/geode/changelog.ts",
-    "site/src/data/geode/architecture-baseline.json",
-    "site/public/llms.txt",
-    "site/public/llms-full.txt",
+    "docs/architecture/architecture-baseline.json",
 )
 _CONFLICT_DOC_PATHS = (
     "docs/architecture/extensibility-roadmap.md",
-    "site/src/data/geode/architecture-baseline.json",
+    "docs/architecture/architecture-baseline.json",
     "CHANGELOG.md",
-    "site/src/data/geode/changelog.ts",
 )
 
 
@@ -253,8 +234,7 @@ _CONFLICT_DOC_PATHS = (
                 "pyproject.toml",
                 "uv.lock",
                 ".github/workflows/ci.yml",
-                "site/package-lock.json",
-                "site/src/app/docs/runtime/llm/page.tsx",
+                "github-pages/redirects.json",
                 "AGENTS.md",
                 "GEODE.md",
                 ".geode/skills/reviewer/SKILL.md",

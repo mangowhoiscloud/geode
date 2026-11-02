@@ -121,7 +121,6 @@ async def collect(
     workload_path: Path,
     output_path: Path,
     site_preflight_path: Path | None = None,
-    link_audit_path: Path | None = None,
     host_preflight_path: Path | None = None,
 ) -> dict[str, Any]:
     run_spec_path = run_spec_path.resolve()
@@ -130,10 +129,8 @@ async def collect(
     run_dir = run_spec_path.parent
     if output_path.exists():
         raise FileExistsError("GEO native output already exists")
-    if (site_preflight_path is None) != (link_audit_path is None):
-        raise ValueError("site preflight and link audit receipts must be supplied together")
     if host_preflight_path is not None and site_preflight_path is None:
-        raise ValueError("host preflight requires site and link preflight receipts")
+        raise ValueError("host preflight requires a site preflight receipt")
 
     def bound(path: Path, schema: str, label: str) -> dict[str, str]:
         path = path.resolve()
@@ -154,10 +151,9 @@ async def collect(
 
     preflight_context = (
         None
-        if site_preflight_path is None or link_audit_path is None
+        if site_preflight_path is None
         else {
             "site": bound(site_preflight_path, "geo-preflight.schema.json", "site preflight"),
-            "links": bound(link_audit_path, "geo-link-audit.schema.json", "link audit"),
             "host": (None if host_preflight_path is None else bound_host(host_preflight_path)),
         }
     )
@@ -356,7 +352,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workload", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--site-preflight", type=Path)
-    parser.add_argument("--link-audit", type=Path)
     parser.add_argument("--host-preflight", type=Path)
     args = parser.parse_args(argv)
     asyncio.run(
@@ -365,7 +360,6 @@ def main(argv: list[str] | None = None) -> int:
             workload_path=args.workload,
             output_path=args.out,
             site_preflight_path=args.site_preflight,
-            link_audit_path=args.link_audit,
             host_preflight_path=args.host_preflight,
         )
     )

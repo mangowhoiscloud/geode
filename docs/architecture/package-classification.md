@@ -6,7 +6,7 @@ authority: package-classification
 related:
   - docs/architecture/extensibility-roadmap.md
   - docs/architecture/domain-free-core-audit.md
-  - site/src/data/geode/architecture-baseline.json
+  - docs/architecture/architecture-baseline.json
 ---
 
 # Package classification during runtime/eval/evolve convergence

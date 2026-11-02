@@ -675,8 +675,8 @@ class Pipeline:
         # P1a — append to the shared self-improving-loop session registry.
         self._append_session_index(started_at=started_at, ended_at=time.time())
         # CSP-14 (2026-05-23) — auto-sync the publish-set of the run dir
-        # into ``docs/self-improving/petri-bundle/seeds/<run_id>/`` so the Pages-published
-        # bundle picks it up on next deploy. Mirrors audit-side
+        # into ``docs/self-improving/petri-bundle/seeds/<run_id>/`` so the next
+        # publication bundle picks it up. Mirrors audit-side
         # ``evals.petri.bundle_sync.sync_eval_to_bundle``.
         # Failures are logged but don't break the run — the bundle is a
         # publish convenience; the canonical artefacts live in

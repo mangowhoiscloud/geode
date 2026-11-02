@@ -139,8 +139,8 @@ source of truth: cite the validated `run-spec.json`, `attempts.jsonl`, and
 
 - [ ] Internal ledger updated under `docs/eval/`.
 - [ ] `run-spec.json`, `attempts.jsonl`, and `analysis.json` pass the eval contract validator.
-- [ ] Public docs page added or updated under `site/src/app/docs/benchmarks/`.
-- [ ] Sitemap entry added in `site/src/lib/geode-docs/sitemap.ts`.
+- [ ] Public docs page added or updated in mangowhois-site under `geode/src/app/docs/benchmarks/`.
+- [ ] Sitemap entry added in mangowhois-site `geode/src/lib/geode-docs/sitemap.ts`.
 - [ ] Local usernames, keys, tokens, and account identifiers scrubbed.
 - [ ] `git diff --check` passed.
 - [ ] Targeted site lint passed.

@@ -1,21 +1,11 @@
 name: Petri bundle integrity
 
-# Isolation layer for the Petri × GEODE benchmark bundle published at
-# https://mangowhoiscloud.github.io/geode/petri-bundle/.
-#
-# Why this exists separately from pages.yml:
-#   pages.yml bundles site/ + docs/self-improving/petri-bundle/ into one Pages artifact.
-#   When a non-petri PR touches site/, pages.yml's *build* job exercises
-#   the petri ratchet, but only if the path-filter in ci.yml or pages.yml
-#   matches. This workflow makes the petri ratchet unconditional — it runs
-#   on every PR that touches the bundle, the validator, the hygiene
-#   ratchet, or this workflow file itself, plus a daily cron + manual
-#   dispatch. Site-build failures cannot mask a corrupt bundle.
-#
-# It does NOT deploy. The actual Pages publish stays in pages.yml so we
-# keep a single artifact source. This workflow is a hard *guardrail*: if
-# it fails on a PR, the bundle change must be fixed before merging,
-# regardless of the site build outcome.
+# Integrity guardrail for the Petri audit bundle under
+# docs/self-improving/petri-bundle/. The downstream site renders it from the
+# publication bundle (docs/architecture/publication-bundle.md); this workflow
+# keeps the raw logs valid. It runs on every PR that touches the bundle, the
+# validator, the hygiene ratchet, or this workflow file, plus a daily cron and
+# manual dispatch. It does NOT deploy.
 
 on:
   push:
@@ -32,7 +22,7 @@ on:
       - "scripts/check_repo_hygiene.py"
       - ".github/workflows/petri-publish.yml"
   schedule:
-    # 09:00 KST = 00:00 UTC. Daily integrity check independent of pages.yml.
+    # 09:00 KST = 00:00 UTC. Daily integrity check.
     - cron: "30 0 * * *"
   workflow_dispatch:
 

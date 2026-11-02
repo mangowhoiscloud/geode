@@ -8,12 +8,12 @@
 </p>
 
 <p align="center">
-  <a href="https://mangowhoiscloud.github.io/geode/docs/">Docs</a> ·
+  <a href="https://mangowhois.ai/products/geode/docs/">Docs</a> ·
   <a href="https://github.com/mangowhoiscloud/geode-eval-artifacts">Evaluation artifacts</a> ·
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v1.0.34 — Autonomous Agent Runtime + Evaluation Substrate
+# GEODE v1.0.35 — Autonomous Agent Runtime + Evaluation Substrate
 
 GEODE is a Python agent runtime for research, file work, and scheduled tasks.
 Its agentic loop calls tools, reads their results, and continues the task.
@@ -73,8 +73,8 @@ GEODE-managed provider keys and OAuth accounts are stored in
 `~/.geode/auth.toml`, an owner-only plaintext file, not an OS keychain.
 Externally supplied environment credentials remain supported.
 
-See [provider configuration](https://mangowhoiscloud.github.io/geode/docs/run/providers/)
-and [authentication](https://mangowhoiscloud.github.io/geode/docs/ops/oauth/)
+See [provider configuration](https://mangowhois.ai/products/geode/docs/run/providers/)
+and [authentication](https://mangowhois.ai/products/geode/docs/ops/oauth/)
 for source selection, credential precedence, and account routing.
 
 ### Optional Jev judgments
@@ -91,8 +91,8 @@ usable credential, then select the judgment route explicitly:
 Choose one route; `llm` returns to the LLM judgment path. This selection preserves
 the generative model and effort. Adding a key alone does not enable Jev.
 Reflection runs after tool-result rounds and before final delivery, subject to
-runtime guards. See [judgment configuration](https://mangowhoiscloud.github.io/geode/docs/config/reference/)
-and [verification and evaluation](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation/)
+runtime guards. See [judgment configuration](https://mangowhois.ai/products/geode/docs/config/reference/)
+and [verification and evaluation](https://mangowhois.ai/products/geode/docs/verification/evaluation/)
 for credentials, usage, and the scope of each judgment.
 
 ## Configuration and operations
@@ -110,11 +110,11 @@ for credentials, usage, and the scope of each judgment.
 Project behavior overrides user defaults. A repository's `.env`, MCP servers,
 gateway config, and keys that widen capability (sandbox, computer use,
 webhooks, storage paths) apply only after `geode config trust` in that folder.
-[Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics/)
+[Configuration basics](https://mangowhois.ai/products/geode/docs/config/basics/)
 has the full resolution order. Credential resolution also depends
 on the selected model, source, and account; it is not one flat settings ladder.
 Google Workspace OAuth has its own
-[account and keyring storage](https://mangowhoiscloud.github.io/geode/docs/run/google-workspace/).
+[account and keyring storage](https://mangowhois.ai/products/geode/docs/run/google-workspace/).
 
 ```bash
 geode about                    # Effective model, paths, and daemon status
@@ -162,7 +162,7 @@ See [Gateway setup](docs/setup.md#slack-gateway).
 **MCP client.** Attach external tool servers through GEODE's MCP configuration.
 A server that is not bundled loads only with a grant in `~/.geode/extension-policy.json`,
 and servers defined by a project load only in a trusted folder.
-See the [MCP guide](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp/).
+See the [MCP guide](https://mangowhois.ai/products/geode/docs/runtime/tools/mcp/).
 
 **MCP server.** Configure an MCP client's stdio command as `geode-mcp`.
 The core server exposes `run_agent`, `query_memory`, and `get_health`.
@@ -186,7 +186,7 @@ SIL and Crucible are **experimental**. They evaluate changes to prompts, tools,
 and other scaffolding without updating model weights. Safety-audit results and
 benchmark results have different acceptance contracts. The public record does
 not establish sustained self-improvement.
-Start with the [self-improving hub](https://mangowhoiscloud.github.io/geode/self-improving/)
+Start with the [self-improving hub](https://tech.mangowhois.ai/self-improving/)
 or the [campaign guide](docs/self-improving/campaign-quick-start.md).
 
 ## Evaluation evidence
@@ -197,10 +197,10 @@ and a benchmark verifier result are different observations.
 
 | Track | Scope to check |
 |---|---|
-| [Tau2](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2/) | Native-user and GEODE-user tracks; completion and quota contamination |
-| [MCPMark](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark/) | Covered services, paired observations, and full-Verified limitations |
-| [Terminal-Bench 2.1](https://mangowhoiscloud.github.io/geode/docs/benchmarks/terminal-bench/) | Account-scoped one-task smoke versus full-suite results |
-| [Jev judgments](https://mangowhoiscloud.github.io/geode/docs/verification/evaluation/) | Decision quality, completion timing, and end-to-end task outcomes |
+| [Tau2](https://mangowhois.ai/products/geode/docs/benchmarks/tau2/) | Native-user and GEODE-user tracks; completion and quota contamination |
+| [MCPMark](https://mangowhois.ai/products/geode/docs/benchmarks/mcpmark/) | Covered services, paired observations, and full-Verified limitations |
+| [Terminal-Bench 2.1](https://mangowhois.ai/products/geode/docs/benchmarks/terminal-bench/) | Account-scoped one-task smoke versus full-suite results |
+| [Jev judgments](https://mangowhois.ai/products/geode/docs/verification/evaluation/) | Decision quality, completion timing, and end-to-end task outcomes |
 
 Receipts and privacy-reviewed trajectories are published in the
 [evaluation artifact repository](https://github.com/mangowhoiscloud/geode-eval-artifacts).
@@ -221,6 +221,6 @@ and integration; [architecture docs](docs/architecture/) own subsystem contracts
 
 Development guidance in `.agents/skills/` is separate from runtime skills in
 `.geode/skills/`. Runtime prompt guidance also does not replace executable
-permission checks. See [prompt assembly](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system/).
+permission checks. See [prompt assembly](https://mangowhois.ai/products/geode/docs/runtime/llm/prompt-system/).
 
 [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md) · [Apache 2.0 license](LICENSE)

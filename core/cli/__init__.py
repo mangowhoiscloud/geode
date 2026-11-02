@@ -317,7 +317,7 @@ from core.cli.commands.prompt_inspect import prompt_app  # noqa: E402
 
 # PR-Hermes-1d.2 (2026-05-26) — cross-project search index rebuild
 from core.cli.commands.reindex import reindex  # noqa: E402
-from core.cli.commands.seed_pool import hub_app, seeds_app  # noqa: E402
+from core.cli.commands.seed_pool import seeds_app  # noqa: E402
 from core.cli.commands.skill import app as skill_app  # noqa: E402
 from core.cli.typer_ask import ask_app  # noqa: E402
 
@@ -438,7 +438,6 @@ def build_app(
     cli.add_typer(config_command_app, name="config")
     cli.add_typer(ask_app, name="ask")
     cli.add_typer(seeds_app, name="seeds")
-    cli.add_typer(hub_app, name="hub")
     cli.add_typer(prompt_app, name="prompt")
     cli.add_typer(session_app, name="session")
     for command in (version, about, setup, _doctor_command, stop, update, uninstall, init, history):

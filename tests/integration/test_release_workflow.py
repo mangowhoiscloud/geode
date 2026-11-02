@@ -13,10 +13,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/release.yml"
-PORTFOLIO_PATH = REPO_ROOT / "site/src/app/portfolio/page.tsx"
-INSTALL_PATH = REPO_ROOT / "site/src/components/geode/landing-install.tsx"
 DISTRIBUTION_SKILL_PATH = REPO_ROOT / ".claude/skills/geode-distribution/SKILL.md"
-RELEASE_DOC_PATH = REPO_ROOT / "site/src/app/docs/ops/release-pypi-lifecycle/page.tsx"
 
 
 def _workflow() -> dict[str, object]:
@@ -166,37 +163,7 @@ def test_release_checks_lock_before_uv_and_probes_installed_daemon() -> None:
     assert "cleanup_daemon" in smoke
 
 
-def _runs_full_site_build(command: str) -> bool:
-    return "npm run build" in command or any(
-        "scripts/check_official_docs.py" in line
-        and "--skip-build" not in line
-        and "--check-map" not in line
-        for line in command.splitlines()
-    )
-
-
-def test_full_site_builds_install_the_replay_stream_prober_first() -> None:
-    """The site build verifies terminal replays with ffprobe, provided by ffmpeg."""
-    building_jobs: list[str] = []
-    for path in sorted(WORKFLOW_PATH.parent.glob("*.yml")):
-        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
-        for job_name, job in workflow["jobs"].items():
-            runs = [str(step.get("run", "")) for step in job.get("steps", [])]
-            builds = [index for index, run in enumerate(runs) if _runs_full_site_build(run)]
-            if not builds:
-                continue
-            building_jobs.append(f"{path.stem}/{job_name}")
-            installs = [
-                index for index, run in enumerate(runs) if "install" in run and "ffmpeg" in run
-            ]
-            assert installs and installs[0] < builds[0], (
-                f"{path.name} / {job_name} builds the site before installing ffmpeg"
-            )
-
-    assert {"pages/build", "release/validate-build"} <= set(building_jobs)
-
-
-@pytest.mark.parametrize("name", ["ci", "pages", "install-smoke", "petri-publish"])
+@pytest.mark.parametrize("name", ["ci", "install-smoke", "petri-publish"])
 def test_ci_project_sync_rejects_uncommitted_lock_updates(name: str) -> None:
     workflow = yaml.safe_load((WORKFLOW_PATH.parent / f"{name}.yml").read_text())
     commands = [
@@ -287,10 +254,7 @@ def test_current_distribution_surfaces_do_not_restore_the_deleted_tap() -> None:
         path.read_text(encoding="utf-8")
         for path in (
             WORKFLOW_PATH,
-            PORTFOLIO_PATH,
-            INSTALL_PATH,
             DISTRIBUTION_SKILL_PATH,
-            RELEASE_DOC_PATH,
         )
     )
 
@@ -307,17 +271,6 @@ def test_release_retry_preserves_release_body_bytes() -> None:
     assert "--json body > published-release/release.json" in text
     assert 'payload["body"]' in text
     assert "--jq .body > published-release/release-notes.md" not in text
-
-
-def test_public_install_commands_use_the_stable_pypi_channel() -> None:
-    text = INSTALL_PATH.read_text(encoding="utf-8")
-
-    assert "brew install" not in text
-    assert "mangowhoiscloud/tap" not in text
-    assert 'useState("uv-tool")' in text
-    assert 'copy: "uv tool install geode-agent"' in text
-    assert 'copy: "uvx --from geode-agent geode"' in text
-    assert "GEODE_GIT_SOURCE" not in text
 
 
 def test_published_metadata_has_no_direct_dependencies() -> None:

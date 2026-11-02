@@ -1,13 +1,13 @@
 """Sync newly-archived ``.eval`` logs from the agent context layer
 (``~/.geode/petri/logs/``) into the repo-tracked bundle
-(``docs/self-improving/petri-bundle/logs/``) so the Pages publish stays fresh.
+(``docs/self-improving/petri-bundle/logs/``) so the publication bundle stays fresh.
 
 Wired into :func:`evals.petri.cli_audit._post_run_emit` so every
 successful audit auto-syncs its archived ``.eval`` to the bundle dir and
 refreshes ``listing.json``. The runtime dir at ``~/.geode/petri/logs/`` is
 the agent context SoT (per-machine, accumulating); the bundle dir at
 ``docs/self-improving/petri-bundle/`` is the repo-tracked publish surface (committable,
-Pages-served).
+shipped in the publication bundle).
 
 Bypass via ``GEODE_PETRI_BUNDLE_SYNC_DISABLED=1`` — useful for test fixtures
 or operators who curate the bundle manually. Best-effort: any failure logs
@@ -46,7 +46,7 @@ __all__ = [
 #: Agent context layer — per-machine runtime accumulation.
 RUNTIME_LOGS_DIR: Path = PETRI_LOGS_DIR  # PR-CLEANUP-D2 anchor alias
 
-#: Repo-tracked bundle — committable, Pages-served.
+#: Repo-tracked bundle — committable, shipped in the publication bundle.
 #: Resolved relative to this module's path so it works from any cwd.
 _REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 BUNDLE_LOGS_DIR: Path = _REPO_ROOT / "docs" / "self-improving/petri-bundle" / "logs"
