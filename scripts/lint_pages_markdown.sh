@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Lint the markdown files that get published to GitHub Pages or linked
-# from the petri-bundle README. The allowlist below is intentionally
+# Lint the markdown files that ship with the petri bundle or that its
+# README links to. The allowlist below is intentionally
 # narrow — see docs/architecture/render-lint.md for the rule-by-rule
 # rationale and the policy on legacy audit docs.
 #
@@ -13,8 +13,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Render-gated files. Anything listed here must pass .pymarkdown.json.
-# Keep this list small — only files that get served by GitHub Pages
-# verbatim (the petri-bundle README) or that the bundle README links to
+# Keep this list small — only files that ship verbatim (the petri-bundle
+# README) or that the bundle README links to
 # as the canonical caveat docs. Other audit docs predating the gate
 # have their own structural debt; adding them here without fixing the
 # violations first would force a content rewrite of those reports.

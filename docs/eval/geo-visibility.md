@@ -19,7 +19,6 @@ eval_contracts:
   - docs/eval/schemas/geo-host-preflight-v2.schema.json
   - docs/eval/schemas/geo-claim-universe.schema.json
   - docs/eval/schemas/geo-human-calibration.schema.json
-  - docs/eval/schemas/geo-link-audit.schema.json
   - docs/eval/schemas/geo-live-approval.schema.json
   - docs/eval/schemas/geo-native-results.schema.json
   - docs/eval/schemas/geo-outcome.schema.json
@@ -172,18 +171,16 @@ with frozen baseline and treatment arms.
    `status=fail` receipt and exits non-zero, preserving page failures plus
    missing and unexpected sitemap URLs instead of erasing the observation:
 
+   The docs build and its site-side preflight (`geode/scripts/verify-geo-preflight.mjs`)
+   now run in mangowhois-site, which serves the docs at
+   <https://mangowhois.ai/products/geode/>. Point the host preflight at that
+   build output:
+
    ```bash
-   cd site
-   npm run build
-   npm run export-md
-   npm run verify-metadata
-   node scripts/verify-geo-preflight.mjs --receipt <run-dir>/site-preflight.json
-   cd ..
-   uv run python scripts/check_docs_links.py --receipt <run-dir>/link-audit.json
    uv run python scripts/eval/geo_host_preflight.py \
-     --base-url https://mangowhoiscloud.github.io/geode/ \
-     --expected-sitemap site/out/sitemap.xml \
-     --expected-root site/out \
+     --base-url https://mangowhois.ai/products/geode/ \
+     --expected-sitemap <mangowhois-site>/dist/products/geode/sitemap.xml \
+     --expected-root <mangowhois-site>/dist/products/geode \
      --crawler OAI-SearchBot \
      --out <run-dir>/host-preflight.json
    ```
@@ -203,7 +200,6 @@ with frozen baseline and treatment arms.
      --run-spec <run-dir>/run-spec.json \
      --workload <run-dir>/workload.json \
      --site-preflight <run-dir>/site-preflight.json \
-     --link-audit <run-dir>/link-audit.json \
      --host-preflight <run-dir>/host-preflight.json \
      --out <run-dir>/native-results.json
 
@@ -318,8 +314,8 @@ numerators and locators do not become benchmark or promotion authority. Only
 the schema- and digest-validated native/vector/verifier/outcome bundle above
 can establish measurement evidence.
 
-The project can publish `/geode/sitemap.xml`, but this repository cannot own
-the GitHub Pages host-root `/robots.txt`. Record host-root behavior as an
+The docs host (mangowhois.ai, including its root `/robots.txt`) is owned by
+mangowhois-site, not this repository. Record host-root behavior as an
 environment observation instead of claiming this project controls it.
 
 Provider-native citation annotations establish C and P, not A or Q. A is

@@ -1,19 +1,19 @@
 # Research publications
 
-[Browse the publication collection](https://mangowhoiscloud.github.io/geode/research/)
+[Browse the publication collection](https://tech.mangowhois.ai/)
 
 ## GEODE technical report
 
-[Read the report](https://mangowhoiscloud.github.io/geode/research/geode/) ·
-[한국어 PDF](https://mangowhoiscloud.github.io/geode/report.pdf) ·
-[English PDF](https://mangowhoiscloud.github.io/geode/report-en.pdf)
+[Read the report](https://tech.mangowhois.ai/geode/) ·
+[한국어 PDF](https://tech.mangowhois.ai/geode/report/ko.pdf) ·
+[English PDF](https://tech.mangowhois.ai/geode/report/en.pdf)
 
 The reader preserves the existing public 92-page Korean and English editions.
 Runtime, state, authority, evaluation, and experiment pages retain their
 original figures, dates, conditions, and citations. This is a new reading
 surface, not a new benchmark or a revision of the report's historical claims.
 
-`site/scripts/export-geode-report.py` rasterizes the existing PDFs at their
+The readers are built by mangowhois-site. Its report export rasterizes the existing PDFs at their
 original 16:9 ratio, with a 1600px long edge and lossless WebP output. It uses
 Poppler and Pillow only during authoring. The public manifest binds all 184
 images to the source PDF digests; the build verifies those identities without
@@ -21,7 +21,7 @@ running a renderer. Page text is extracted from the PDFs, not rewritten.
 
 ## Jev Decision Offloading
 
-[Read the study](https://mangowhoiscloud.github.io/geode/research/jev-system1-offloading/)
+[Read the study](https://tech.mangowhois.ai/jev/offloading/)
 
 The original 57-scene presentation and 81-build PDFs remain the source of
 truth. Focus view enlarges the existing canvas; text view exposes the full
@@ -30,9 +30,9 @@ assets, study conditions, and PDF bytes remain unchanged by the reader update.
 
 ## JEVDB
 
-[Read the paper review](https://mangowhoiscloud.github.io/geode/research/jevdb/) ·
+[Read the paper review](https://tech.mangowhois.ai/jev/jevdb/) ·
 [Watch the paper review video](https://youtu.be/KKiEyGjGUIo) ·
-[Download the review slides (PPTX)](jevdb-seminar-v25.pptx)
+[Download the review slides (PPTX)](https://tech.mangowhois.ai/research/jevdb-seminar-v25.pptx)
 
 Jihwan Ryu's review of **Prune First, Decide Fast: Scalable Semantic Query
 Processing with JEVDB**, by Zhengle Wang, Hanxu Yan, Fuheng Zhao, and Chunwei
@@ -52,15 +52,16 @@ benchmark reproduction.
 - Original paper figures retain their slide-level attribution and CC BY 4.0
   notices. Presenter examples and personal experiments are identified separately.
 
-Only the reviewed PPTX is exported to the website. The build copies this file
-to `/geode/research/jevdb-seminar-v25.pptx`; internal review records and other
-submission materials are not included. The source file remains unchanged.
+Only the reviewed PPTX is published, at
+<https://tech.mangowhois.ai/research/jevdb-seminar-v25.pptx>; mangowhois-site
+holds the single copy. Internal review records and other submission materials
+are not included. The file remains unchanged.
 
 ### v25 web reader
 
 The JEVDB review uses the Decision Offloading reader's light workspace, scene
-list, canvas navigation, and source sheet. The 19 English slide images under
-`site/public/research/jevdb-slides-v25/` are unchanged existing v25 PDF review
+list, canvas navigation, and source sheet. The reader's 19 English slide images
+(`jevdb-slides-v25/`) are unchanged existing v25 PDF review
 rasters, extracted from the completed slide-and-script preview. No PDF, slide,
 or video was rerendered for this presentation change. The public manifest
 records each image digest, the preview HTML/PDF identities, and the unchanged
@@ -68,7 +69,7 @@ canonical PPTX digest. The images were also compared byte-for-byte with the
 reviewed PDF page rasters. The earlier PDF rendering receipt identifies a
 pre-final-note PPTX hash; it is not relabeled as a render of the final PPTX bytes.
 
-`site/src/data/geode/jevdb-slides.json` contains original English slide text
+The reader's slide data (`jevdb-slides.json`) contains original English slide text
 extracted from the published PPTX slide XML, plus bilingual reading notes and
 source/condition captions. No speaker notes or private production discussion
 are copied into the web reader. Language selection changes navigation and

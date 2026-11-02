@@ -29,12 +29,6 @@ dependencies = [
     # Pure-Python, no transitive deps — ~30 KB.
     "defusedxml>=0.7.1",
     "markdownify>=0.14.1",
-    # markdown-it-py renders the self-improving hub's run-report markdown SoT
-    # (``docs/self-improving/run-*.md``) to HTML at BUILD TIME in
-    # ``scripts/build_self_improving_hub.py`` — no CDN / client-side JS, so the
-    # page always renders. Was a transitive of markdownify; declared explicitly
-    # so the build never relies on a dep that could vanish.
-    "markdown-it-py>=3.0",
     "httpx>=0.27.0",
     # Runtime validation is applied after trusted tool-request transforms and
     # again after public PreToolUse rewrites.
@@ -44,7 +38,7 @@ dependencies = [
     "keyring>=25.7.0",
     # websockets — direct import in core/tools/browser_tools.py's CDP client.
     # Was only transitively present; declared explicitly so the browser tools
-    # never rely on a dep that could vanish (cf. markdown-it-py precedent).
+    # never rely on a dep that could vanish.
     "websockets>=12.0",
     # SDK 3 requires HTTPX2; the audit dependency graph still requires SDK 2.
     # See docs/research/openai-sdk3-20260924.md before raising this bound.
@@ -75,8 +69,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://mangowhoiscloud.github.io/geode"
-Documentation = "https://mangowhoiscloud.github.io/geode/docs"
+Homepage = "https://mangowhois.ai/products/geode/"
+Documentation = "https://mangowhois.ai/products/geode/docs/"
 Repository = "https://github.com/mangowhoiscloud/geode"
 Issues = "https://github.com/mangowhoiscloud/geode/issues"
 Changelog = "https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md"
@@ -489,12 +483,6 @@ DEP002 = [
     # must declare it so `uv sync --extra obs` installs the
     # instrumentation alongside traceloop-sdk.
     "opentelemetry-instrumentation-anthropic",
-    # `markdown-it-py` is imported only by `scripts/build_self_improving_hub.py`
-    # (renders the self-improving hub run-report markdown SoT to HTML at build
-    # time). `scripts` is in deptry's `extend_exclude`, so the static scan never
-    # sees the import — but the dependency is real and must stay declared so the
-    # hub build does not rely on a transitive of `markdownify` that could vanish.
-    "markdown-it-py",
 ]
 
 # DEP004 — module imported but the package is declared as a dev-group
@@ -531,7 +519,7 @@ pyyaml = "yaml"
 
 # codespell — typo detection in identifiers/strings/comments. Run via pre-commit.
 [tool.codespell]
-skip = "*.lock,uv.lock,*.svg,*.json,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,site/public/llms.txt,site/public/llms-full.txt,site/src/data/geode/sot.ts,site/src/data/geode/changelog.ts,.geode/*,.claude/*"
+skip = "*.lock,uv.lock,*.svg,*.json,docs/architecture/domain-free-core-audit.md,CHANGELOG.md,.geode/*,.claude/*"
 # tau2's public ToolCall wire model names its actor field ``requestor``.
 ignore-words-list = "statics,ot,ans,nd,thi,ist,ines,recuse,cant,blockd,Anser,socio-economic,wit,crate,requestor,FallIn"
 check-filenames = ""

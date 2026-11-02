@@ -45,7 +45,7 @@
       "authority": "process",
       "path": "docs/eval/benchmark-publishing-cycle.md",
       "summary": "End-to-end workflow from preregistered benchmark scope through evidence preservation, publication, and deployment.",
-      "sha256": "b61114e8d4b0b9fad244c7e324fb047ab697c91a7f14069d5f5a2c5a6a5139be",
+      "sha256": "61bc4138f8666ce2b0492cecbec060eab5be0fb43f7ab0b737fb7e382c1ce045",
       "triggers": [
         "attempts JSONL",
         "benchmark run",
@@ -73,7 +73,7 @@
       "authority": "human-run-report",
       "path": "docs/eval/benchmark-run-record.template.md",
       "summary": "Human-readable benchmark report template derived from frozen run, attempt, analysis, and evidence sidecars.",
-      "sha256": "2e7622d411b1eeb19033c08270dfefe8c068a5845f24869c7c2ea517bcfcd937",
+      "sha256": "1be37eeb9112885600e5aa2fefe21d73519ab405e668aac3bfd76e1292e17952",
       "triggers": [
         "benchmark report",
         "result publication",
@@ -195,7 +195,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/geo-visibility.md",
       "summary": "Reproducible GEODE profile for measuring generative discovery, citation selection, answer absorption, and fidelity without collapsing them into one GEO score.",
-      "sha256": "e6398f240cb477c8c0ab112b2291b1f2f9039ac0e4b31ceace1b371eeafc74c7",
+      "sha256": "5b4c08ee59cd0d4fed55fe1c9e0c63b98532203b609d482d11d3227041dfc4d0",
       "triggers": [
         "AI search visibility",
         "GEO",
@@ -211,7 +211,6 @@
         "docs/eval/schemas/geo-host-preflight-v2.schema.json",
         "docs/eval/schemas/geo-host-preflight.schema.json",
         "docs/eval/schemas/geo-human-calibration.schema.json",
-        "docs/eval/schemas/geo-link-audit.schema.json",
         "docs/eval/schemas/geo-live-approval.schema.json",
         "docs/eval/schemas/geo-native-results.schema.json",
         "docs/eval/schemas/geo-outcome.schema.json",
@@ -257,7 +256,7 @@
       "authority": "diagnostic",
       "path": "docs/eval/jev-v3-study-20260927.md",
       "summary": "Source-bound Jev v3 component and end-to-end study, retained failure lineages, parser-corrected reanalysis and independently checkable public evidence.",
-      "sha256": "5d25853aa9e079f94a10298cd568c37b775093883347e21de3ac985178920695",
+      "sha256": "0ab9591128ffb7caa2ca3beb7a3bc6c70c2f3033854e41ab8b2125ab6b274287",
       "triggers": [
         "astra",
         "jev",
@@ -560,7 +559,7 @@
       "authority": "suite-profile",
       "path": "docs/eval/terminal-bench-2.md",
       "summary": "GEODE adoption profile for canonical Terminal-Bench 2.1 execution through Harbor, including official-submission and diagnostic comparability boundaries.",
-      "sha256": "e3a91a56803e134623be6cccccb376206a49eea68d768e0248ccea8ca43958e1",
+      "sha256": "3b7ee53f6b22e9507173507c5acbe4dc4add60f01ff579ad366f8ad027e8a76d",
       "triggers": [
         "Harbor",
         "Terminal-Bench 2",

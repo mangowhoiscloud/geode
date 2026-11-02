@@ -67,7 +67,7 @@ RUNTIME:  ToolRegistry, MCP Registry, Skills, Memory(5-Tier), Reports
 MODEL:    AdapterRegistry → provider / credential-source bindings
 ```
 
-The built-in adapter inventory, including OpenRouter PAYG, is generated in `site/src/data/geode/architecture-baseline.json` under `built_in_adapters`. `core/llm/adapters/registry.py` owns factory registration and permitted package extensions.
+The built-in adapter inventory, including OpenRouter PAYG, is generated in `docs/architecture/architecture-baseline.json` under `built_in_adapters`. `core/llm/adapters/registry.py` owns factory registration and permitted package extensions.
 
 **Thin-only runtime.** `geode` (thin CLI) talks to one `geode serve` daemon over a Unix socket; the daemon holds the single `GeodeRuntime` and auto-starts if absent. Sessions serialize per key (`SessionLane`, max 256) and run in parallel across keys; idle cleanup at 300s. Entry modes carry their own session policy: CLIPoller → IPC (hitl=2 — full HITL relayed to the thin CLI; no headless deny filter), Gateway → DAEMON (hitl=0, headless — `run_bash` and collaboration tools denied), Scheduler → SCHEDULER (hitl=0, 300s cap, default headless deny policy). Gateway pollers run in daemon threads that do not inherit ContextVars — each handler calls `boot.propagate_to_thread()` to re-inject readiness / memory / profile context.
 

@@ -30,7 +30,7 @@ Then read only the sections that match the change:
 | persisted data, schema identity, or writer/reader compatibility | [§4 Data, schemas, and persistence](../../../docs/architecture/naming-conventions.md#4-data-schemas-and-persistence) |
 | errors, logging, redaction, or trust boundaries | [§5 Errors, logging, and trust boundaries](../../../docs/architecture/naming-conventions.md#5-errors-logging-and-trust-boundaries) |
 | test placement or verification design | [§7 Tests and verification](../../../docs/architecture/naming-conventions.md#7-tests-and-verification) |
-| Next.js or public-site code | [§8 Site conventions](../../../docs/architecture/naming-conventions.md#8-site-conventions) |
+| Redirect-only GitHub Pages site | [§8 Redirect site conventions](../../../docs/architecture/naming-conventions.md#8-redirect-site-conventions) |
 | package version, compatibility, or promotion | [§9 Versioning and compatibility](../../../docs/architecture/naming-conventions.md#9-versioning-and-compatibility) |
 
 Follow every applicable row for a cross-cutting change. Read the whole SOT only
@@ -41,8 +41,8 @@ Executable configuration remains authoritative:
 - `pyproject.toml` for Ruff, mypy, pytest, import-linter, dependency, security,
   and coverage gates;
 - `AGENTS.md` and `docs/workflow.md` for repository workflow;
-- `site/DESIGN.md`, `site/tsconfig.json`, and `site/eslint.config.mjs` for the
-  public site;
+- mangowhois-site's own design and lint configuration for the public pages
+  (GEODE keeps only the redirect-only `github-pages/` site);
 - the subsystem contract nearest the changed code for local invariants.
 
 ## Workflow

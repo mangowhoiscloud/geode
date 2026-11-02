@@ -1,8 +1,8 @@
 """Build ``docs/self-improving/petri-bundle/seeds/listing.json`` from synced seed runs.
 
-Mirrors ``scripts/build_literature_listing.py`` — runs from
-``.github/workflows/pages.yml`` at Pages build time, and locally via
-``uv run python scripts/build_seeds_listing.py``.
+Mirrors ``scripts/build_literature_listing.py``. Run locally via
+``uv run python scripts/build_seeds_listing.py`` after a seed run syncs, and
+commit the listing; the publication bundle ships it to the downstream hub.
 
 Algorithm
 =========
@@ -74,8 +74,8 @@ def _resolve_harness_source(model: str, provider: str, cli: bool) -> str:
     """Source-prefixed model identifier (e.g. ``claude-cli/claude-opus-4-8``,
     ``openai-codex/gpt-5.5``). ``claude-cli`` when the sub-agent ran via the
     Claude Code CLI (``claude_cli_session_id`` present), else the bare
-    ``provider``. Mirrors ``build_self_improving_hub._subagent_harness`` so the
-    seedgen table chips match the per-sub-agent detail chips."""
+    ``provider``. The downstream hub renders one chip per entry, and its
+    per-sub-agent detail chips resolve the same way."""
     source = "claude-cli" if cli else (provider or "")
     if source and model and "/" not in model:
         return f"{source}/{model}"
@@ -109,8 +109,8 @@ def _run_harness_models(run_dir: Path) -> list[str]:
                 break
         # session.json carries claude_cli_session_id and, for non-cli agents,
         # the model/provider that a compact event row may omit — read it before the
-        # empty-model skip so we mirror the hub's _subagent_harness fallback
-        # (build_self_improving_hub.py) and the two resolvers can't drift.
+        # empty-model skip, matching the downstream hub's per-sub-agent
+        # resolution so the two cannot drift.
         session: dict[str, Any] = {}
         session_path = agent_dir / "session.json"
         if session_path.is_file():

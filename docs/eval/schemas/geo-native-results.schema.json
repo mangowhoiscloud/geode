@@ -66,10 +66,9 @@
         {"type": "null"},
         {
           "type": "object",
-          "required": ["site", "links", "host"],
+          "required": ["site", "host"],
           "properties": {
             "site": {"$ref": "#/$defs/evidence_ref"},
-            "links": {"$ref": "#/$defs/evidence_ref"},
             "host": {
               "oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence_ref"}]
             }

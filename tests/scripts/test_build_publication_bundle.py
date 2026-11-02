@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib
 import io
 import json
 import os
@@ -237,32 +236,6 @@ def test_hub_constants_export_geode_module_values() -> None:
     lanes = constants["credential_source_lanes"]
     assert lanes and all(source_to_lane(source) == lane for source, lane in lanes.items())
     assert constants["task_prefix_phases"] == [list(pair) for pair in _TASK_PREFIX_TO_PHASE]
-
-
-def test_hub_constants_cover_the_generator_mirrors() -> None:
-    hub = importlib.import_module("scripts.build_self_improving_hub")
-    constants = bundle.collect_hub_constants()
-
-    assert list(hub.AUTORESEARCH_RESULTS_TSV_HEADER) == constants["results_tsv_header"]
-    assert {
-        kind: Path(path).name for kind, path in constants["policy_kind_to_path"].items()
-    } == hub._TARGET_KIND_TO_POLICY_FILE
-    assert constants["statistical_power"] == {
-        "target_effect_size": hub._POWER_DEFAULT_TARGET_EFFECT_SIZE,
-        "alpha": hub._POWER_DEFAULT_ALPHA,
-        "power": hub._POWER_DEFAULT_POWER,
-    }
-    assert set(hub._PILOT_DIM_ABBR) <= set(constants["judge_dimensions"]["names"])
-    assert {arm for arm, _label in hub._EVIDENCE_ARMS} == set(constants["promote_policies"])
-    assert constants["baseline_registry_kind"] == hub._BASELINE_REGISTRY_ROW_KIND
-    assert constants["task_prefix_phases"] == [list(pair) for pair in hub._TASK_PREFIX_TO_PHASE]
-    # Chip prefixes that are GEODE credential sources take their lane from GEODE.
-    assert {"claude-cli", "openai-codex"} <= set(constants["credential_source_lanes"])
-    assert {"claude-cli", "openai-codex"} <= set(hub.HARNESS_MAP)
-    margin = constants["promote_margin"]
-    rule = hub._render_campaign_margin_rule(None, {})
-    assert f"max({margin['gain_sigma']}&middot;" in rule
-    assert f"{margin['floor']} floor, {margin['n1_critical_floor']} if baseline N=1" in rule
 
 
 def test_real_checkout_bundles_raw_hub_data_only() -> None:

@@ -55,12 +55,6 @@ jobs:
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: site/package-lock.json
-
       - id: rev
         name: Record release SHA and reproducible timestamp
         run: |
@@ -110,20 +104,11 @@ jobs:
       - name: Sync dependencies
         run: uv sync --extra audit
 
-      - name: Install site dependencies
-        run: npm ci
-        working-directory: site
-
-      - name: Audit locked site dependencies
-        run: npm audit --audit-level=moderate
-        working-directory: site
-
       - name: Lint and hygiene
         run: |
           uv run ruff check core evals evolve tests scripts
           uv run ruff format --check core evals evolve tests scripts
           uv run deptry .
-          npm run lint --prefix site
 
       - name: Type check
         run: >
@@ -139,12 +124,7 @@ jobs:
           verify_prompt_integrity(raise_on_drift=True)
           PY
 
-      - name: Install ffprobe for replay stream verification
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg
-
-      - name: Official docs generation gate
+      - name: Official docs gate
         run: uv run python scripts/check_official_docs.py
 
       - name: Test

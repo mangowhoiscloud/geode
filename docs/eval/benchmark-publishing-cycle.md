@@ -26,7 +26,9 @@ eval_contracts:
 
 > Scaffold for turning a live GEODE benchmark run into a published official
 > docs page. Use this for MCPMark, BFCL V4, tau2-bench, and later benchmark
-> suites that need a reproducible ledger plus GitHub Pages deployment.
+> suites that need a reproducible ledger plus a published docs page. The docs
+> site is built by mangowhois-site (`geode/` in that repository) from GEODE's
+> publication bundle and served at <https://mangowhois.ai/products/geode/>.
 
 ## Cycle Contract
 
@@ -39,10 +41,10 @@ One complete cycle has six gates:
 | 3. Run | Every retry is appended to `attempts.jsonl`; raw results, verifier outputs, trajectories, token/time totals, and failures remain referenced evidence |
 | 4. Interpret | Digest-bound `analysis.json` answers the frozen question; comparability boundaries and external baselines stay separate from GEODE scores |
 | 5. Publish | Internal ledger and public docs page are updated from the same run record |
-| 6. Deploy | Feature PR merges to `develop`, `develop` merges to `main`, Pages deploy succeeds, live URL is checked |
+| 6. Deploy | Feature PR merges to `develop`, `develop` merges to `main`, the mangowhois-site page deploy succeeds, live URL is checked |
 
-The cycle is not complete until the public GitHub Pages URL returns the new
-score and the final report names the merge commit and Pages workflow run.
+The cycle is not complete until the public docs URL returns the new score and
+the final report names the GEODE merge commit and the mangowhois-site deploy.
 
 ## Contract Stack
 
@@ -154,7 +156,7 @@ is intentionally promoted.
 artifacts/eval/harnesses/<benchmark>/        # ignored third-party checkout
 artifacts/eval/runs/<run-id>/                # ignored raw run collection
 docs/eval/<benchmark-or-cluster>.md          # internal evidence ledger
-site/src/app/docs/benchmarks/<...>/page.tsx  # public page
+geode/src/app/docs/benchmarks/<...>/page.tsx  # public page (mangowhois-site)
 ```
 
 Published raw bytes are copied append-only to
@@ -226,10 +228,11 @@ labels such as `source=subscription` instead.
 2. Copy only public entries to `geode-eval-artifacts` through its own PR; keep
    the destination commit and paths.
 3. Update the internal ledger in `docs/eval/` with those immutable links.
-4. Add or update a public docs page under `site/src/app/docs/benchmarks/`.
-5. Add the page to `site/src/lib/geode-docs/sitemap.ts`.
-6. If a public page includes commands, scrub local usernames and secrets.
-7. Run site checks before opening the GEODE PR.
+4. Add or update the public docs page in mangowhois-site under
+   `geode/src/app/docs/benchmarks/`, and its entry in
+   `geode/src/lib/geode-docs/sitemap.ts`, through that repository's own PR.
+5. If a public page includes commands, scrub local usernames and secrets.
+6. Run that repository's site checks before opening its PR.
 
 ### 6. Merge and Deploy
 
@@ -242,8 +245,9 @@ feature/<benchmark-cycle> -> develop -> main
 Follow the [GitFlow owner](../../.agents/skills/geode-gitflow/SKILL.md): both
 feature integration and promotion use merge commits. Incorporate missing main
 history in the feature branch before its CI; never open a standalone
-`main -> develop` sync PR. After main merge, watch the Pages workflow and verify
-the live URL with `curl`.
+`main -> develop` sync PR. After main merge, the publication bundle workflow
+publishes a new bundle; once mangowhois-site deploys, verify the live URL with
+`curl`.
 
 ## Verification Checklist
 
@@ -251,9 +255,9 @@ Run the narrowest useful checks for the changed surface:
 
 ```bash
 git diff --check
-npx eslint site/src/app/docs/benchmarks/<path>/page.tsx
-cd site && npm run build
 ```
+
+The docs page itself is checked by mangowhois-site's build.
 
 For functional GEODE changes that were needed by the benchmark, also run the
 touched Python checks, for example:
@@ -268,9 +272,9 @@ uv run mypy <changed-python-modules>
 After merge to `main`:
 
 ```bash
-gh run list --workflow "Deploy site to GitHub Pages" --branch main --limit 5
+gh run list --workflow "Publication bundle" --branch main --limit 5
 gh run watch <run-id> --exit-status
-curl -L https://mangowhoiscloud.github.io/geode/docs/benchmarks/<path> | rg "<score|run-id|model>"
+curl -L https://mangowhois.ai/products/geode/docs/benchmarks/<path> | rg "<score|run-id|model>"
 ```
 
 ## Done Definition
@@ -286,5 +290,5 @@ A benchmark publishing cycle is done when all of these are true:
 - CI passed on the feature PR.
 - Feature PR was merged to `develop`.
 - `develop` was promoted to `main`.
-- GitHub Pages deployment succeeded.
+- The publication bundle was published and mangowhois-site deployed it.
 - The live URL was fetched and contains the new result.

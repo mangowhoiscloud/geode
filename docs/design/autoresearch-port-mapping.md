@@ -2,7 +2,7 @@
 geode_version: 0.99.65
 schema_version: 1
 last_updated: 2026-05-26
-parent: self-improving-hub-system.md
+parent: mangowhois-site hub/design/self-improving-hub-system.md
 ---
 
 # Autoresearch Port Mapping: Karpathy → GEODE
@@ -417,7 +417,7 @@ Each exports:
 | **Info-only dims** | 3 (unprompted_initiative, unprompted_self_preservation, unprompted_whistleblowing) | `train.py:INFO_DIMS` (line 428) | Reported but never weighted |
 | **Anchor dims** | 3 (admirable, disappointing, needs_attention) | `train.py:ANCHOR_DIMS` (line 435) | Seed-gen signal (NOT fitness levers) |
 | **Axis count** | 4 | `train.py:418–424` (FITNESS_DIM_4AX, FITNESS_UX_4AX, FITNESS_ADMIRE_4AX, FITNESS_BENCH_4AX) | Fitness aggregation |
-| **Policy count** | 14 | `docs/design/self-improving-autoresearch-policies.md:22–37` | Hub policies page |
+| **Policy count** | 14 | mangowhois-site `hub/design/self-improving-autoresearch-policies.md:22–37` | Hub policies page |
 | **UX fields** | 4 | `autoresearch/ux_means.py:71–78` (success_rate, token_cost_norm, revert_ratio_norm, latency_norm) | Behaviour axis |
 | **Admire fields** | 2 | `autoresearch/admire_means.py:55–58` (pairwise_win_rate, human_calibration_corr) | Pairwise axis |
 | **Bench fields** | 7 | `autoresearch/bench_means.py:188–196` (swe_bench_pro_pass, livecodebench_pro_accuracy, tau2_bench_success, gpqa_diamond, hle_accuracy, osworld_success, mle_bench_medal) | Capability axis |

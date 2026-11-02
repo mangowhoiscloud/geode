@@ -24,7 +24,7 @@ description: Research process for comparing frontier harnesses (Claude Code, Cod
 | 8 | **Grok Build** | Coding agent harness and TUI | Layered config, session/model selection, compaction, tools, hooks and lifecycle | [official source](https://github.com/xai-org/grok-build); distinguish source mirror from product release |
 | 9 | **Original / upstream implementation** | Native authority | Task and scorer semantics, prompts, assets, workspace assumptions, reference results, reproduction path | pinned upstream source and primary docs |
 
-The [cited source inventory](../../../site/src/app/docs/reference/external-references/page.tsx)
+The [cited source inventory](https://mangowhois.ai/products/geode/docs/reference/external-references/)
 owns dated version pins and comparison entry points. A source's inclusion is
 not evidence of GEODE adoption or equivalent task performance.
 

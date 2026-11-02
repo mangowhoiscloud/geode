@@ -63,6 +63,17 @@ functional change.
   The publication bundle includes it, and each manifest file entry now records
   its last commit time.
 
+### Changed
+
+- **Old public addresses redirect.** GitHub Pages now serves only redirects:
+  one stub per frozen old page and a 404 fallback map
+  `mangowhoiscloud.github.io/geode/` addresses to the docs at
+  `mangowhois.ai/products/geode/`, the hub and research readers at
+  `tech.mangowhois.ai`, and retired hub operator docs on GitHub. Project URLs,
+  README and docs links, and the OpenRouter attribution header point to the new
+  addresses. The architecture inventory moved to
+  `docs/architecture/architecture-baseline.json`.
+
 ### Fixed
 
 - **Draft PR CI eligibility.** Defer aggregate Test and Gate jobs with their
@@ -82,6 +93,19 @@ functional change.
   plugin pins `glob@14.0.3` (its recorded `package.json` digest updated), and an
   npm override pins ESLint's `minimatch` to 11.0.3. The plugin's pattern and
   integrity checks and the site lint pass on the new versions.
+
+### Removed
+
+- **In-repo website and hub generator.** The Next.js site, the generated
+  self-improving hub pages, templates and both Inspect viewer copies,
+  `scripts/build_self_improving_hub.py` with `geode hub build`, and the
+  site-only scripts, hooks, tests and build checks are gone. mangowhois-site
+  builds the docs, hub and readers from the publication bundle; the raw hub
+  data and its producers stay here.
+- **Duplicated site resources.** The hub design docs and the JEVDB review
+  PPTX now live only in mangowhois-site, and the GEO visibility benchmark no
+  longer accepts the docs link-audit receipt that only the removed site link
+  checker produced.
 
 ### Infrastructure
 

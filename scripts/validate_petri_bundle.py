@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Validate docs/self-improving/petri-bundle/ before GitHub Pages deploy.
+"""Validate docs/self-improving/petri-bundle/ before it ships in the publication bundle.
 
-Used as a **CI ratchet** — invoked from both ``.github/workflows/ci.yml``
-(PR gate, blocks merge) and ``.github/workflows/pages.yml`` (post-merge
-defense-in-depth) and the dedicated ``.github/workflows/petri-publish.yml``
-guardrail. Each layer alone is insufficient: CI catches PRs before merge,
-pages.yml catches drift from cron-triggered rebuilds, and petri-publish.yml
-is the isolation layer that runs even when the site build is skipped.
+Used as a **CI ratchet** — invoked from ``.github/workflows/ci.yml`` (PR gate,
+blocks merge) and the dedicated ``.github/workflows/petri-publish.yml``
+guardrail, which also runs daily and on changes to the bundle itself. The
+downstream site renders the Inspect viewer; this repository ships raw logs only.
 
 Enforces:
 1. listing.json present + parses.
@@ -20,9 +18,6 @@ Enforces:
    These three checks together prevent the click-time TypeError seen in
    inspect_ai #1747 — ``formatPrettyDecimal(g.metrics[i].value)`` blows up
    when ``results`` is None or ``scores[].metrics`` is empty.
-5. Required asset files present (index.html + the JS bundle the viewer
-   loads on cold start). Missing assets = silent blank-page failure for
-   end users.
 
 Run from repo root:
     uv run python scripts/validate_petri_bundle.py
@@ -54,17 +49,6 @@ except ImportError:
 
 BUNDLE_DIR = Path("docs/self-improving/petri-bundle")
 LISTING = BUNDLE_DIR / "logs" / "listing.json"
-ASSETS_DIR = BUNDLE_DIR / "assets"
-
-# index.html + the entry JS bundle Inspect ships. Hash-suffixed chunks
-# (chunk-*.js, lib-*.js, …) intentionally not pinned — they rotate every
-# viewer rebuild. The launcher pair below is enough to detect a wholesale
-# bundle wipe.
-REQUIRED_ASSET_NAMES: tuple[str, ...] = ("index.html",)
-REQUIRED_ASSET_GLOBS: tuple[tuple[str, str], ...] = (
-    ("assets", "index.js"),
-    ("assets", "index.css"),
-)
 
 
 def _check_eval_archive(path: Path) -> list[str]:
@@ -118,21 +102,6 @@ def _check_eval_archive(path: Path) -> list[str]:
     return failures
 
 
-def _check_assets() -> list[str]:
-    """Return a list of failure messages for missing viewer assets."""
-    failures: list[str] = []
-    for name in REQUIRED_ASSET_NAMES:
-        if not (BUNDLE_DIR / name).is_file():
-            failures.append(f"asset missing: {BUNDLE_DIR / name}")
-    for parts in REQUIRED_ASSET_GLOBS:
-        path = BUNDLE_DIR
-        for p in parts:
-            path = path / p
-        if not path.is_file():
-            failures.append(f"asset missing: {path}")
-    return failures
-
-
 def main() -> int:
     if not LISTING.exists():
         print(f"FAIL: {LISTING} missing", file=sys.stderr)
@@ -144,7 +113,7 @@ def main() -> int:
         print(f"FAIL: {LISTING} is not valid JSON: {exc}", file=sys.stderr)
         return 1
 
-    failures: list[str] = _check_assets()
+    failures: list[str] = []
 
     skipped_deep = False
     for name, entry in data.items():
@@ -180,7 +149,6 @@ def main() -> int:
             "  - Remove offending entries from docs/self-improving/petri-bundle/logs/listing.json"
         )
         print("    and the .eval files from docs/self-improving/petri-bundle/logs/.")
-        print("  - Rebuild the viewer bundle via `inspect view bundle` if assets are missing.")
         print("  - Partial/error/empty-results archives trigger click-time TypeError")
         print("    (inspect_ai #1747 pattern).")
         return 1
@@ -211,7 +179,7 @@ def main() -> int:
 
     print(
         f"OK: {len(data)} archive(s), {lit_count} literature snapshot(s), "
-        f"{seeds_count} seed run(s) — listing + zip header + scores + assets all valid.",
+        f"{seeds_count} seed run(s) — listing + zip header + scores all valid.",
     )
     return 0
 

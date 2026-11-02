@@ -120,8 +120,8 @@ Serve baselines under a top-level **`baseline`** section, grouped by `epoch_hash
 each epoch rendered as a sub-series (like a `gen-*` run): `epoch_label` as the
 series name + a one-line spec summary (margin_rule · models · pool) + a dense
 table of that epoch's baselines (`baseline-id · ts · fitness · fitness_stderr ·
-verdict`). Mirror `scripts/build_self_improving_hub.py:_render_seedgen_index_rows`
-(dense table + sidebar, NO card-grid / accent-bar slop — [[feedback_no_box_ui_no_emoji]]).
+verdict`). The hub is rendered by mangowhois-site (`hub/build_hub.py`); mirror its
+seed-generation index rows (dense table + sidebar, NO card-grid / accent-bar slop — [[feedback_no_box_ui_no_emoji]]).
 Never render two epochs in one comparison table (the whole point is they are not
 comparable).
 

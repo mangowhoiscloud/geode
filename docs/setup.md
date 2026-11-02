@@ -78,7 +78,7 @@ chmod 600 ~/.geode/.env
 
 For the order in which exported variables, `~/.geode/.env`, a project `.env` and
 `config.toml` apply, see
-[Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics/).
+[Configuration basics](https://mangowhois.ai/products/geode/docs/config/basics/).
 
 ### 2. Project Setup
 
@@ -93,7 +93,7 @@ credential sources, endpoints, or user authentication roots, even in a trusted
 folder. Explicit shell exports remain operator overrides.
 The project `.env` and the `.geode/config.toml` settings that widen what the
 agent may do apply only after you run `geode config trust` in the folder; see
-[project trust](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust).
+[project trust](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust).
 
 ### Workspace data cutover
 
@@ -233,11 +233,11 @@ geode → is_serve_running()? → No → start_serve_if_needed(30s) → connect 
 Turn the gateway on with `[gateway] enabled = true` in `~/.geode/config.toml`,
 then add a `[[gateway.bindings.rules]]` entry for each Slack channel, in the same
 file or in a project `.geode/config.toml`. The rule format is in
-[Configure a binding](https://mangowhoiscloud.github.io/geode/docs/guides/binding/).
+[Configure a binding](https://mangowhois.ai/products/geode/docs/guides/binding/).
 Update an existing `[gateway]` table rather than declaring it twice. In Slack, the
 channel ID is at the bottom of the dialog that opens when you click the channel
 name. A project `[gateway]` table applies only in a
-[trusted folder](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust).
+[trusted folder](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust).
 
 ### 3. Verify
 
@@ -351,9 +351,9 @@ can resume after a daemon restart.
 | `/quit` | `/q` | Exit |
 
 For the model resolution order and a `/model` switch that does not stick, see
-[Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics/);
+[Configuration basics](https://mangowhois.ai/products/geode/docs/config/basics/);
 the default model is listed in
-[Configure providers](https://mangowhoiscloud.github.io/geode/docs/run/providers/).
+[Configure providers](https://mangowhois.ai/products/geode/docs/run/providers/).
 
 ---
 
@@ -374,9 +374,9 @@ geode serve [-p 3.0]                   # Headless daemon
 
 ## Configuration Reference
 
-[Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics/)
+[Configuration basics](https://mangowhois.ai/products/geode/docs/config/basics/)
 covers which file holds what and
-[when project files apply](https://mangowhoiscloud.github.io/geode/docs/config/basics/#project-trust);
+[when project files apply](https://mangowhois.ai/products/geode/docs/config/basics/#project-trust);
 the full on-disk layout is in
 [storage-hierarchy.md](architecture/storage-hierarchy.md).
 
@@ -389,7 +389,7 @@ Environment settings (declarations: [`core/config/_settings.py`](../core/config/
 | `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `OPENROUTER_API_KEY` | | OpenRouter credit-backed API key; select exact refs as `openrouter/<publisher>/<model>` |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
-| `GEODE_MODEL` | [routing default](https://mangowhoiscloud.github.io/geode/docs/run/providers/) | Manual session override only; persist model choices in `config.toml` |
+| `GEODE_MODEL` | [routing default](https://mangowhois.ai/products/geode/docs/run/providers/) | Manual session override only; persist model choices in `config.toml` |
 | `GEODE_ENSEMBLE_MODE` | `single` | Manual session override only; prefer `config.toml` for durable behavior |
 | **Gateway** | | |
 | `GEODE_GATEWAY_ENABLED` | `false` | Manual session override; prefer `[gateway] enabled = true` in `config.toml` |

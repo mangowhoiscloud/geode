@@ -47,7 +47,7 @@ should compare content with it rather than with the archive name.
 |---|---|---|
 | `changelog/CHANGELOG.md` | `CHANGELOG.md` | yes |
 | `eval/index.json` | `docs/eval/index.json` | yes |
-| `architecture/architecture-baseline.json` | output of `scripts/architecture_baseline.py` (currently `site/src/data/geode/`) | yes |
+| `architecture/architecture-baseline.json` | `docs/architecture/architecture-baseline.json`, written by `scripts/architecture_baseline.py` | yes |
 | `hub/petri-bundle/logs/{*.eval,listing.json}` | `docs/self-improving/petri-bundle/logs/` | no |
 | `hub/petri-bundle/seeds/**` | `docs/self-improving/petri-bundle/seeds/` | no |
 | `hub/petri-bundle/literature/*.json` (not `listing.json`) | `docs/self-improving/petri-bundle/literature/` | no |

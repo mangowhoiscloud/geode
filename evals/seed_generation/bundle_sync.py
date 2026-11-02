@@ -4,7 +4,8 @@ Mirrors the audit-side pattern in ``evals/petri/bundle_sync.py``
 (``sync_eval_to_bundle``). When a seed-generation run finishes, the
 orchestrator calls :func:`sync_run_to_bundle` which selectively copies
 the publishable subset of ``state/seed_generation/<run_id>/`` into the
-Pages-tracked ``docs/self-improving/petri-bundle/seeds/<run_id>/``:
+tracked ``docs/self-improving/petri-bundle/seeds/<run_id>/`` (shipped in the
+publication bundle):
 
 - ``state.json``      — full pipeline snapshot (phase progress, costs)
 - ``survivors.json``  — top-K candidate metadata
@@ -16,7 +17,7 @@ Pages-tracked ``docs/self-improving/petri-bundle/seeds/<run_id>/``:
 
 Why selective copy: the full ``state/seed_generation/<run_id>/`` can
 include ``candidates/<id>.debate.jsonl`` sidecars + debate transcripts +
-N drafts (15+). The Pages bundle is a publish surface, not an archive —
+N drafts (15+). The published bundle is a publish surface, not an archive —
 operators get the final report (survivors + meta_review) for
 auditability, plus the trace (state.json + journal) for diagnostic
 inspection. Full drafts live in state/ for local replay.
@@ -75,7 +76,7 @@ def _resolve_repo_root() -> Path:
 
 
 def _bundle_seeds_dir() -> Path:
-    """Resolved Pages-published seeds directory.
+    """Resolved published seeds directory.
 
     Lazy resolution so ``GEODE_REPO_ROOT`` test fixtures take effect.
     """
@@ -462,7 +463,7 @@ def iter_synced_runs(bundle_seeds_dir: Path | None = None) -> list[dict[str, Any
     listing build step performs). Skips dirs without a parseable
     ``state.json`` with a warning.
 
-    Used by ``scripts/build_seeds_listing.py`` (Pages build step).
+    Used by ``scripts/build_seeds_listing.py``.
     """
     root = bundle_seeds_dir or _bundle_seeds_dir()
     if not root.is_dir():

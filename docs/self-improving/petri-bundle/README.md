@@ -2,18 +2,16 @@
 
 > ⚠️ **2026-05-14 사후 검증 update**: 본 bundle 의 가장 큰 finding (`input_hallucination` Δ ≈ +1.04 ~ +1.31, "GEODE 압박 시 약점") 은 사후 검증 결과 **[substantially invalid]** 로 강등. 23.1% empty seed (dedicated fabrication seed 누락) + A2 verbatim verdict 의 REAL_FABRICATION 0 건. archive 는 historical record 로 유지. 상세: [`audits/2026-05-14-petri-verification-summary.md`](https://github.com/mangowhoiscloud/geode-eval-artifacts/blob/main/sil/audit-reports/2026-05-14-petri-verification-summary.md).
 
-본 directory 는 [Anthropic Petri](https://github.com/meridianlabs-ai/inspect_petri),
-[inspect_ai](https://inspect.aisi.org.uk/) 의 native log viewer 의
-**self-contained static bundle**. 본 GEODE (general-purpose autonomous
-execution agent) 의 13 시나리오 × 17 dim alignment audit 의 archive 를
-web 에서 직접 탐색하기 위한 viewer.
+본 directory 는 [Anthropic Petri](https://github.com/meridianlabs-ai/inspect_petri) /
+[inspect_ai](https://inspect.aisi.org.uk/) audit 의 raw log (`logs/*.eval`,
+`logs/listing.json`) 와 seed run 을 담는다. GEODE (general-purpose autonomous
+execution agent) 의 13 시나리오 × 17 dim alignment audit archive 다. Viewer 는
+GEODE 저장소에 두지 않고, mangowhois-site 가 publication bundle
+([contract](../../architecture/publication-bundle.md)) 로 렌더링한다.
 
 ## 본 viewer 의 접근
 
-🔗 **[https://mangowhoiscloud.github.io/geode/petri-bundle/](https://mangowhoiscloud.github.io/geode/petri-bundle/)**
-
-GitHub Pages 의 source: `main` branch / `/docs`. 첫 접근 의 ~2-3 sec 의
-viewer 의 init (JS bundle 의 load).
+🔗 **[https://tech.mangowhois.ai/self-improving/audits/](https://tech.mangowhois.ai/self-improving/audits/)**
 
 ## 본 audit 의 한 줄 요약
 
@@ -166,11 +164,8 @@ git clone https://github.com/mangowhoiscloud/geode.git
 cd geode
 uv sync --extra audit
 
-# 본 bundle 의 regenerate (logs/ 의 본 archive 의 update 후)
-inspect view bundle --log-dir logs/ --output-dir docs/petri-bundle --overwrite
-
-# 본 index.html 의 abs_log_dir 의 portability fix
-sed -i '' 's|"abs_log_dir": "[^"]*"|"abs_log_dir": "logs"|' docs/petri-bundle/index.html
+# 본 archive 의 무결성 검사 (viewer 는 mangowhois-site 가 렌더링)
+uv run python scripts/validate_petri_bundle.py
 ```
 
 ## 본 audit 의 비용
@@ -190,4 +185,4 @@ Cursor API 1,000만원 + 검증 토큰 ~181만원 + 구독 200만원 + Autonomou
 - Anthropic Petri (Meridian Labs): MIT
 - inspect_ai (UK AISI): MIT
 - 본 GEODE / 본 archive: Apache-2.0
-- 본 viewer `index.html` 의 page-level `noindex` 는 검색 색인 제외 요청이다. raw archive 는 공개 자료이며 robots 정책은 접근 통제나 비밀 보호 경계가 아니다.
+- raw archive 는 공개 자료이며, viewer page 의 `noindex` 나 robots 정책은 접근 통제나 비밀 보호 경계가 아니다.
