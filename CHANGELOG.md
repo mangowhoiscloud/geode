@@ -82,6 +82,13 @@ functional change.
   output terms). The learning-view validator accepts v1 and v2 and adds split,
   route, and repeat-plan checks.
 
+### Security
+
+- **soupsieve 4.1.3.** The locked transitive `soupsieve` (via
+  `beautifulsoup4`) moves from 2.9.2 to 4.1.3, clearing CVE-2026-126190,
+  CVE-2026-126191, CVE-2026-126192 and CVE-2026-126193 reported by the runtime
+  dependency audit.
+
 ## [1.0.35] - 2026-11-02
 
 ### Added
