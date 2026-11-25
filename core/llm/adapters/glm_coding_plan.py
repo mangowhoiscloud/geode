@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from core.config.policy_source import PolicySourcePaths
@@ -29,6 +29,7 @@ from core.llm.adapters.base import (
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
+    sent_params_receipt,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.providers.glm import build_glm_chat_kwargs, translate_glm_stream
@@ -89,8 +90,11 @@ class GlmCodingPlanAdapter:
                 type(exc).__name__,
             )
             raise
-        return translate_chat_response(
-            response, provider=self.provider, adapter_name=self.name, model=req.model
+        return replace(
+            translate_chat_response(
+                response, provider=self.provider, adapter_name=self.name, model=req.model
+            ),
+            request_params=sent_params_receipt(req, kwargs),
         )
 
     async def aweb_search(

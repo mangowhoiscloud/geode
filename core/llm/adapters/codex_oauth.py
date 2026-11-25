@@ -47,6 +47,7 @@ from core.llm.adapters.base import (
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
+    sent_params_receipt,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
@@ -240,6 +241,7 @@ class CodexOAuthAdapter:
         result = replace(
             translate_codex_response(final, accumulated_items=accumulated),
             request_image_receipt=image_receipt,
+            request_params=sent_params_receipt(req, kwargs),
         )
         # PR-CODEX-OAUTH-EMPTY-TEXT-DUMP (2026-05-25) — Codex sometimes
         # returns ``output_text=""`` while emitting reasoning-only items

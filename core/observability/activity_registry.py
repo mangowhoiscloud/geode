@@ -67,6 +67,7 @@ from core.observability.activity import (
     LLMCallEndedDetails,
     LLMCallEndedRow,
     LLMCallFailedRow,
+    LLMCallIdentityDetails,
     LLMCallRetriedRow,
     LLMCallStartedRow,
     LLMCallUsageDetails,
@@ -268,6 +269,37 @@ def _observed_latency_ms(data: Mapping[str, Any]) -> float | None:
     return latency if math.isfinite(latency) and latency >= 0 else None
 
 
+_LLM_CALL_IDENTITY_KEYS = (
+    "system_fingerprint",
+    "system_prompt_sha256",
+    "tool_schema_sha256",
+    "temperature_requested",
+    "params_sent",
+    "params_dropped",
+    "provider_seed",
+    "route_check",
+    "validity",
+    "invalid_reason",
+)
+
+
+def _call_identity(data: Mapping[str, Any]) -> LLMCallIdentityDetails | None:
+    present = {key: data[key] for key in _LLM_CALL_IDENTITY_KEYS if data.get(key) is not None}
+    if not present:
+        return None
+    try:
+        return LLMCallIdentityDetails.model_validate(present)
+    except ValidationError:
+        # Keep the route verdict even when an oversized knob receipt is refused.
+        log.warning("Invalid LLM call params omitted from LLM event")
+        present.pop("params_sent", None)
+        try:
+            return LLMCallIdentityDetails.model_validate(present)
+        except ValidationError:
+            log.warning("Invalid LLM call identity omitted from LLM event")
+            return None
+
+
 def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
     """Project one LLM attempt without retaining raw provider error text."""
     identifier = str(
@@ -329,6 +361,7 @@ def _llm_call_ended(data: dict[str, Any], run_id: str) -> ActivityRowBase:
             routing_strategy=_text("routing_strategy"),
             routing_attempt=int(routing_attempt) if routing_attempt is not None else None,
             request_image_receipt=receipt,
+            call_identity=_call_identity(data),
         ),
     )
 

@@ -283,8 +283,13 @@ class AdapterCallResult:
     response_id: str = ""
     response_model: str = ""
     response_provider: str = ""
+    # Provider backend fingerprint when the wire response carries one.
+    system_fingerprint: str = ""
     routing_strategy: str = ""
     routing_attempt: int = 0
+    # Adapter-owned receipt of the decoding knobs actually serialized, from
+    # :func:`sent_params_receipt`. None means the adapter did not report it.
+    request_params: dict[str, Any] | None = None
     # Optional adapter-owned, bounded receipt of serialized request images.
     # None means unavailable, not an observed zero. No raw request content.
     request_image_receipt: dict[str, Any] | None = None
@@ -292,6 +297,60 @@ class AdapterCallResult:
     anthropic_content: tuple[dict[str, Any], ...] = ()
     chat_reasoning: ChatReasoningReplay | None = None
     stop_details: dict[str, Any] | None = None
+
+
+# Wire names one requested knob may take. A requested knob whose aliases are
+# all absent from the serialized request was dropped by the adapter.
+_REQUESTED_PARAM_ALIASES: dict[str, tuple[str, ...]] = {
+    "temperature": ("temperature",),
+    "max_tokens": ("max_tokens", "max_output_tokens", "max_completion_tokens"),
+    "stop_sequences": ("stop", "stop_sequences"),
+}
+_SENT_PARAM_KEYS = (
+    "temperature",
+    "top_p",
+    "top_k",
+    "seed",
+    "max_tokens",
+    "max_output_tokens",
+    "max_completion_tokens",
+    "stop",
+    "stop_sequences",
+    "reasoning",
+    "reasoning_effort",
+    "thinking",
+    "output_config",
+    "tool_choice",
+    "parallel_tool_calls",
+)
+
+
+def sent_params_receipt(req: AdapterCallRequest, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Record the decoding knobs that reached the wire, not the requested ones.
+
+    A harness can name a temperature that a reasoning route never sends, so a
+    training row must read ``params_sent`` and the explicit ``params_dropped``
+    list. ``AdapterCallRequest`` has no seed field; ``provider_seed`` is the
+    serialized seed or ``"not-sent"``. Message, tool, and schema bodies are
+    excluded: the call record keeps their digests instead.
+    """
+    wire = {**(kwargs.get("extra_body") or {}), **kwargs}
+    sent = {key: wire[key] for key in _SENT_PARAM_KEYS if key in wire}
+    requested = {
+        "temperature": req.temperature,
+        "max_tokens": req.max_tokens,
+        "stop_sequences": req.stop_sequences or None,
+    }
+    dropped = sorted(
+        name
+        for name, value in requested.items()
+        if value is not None and not any(alias in wire for alias in _REQUESTED_PARAM_ALIASES[name])
+    )
+    return {
+        "params_sent": sent,
+        "params_dropped": dropped,
+        "provider_seed": sent.get("seed", "not-sent"),
+    }
 
 
 @dataclass(frozen=True)

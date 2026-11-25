@@ -427,7 +427,7 @@ def test_llm_activity_latency_is_observed_value_or_null(
     assert isinstance(row, LLMCallEndedRow)
     stored = json.loads(json.dumps(row.model_dump(mode="json"), allow_nan=False))
     reparsed = TypeAdapter(TypedActivityRow).validate_python(stored)
-    assert reparsed.schema_version == 12
+    assert reparsed.schema_version == 13
     assert reparsed.model_dump()["details"]["duration_ms"] == expected
 
 
@@ -468,7 +468,7 @@ def test_llm_activity_preserves_requested_effort_and_call_purpose(purpose: str) 
         },
         run_id="purpose-test",
     )
-    assert row.schema_version == 12
+    assert row.schema_version == 13
     reparsed = TypeAdapter(TypedActivityRow).validate_python(row.model_dump())
     details = reparsed.model_dump()["details"]
     assert (details["purpose"], details["source"], details["effort"]) == (
@@ -484,7 +484,7 @@ def test_exported_activity_json_schema_includes_structured_decision() -> None:
     schema = TypeAdapter(TypedActivityRow).json_schema()
     details = schema["$defs"]["LLMCallEndedDetails"]
     assert "structured_decision" in details["properties"]["purpose"]["anyOf"][0]["enum"]
-    assert schema["$defs"]["LLMCallEndedRow"]["properties"]["schema_version"]["default"] == 12
+    assert schema["$defs"]["LLMCallEndedRow"]["properties"]["schema_version"]["default"] == 13
 
 
 @pytest.mark.parametrize(

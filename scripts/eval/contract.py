@@ -545,6 +545,31 @@ def write_or_check_catalog(*, write: bool) -> None:
     print(f"catalog OK: {len(build_catalog()['documents'])} documents")
 
 
+def _validate_repetition_plan(path: Path, payload: dict[str, Any]) -> None:
+    """Enforce collection-protocol repeat minimums when a run spec declares a plan.
+
+    Legacy frozen specs without ``repetition_plan`` remain valid. A plan for an
+    evaluation gate names its power admission; a plan carrying promotion
+    authority also measures A/A variation with at least two baseline runs.
+    """
+    from evals.collection_protocol import REPEAT_MINIMUMS, check_repetitions
+
+    execution = payload["reproduction"]["execution"]
+    plan = execution.get("repetition_plan")
+    if plan is None:
+        return
+    try:
+        check_repetitions(plan["purpose"], execution["repetitions"])
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+    if plan["purpose"] == "evaluation-gate" and not plan["power_admission_ref"]:
+        raise ValueError(f"{path}: evaluation-gate repetitions require power_admission_ref")
+    authority = payload["reproduction"]["comparison"]["promotion_authority"]
+    minimum = REPEAT_MINIMUMS["aa-baseline"]
+    if authority != "none" and (plan["aa_baseline_runs"] or 0) < minimum:
+        raise ValueError(f"{path}: promotion authority requires aa_baseline_runs >= {minimum}")
+
+
 def validate_run_spec(path: Path) -> dict[str, Any]:
     _reject_placeholders(path)
     payload = _load_json_object(path)
@@ -554,6 +579,7 @@ def validate_run_spec(path: Path) -> dict[str, Any]:
     seeds = execution["seed_schedule"]
     if len(seeds) != repetitions:
         raise ValueError(f"{path}: seed_schedule length must equal repetitions")
+    _validate_repetition_plan(path, payload)
     workload_ids = execution["ordered_workload_ids"]
     canonical_ids = json.dumps(workload_ids, ensure_ascii=False, separators=(",", ":"))
     expected_hash = hashlib.sha256(canonical_ids.encode("utf-8")).hexdigest()

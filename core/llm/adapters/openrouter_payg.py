@@ -26,6 +26,7 @@ from core.llm.adapters.base import (
     EnvironmentReport,
     Message,
     TextCompletionResult,
+    sent_params_receipt,
 )
 from core.llm.errors import LLMRequestValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
@@ -191,6 +192,7 @@ class OpenRouterPaygAdapter:
         return TextCompletionResult(text=result.text, usage=result.usage)
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
+        requested = req
         model = to_openrouter_model_id(req.model)
         if req.max_tokens <= 0:
             raise LLMRequestValidationError("OpenRouter max_tokens must be positive")
@@ -295,6 +297,7 @@ class OpenRouterPaygAdapter:
             response_provider=response_provider,
             routing_strategy=routing_strategy,
             routing_attempt=routing_attempt,
+            request_params=sent_params_receipt(requested, kwargs),
         )
 
     def test_environment(self) -> EnvironmentReport:

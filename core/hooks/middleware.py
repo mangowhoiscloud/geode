@@ -491,6 +491,7 @@ class MiddlewareRegistry:
                     source=getattr(current.adapter, "source", None),
                     effort=current.request.effort,
                     purpose=purpose,
+                    request=current.request,
                 )
             return await complete()
 

@@ -14,6 +14,7 @@ from evals.benchmarks.tau2.runtime_contract import (
     GEODE_DUAL_RUNTIME_PROFILE,
     TAU2_NATIVE_USER_PROFILE,
 )
+from evals.collection_protocol import label_hygiene
 
 from evolve.crucible.contract import (
     ContractError,
@@ -782,9 +783,15 @@ def tau2_has_infrastructure_contamination(raw: Mapping[str, Any]) -> bool:
             continue
         if TAU2_ADAPTER.classify_termination(termination) == "infra":
             return True
-        if _pre_execution_retry_errors(sim, index=index):
+        if _pre_execution_retry_errors(sim, index=index) or _contaminated(sim):
             return True
     return False
+
+
+def _contaminated(sim: Mapping[str, Any]) -> bool:
+    """Harness or provider error text relayed into the transcript."""
+    messages = sim.get("messages")
+    return isinstance(messages, list) and label_hygiene(messages)["validity"] == "invalid"
 
 
 def tau2_resource_usage_floor(raw: Mapping[str, Any]) -> ResourceUsage:
@@ -911,9 +918,16 @@ def normalize_tau2_results(
         termination = str(sim.get("termination_reason") or "").strip()
         termination_class = TAU2_ADAPTER.classify_termination(termination)
         retry_errors = _pre_execution_retry_errors(sim, index=index)
-        if termination_class == "infra" or retry_errors:
+        contaminated = _contaminated(sim)
+        if termination_class == "infra" or retry_errors or contaminated:
             status = "infrastructure_error"
-            row_failure = "tau2_pre_execution_retry" if retry_errors else f"tau2_{termination}"
+            row_failure = (
+                "tau2_pre_execution_retry"
+                if retry_errors
+                else "tau2_contaminated_transcript"
+                if contaminated
+                else f"tau2_{termination}"
+            )
             saw_infrastructure_error = True
         else:
             status = "completed"

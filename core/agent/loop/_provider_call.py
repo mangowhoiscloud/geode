@@ -498,6 +498,7 @@ async def call_llm(
                 effort=active_request.effort,
                 purpose=purpose,
                 cost_estimator=calculate_cost,
+                request=active_request,
             )
             if allow_tools and can_recover_history and active_request.messages == req.messages:
                 # Action requests carry the loop's own history; auxiliary

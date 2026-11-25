@@ -544,6 +544,29 @@ def build_model_action_message(
     return "\n".join(lines)
 
 
+_MODEL_ACTION_ERROR_TYPE = re.compile(r"^  error_type : ([a-z_]+)$", re.M)
+
+
+def parse_model_action_message(text: str) -> str | None:
+    """Return the error type when ``text`` is a model-action diagnostic.
+
+    The inverse of :func:`build_model_action_message`. Benchmarks that relay
+    the loop's final text into a transcript use it to keep a harness failure
+    from being scored as agent behavior. Builds before the labelled lines
+    emitted only the marker and hint, so a known hint headline also matches.
+    """
+    head = text.strip().split("\n", 1)[0]
+    marker, _, headline = head.partition(" ")
+    if marker not in {"✕", "!", "·"} or not headline:
+        return None
+    if match := _MODEL_ACTION_ERROR_TYPE.search(text):
+        return match.group(1)
+    for error_type, _severity, hint in _ERROR_CLASSIFICATION.values():
+        if headline.startswith(hint.split(". ", 1)[0]):
+            return error_type
+    return None
+
+
 def _extract_error_body(exc: Exception) -> dict[str, Any] | None:
     """Pull the parsed JSON body out of an SDK exception, if present.
 

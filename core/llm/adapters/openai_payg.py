@@ -24,7 +24,7 @@ import hashlib
 import logging
 import os
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from core.config.policy_source import PolicySourcePaths
@@ -46,6 +46,7 @@ from core.llm.adapters.base import (
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
+    sent_params_receipt,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.routing import resolve_routing
@@ -211,7 +212,10 @@ class OpenAIPaygAdapter:
                     type(exc).__name__,
                 )
                 raise
-        return translate_codex_response(final, accumulated_items=accumulated)
+        return replace(
+            translate_codex_response(final, accumulated_items=accumulated),
+            request_params=sent_params_receipt(req, kwargs),
+        )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)

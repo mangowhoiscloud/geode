@@ -1238,6 +1238,7 @@ def translate_chat_response(
         raw_response=response,
         response_id=str(getattr(response, "id", "") or ""),
         response_model=str(getattr(response, "model", "") or ""),
+        system_fingerprint=str(getattr(response, "system_fingerprint", "") or ""),
         chat_reasoning=chat_reasoning,
     )
 
@@ -1439,6 +1440,7 @@ def translate_codex_response(
         assistant_phase=assistant_phase,
         response_id=str(getattr(response, "id", "") or ""),
         response_model=str(getattr(response, "model", "") or ""),
+        system_fingerprint=str(getattr(response, "system_fingerprint", "") or ""),
     )
 
 

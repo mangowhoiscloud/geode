@@ -175,3 +175,184 @@ def test_learning_view_rejects_reward_for_invalid_rollout(tmp_path: Path) -> Non
     _write_json(manifest, payload)
     with pytest.raises(ValueError, match=r"not reward-admitted|coverage"):
         validate_learning_view(manifest)
+
+
+# --- v2 records -------------------------------------------------------------
+
+
+def _rewrite(tmp_path: Path, manifest: Path, name: str, rows: list[dict[str, object]]) -> None:
+    path = tmp_path / f"{name}.jsonl"
+    _write_jsonl(path, rows)
+    payload = json.loads(manifest.read_text())
+    entry = payload["files"][name]
+    entry.update(sha256=_sha(path), rows=len(rows), record_schema=rows[0]["schema_id"])
+    _write_json(manifest, payload)
+
+
+def _v2_example(**overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "schema_id": "geode.eval-example@2",
+        "schema_version": 2,
+        "example_id": "fixture.task-1",
+        "suite": "fixture",
+        "dataset": {"name": "fixture", "revision": "1"},
+        "source_task_id": "task-1",
+        "stratum_id": None,
+        "input_sha256": "a" * 64,
+        "split": "train",
+        "family_id": "family-1",
+        "source_benchmark": None,
+        "benchmark_eval_set": False,
+        "license": "MIT",
+        "redistribution": "public",
+        "canary": None,
+        "output_terms": {"provider": "none", "training_use": "permitted", "terms_ref": None},
+    }
+    row.update(overrides)
+    return row
+
+
+def _v2_rollout(tmp_path: Path, **overrides: object) -> dict[str, object]:
+    row = json.loads((tmp_path / "rollouts.jsonl").read_text())
+    if row["schema_version"] == 1:
+        del row["seed"]
+        row.update(
+            schema_id="geode.eval-rollout@2",
+            schema_version=2,
+            policy={
+                "model_requested": "gpt-5.5",
+                "model_served": "gpt-5.5",
+                "provider": "openai",
+                "source": "codex-oauth",
+                "effort": "high",
+                "geode_revision": "b" * 40,
+                "candidate_patch_sha256": None,
+                "system_prompt_sha256": "c" * 64,
+                "tool_schema_sha256": "d" * 64,
+            },
+            user_simulator=None,
+            environment={
+                "harness_revision": "fixture-1",
+                "task_content_sha256": "e" * 64,
+                "max_steps": 30,
+                "timeout_seconds": 600,
+                "max_errors": 10,
+                "reset_identity": None,
+            },
+            sampling={
+                "harness_seed": 300,
+                "provider_seed": "not-sent",
+                "repetition_purpose": "evaluation-gate",
+                "repetition_index": 0,
+                "k_planned": 3,
+            },
+            outcome={"agent_completed": True, "verifier_pass": True},
+            label_hygiene={
+                "detector": "geode.contamination-detector@1",
+                "validity": "valid",
+                "flags": [],
+            },
+            invalid_reason=None,
+        )
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(row.get(key), dict):
+            row[key] = {**row[key], **value}
+        else:
+            row[key] = value
+    return row
+
+
+def _v2_reward(tmp_path: Path, **component: object) -> dict[str, object]:
+    row = json.loads((tmp_path / "rewards.jsonl").read_text())
+    row.update(
+        schema_id="geode.eval-reward@2",
+        schema_version=2,
+        components={
+            "db": {
+                "value": 1.0,
+                "grader_kind": "code",
+                "grader_id": "tau2-db-check",
+                "grader_stochastic": False,
+                **component,
+            }
+        },
+    )
+    return row
+
+
+def _v2_fixture(tmp_path: Path) -> Path:
+    manifest = _fixture(tmp_path)
+    _rewrite(tmp_path, manifest, "rewards", [_v2_reward(tmp_path)])
+    _rewrite(tmp_path, manifest, "rollouts", [_v2_rollout(tmp_path)])
+    _rewrite(tmp_path, manifest, "examples", [_v2_example()])
+    return manifest
+
+
+def test_learning_view_accepts_v2_records(tmp_path: Path) -> None:
+    assert validate_learning_view(_v2_fixture(tmp_path))["rollouts"] == 1
+
+
+@pytest.mark.parametrize(
+    ("name", "rows", "match"),
+    [
+        (
+            "examples",
+            lambda _p: [_v2_example(benchmark_eval_set=True)],
+            "eval items cannot be train",
+        ),
+        (
+            "examples",
+            lambda _p: [
+                _v2_example(
+                    output_terms={"provider": "x", "training_use": "unknown", "terms_ref": None}
+                )
+            ],
+            "output terms",
+        ),
+        (
+            "examples",
+            lambda _p: [
+                _v2_example(),
+                _v2_example(example_id="fixture.task-2", source_task_id="task-2", split="sealed"),
+            ],
+            "family family-1 spans train and sealed",
+        ),
+        (
+            "rollouts",
+            lambda p: [_v2_rollout(p, policy={"model_served": "gpt-5.4"})],
+            "served model differs",
+        ),
+        (
+            "rollouts",
+            lambda p: [_v2_rollout(p, sampling={"k_planned": 1})],
+            "evaluation-gate needs k_planned >= 3",
+        ),
+        (
+            "rollouts",
+            lambda p: [
+                _v2_rollout(
+                    p,
+                    label_hygiene={
+                        "validity": "invalid",
+                        "flags": [
+                            {"kind": "harness_error_text", "message_index": 1, "role": "user"}
+                        ],
+                    },
+                )
+            ],
+            "schema|valid",
+        ),
+        (
+            "rewards",
+            lambda p: [_v2_reward(p, grader_kind="model", grader_stochastic=False)],
+            "schema|True",
+        ),
+    ],
+)
+def test_learning_view_v2_admission_rejects(
+    tmp_path: Path, name: str, rows: object, match: str
+) -> None:
+    manifest = _v2_fixture(tmp_path)
+    _rewrite(tmp_path, manifest, name, rows(tmp_path))  # type: ignore[operator]
+    with pytest.raises(ValueError, match=match):
+        validate_learning_view(manifest)
