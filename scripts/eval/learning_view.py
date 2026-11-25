@@ -8,13 +8,28 @@ import json
 from pathlib import Path
 from typing import Any
 
+from core.hooks.llm_observation import route_check
+from evals.collection_protocol import REPEAT_MINIMUMS
 from scripts.eval import contract
 
+# Accepted record schemas per file. v2 adds policy/sampling identity, label
+# hygiene, grader kinds, and split/terms metadata; v1 views stay readable.
 SCHEMAS = {
-    "examples": ("geode.eval-example@1", "example.schema.json"),
-    "rollouts": ("geode.eval-rollout@1", "rollout.schema.json"),
-    "rewards": ("geode.eval-reward@1", "reward.schema.json"),
+    "examples": {
+        "geode.eval-example@1": "example.schema.json",
+        "geode.eval-example@2": "example-v2.schema.json",
+    },
+    "rollouts": {
+        "geode.eval-rollout@1": "rollout.schema.json",
+        "geode.eval-rollout@2": "rollout-v2.schema.json",
+    },
+    "rewards": {
+        "geode.eval-reward@1": "reward.schema.json",
+        "geode.eval-reward@2": "reward-v2.schema.json",
+    },
 }
+# Output terms that keep an example out of the train split.
+_TRAIN_BLOCKING_TERMS = {"prohibited", "unknown"}
 
 
 def _resolve(base: Path, value: str, *, label: str) -> Path:
@@ -57,6 +72,47 @@ def _unique(rows: list[dict[str, Any]], key: str, *, label: str) -> dict[str, di
     return indexed
 
 
+def _check_splits(examples: dict[str, dict[str, Any]]) -> None:
+    """Keep one source task in one split; keep eval sets and blocked terms out of train.
+
+    Arms, repetitions, and retries share their ``example_id``, so this check
+    covers them through the example. Examples that share a source task or a
+    family must also agree, or a near-duplicate leaks across the boundary.
+    """
+    seen: dict[tuple[str, str], str] = {}
+    for example_id, example in examples.items():
+        if example["schema_version"] != 2:
+            continue
+        split = example["split"]
+        for key in (
+            ("source_task", f"{example['suite']}/{example['source_task_id']}"),
+            ("family", example["family_id"]),
+        ):
+            other = seen.setdefault(key, split)
+            if other != split:
+                raise ValueError(
+                    f"example {example_id}: {key[0]} {key[1]} spans {other} and {split}"
+                )
+        if split == "train" and example["benchmark_eval_set"]:
+            raise ValueError(f"example {example_id}: public benchmark eval items cannot be train")
+        if split == "train" and example["output_terms"]["training_use"] in _TRAIN_BLOCKING_TERMS:
+            raise ValueError(f"example {example_id}: output terms do not admit training use")
+
+
+def _check_rollout_v2(rollout_id: str, rollout: dict[str, Any]) -> None:
+    policy, sampling = rollout["policy"], rollout["sampling"]
+    check = route_check(policy["model_requested"], policy["model_served"])
+    if check == "mismatch" and rollout["validity"] == "valid":
+        raise ValueError(f"rollout {rollout_id}: served model differs from requested model")
+    if sampling["repetition_index"] >= sampling["k_planned"]:
+        raise ValueError(f"rollout {rollout_id}: repetition_index must be below k_planned")
+    minimum = REPEAT_MINIMUMS[sampling["repetition_purpose"]]
+    if sampling["k_planned"] < minimum:
+        raise ValueError(
+            f"rollout {rollout_id}: {sampling['repetition_purpose']} needs k_planned >= {minimum}"
+        )
+
+
 def validate_learning_view(path: Path) -> dict[str, int | str]:
     path = path.resolve()
     manifest = contract._load_json_object(path)
@@ -67,10 +123,11 @@ def validate_learning_view(path: Path) -> dict[str, int | str]:
     )
     base = path.parent
     loaded: dict[str, list[dict[str, Any]]] = {}
-    for name, (schema_id, schema_file) in SCHEMAS.items():
+    for name, accepted in SCHEMAS.items():
         ref = manifest["files"][name]
-        if ref["record_schema"] != schema_id:
-            raise ValueError(f"{path}: {name} record_schema must be {schema_id}")
+        schema_file = accepted.get(ref["record_schema"])
+        if schema_file is None:
+            raise ValueError(f"{path}: {name} record_schema must be one of {sorted(accepted)}")
         record_file = _artifact(base, ref, label=f"{path}:{name}")
         rows = _jsonl(record_file, schema_file)
         if len(rows) != ref["rows"]:
@@ -80,6 +137,10 @@ def validate_learning_view(path: Path) -> dict[str, int | str]:
     examples = _unique(loaded["examples"], "example_id", label="examples")
     rollouts = _unique(loaded["rollouts"], "rollout_id", label="rollouts")
     rewards = _unique(loaded["rewards"], "reward_id", label="rewards")
+    _check_splits(examples)
+    for rollout_id, rollout in rollouts.items():
+        if rollout["schema_version"] == 2:
+            _check_rollout_v2(rollout_id, rollout)
 
     rewarded_rollouts: set[str] = set()
     for rollout_id, rollout in rollouts.items():

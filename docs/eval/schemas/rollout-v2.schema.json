@@ -1,0 +1,558 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mangowhoiscloud/geode/main/docs/eval/schemas/rollout-v2.schema.json",
+  "title": "GEODE evaluation rollout v2",
+  "type": "object",
+  "required": [
+    "schema_id",
+    "schema_version",
+    "run_id",
+    "rollout_id",
+    "example_id",
+    "rollout_index",
+    "policy",
+    "user_simulator",
+    "environment",
+    "sampling",
+    "rollout_attempt_ids",
+    "selected_attempt_id",
+    "trajectory",
+    "native_result",
+    "timing",
+    "validity",
+    "termination_reason",
+    "selected_for_reward",
+    "outcome",
+    "label_hygiene",
+    "invalid_reason"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "geode.eval-rollout@2"
+    },
+    "schema_version": {
+      "const": 2
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+    },
+    "rollout_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,255}$"
+    },
+    "example_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,255}$"
+    },
+    "rollout_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "model_requested",
+        "model_served",
+        "provider",
+        "source",
+        "effort",
+        "geode_revision",
+        "candidate_patch_sha256",
+        "system_prompt_sha256",
+        "tool_schema_sha256"
+      ],
+      "properties": {
+        "model_requested": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model_served": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "effort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "geode_revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "candidate_patch_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "system_prompt_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "tool_schema_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rollout_attempt_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "selected_attempt_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256
+    },
+    "trajectory": {
+      "$ref": "#/$defs/artifactReference"
+    },
+    "native_result": {
+      "$ref": "#/$defs/artifactReferenceWithLocator"
+    },
+    "timing": {
+      "type": "object",
+      "required": [
+        "started_at",
+        "finished_at",
+        "wall_seconds"
+      ],
+      "properties": {
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "wall_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "validity": {
+      "enum": [
+        "valid",
+        "invalid",
+        "aborted"
+      ]
+    },
+    "termination_reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "selected_for_reward": {
+      "type": "boolean"
+    },
+    "user_simulator": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "implementation",
+        "model",
+        "route",
+        "effort",
+        "revision"
+      ],
+      "properties": {
+        "implementation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "harness_revision",
+        "task_content_sha256",
+        "max_steps",
+        "timeout_seconds",
+        "max_errors",
+        "reset_identity"
+      ],
+      "properties": {
+        "harness_revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "task_content_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "max_steps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "timeout_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "max_errors": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reset_identity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "additionalProperties": false
+    },
+    "sampling": {
+      "type": "object",
+      "required": [
+        "harness_seed",
+        "provider_seed",
+        "repetition_purpose",
+        "repetition_index",
+        "k_planned"
+      ],
+      "properties": {
+        "harness_seed": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        },
+        "provider_seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "enum": [
+                "not-sent",
+                "unsupported-by-route"
+              ]
+            }
+          ]
+        },
+        "repetition_purpose": {
+          "enum": [
+            "diagnostic",
+            "aa-baseline",
+            "evaluation-gate",
+            "preference",
+            "rl-group"
+          ]
+        },
+        "repetition_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "k_planned": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "agent_completed",
+        "verifier_pass"
+      ],
+      "properties": {
+        "agent_completed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verifier_pass": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "label_hygiene": {
+      "type": "object",
+      "required": [
+        "detector",
+        "validity",
+        "flags"
+      ],
+      "properties": {
+        "detector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "validity": {
+          "enum": [
+            "valid",
+            "invalid"
+          ]
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "message_index",
+              "role"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "harness_error_text",
+                  "provider_error_text",
+                  "empty_response"
+                ]
+              },
+              "message_index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "role": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              },
+              "error_type": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "invalid_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 160
+    }
+  },
+  "$defs": {
+    "artifactReference": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "trajectory_id",
+        "session_ids"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "trajectory_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "session_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifactReferenceWithLocator": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "source_locator"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_locator": {
+          "type": "string",
+          "pattern": "^/"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "validity": {
+            "const": "valid"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "selected_attempt_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "invalid_reason": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "validity": {
+            "enum": [
+              "invalid",
+              "aborted"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "selected_for_reward": {
+            "const": false
+          },
+          "invalid_reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "label_hygiene": {
+            "properties": {
+              "validity": {
+                "const": "invalid"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "validity": {
+            "enum": [
+              "invalid",
+              "aborted"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

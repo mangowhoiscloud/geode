@@ -59,6 +59,28 @@ functional change.
   (dated snapshots and relay namespaces aside) marks the attempt
   `validity=invalid` with `invalid_reason=route_contamination`. All six
   `acomplete` adapters report the knob receipt.
+- **Learning-data collection protocol.** `evals/collection_protocol.py` sets
+  repeat minimums (2 same-config A/A baselines per campaign, 3 per task for
+  evaluation gates with k from power admission, 4 before preference pairs, 16
+  per RL group), requires materiality to exceed the measured A/A width, drops
+  all-same-reward groups, records each preference pair's first divergence
+  ordinal and actor, and reports per-task passes/k with Wilson intervals,
+  within-task disagreement, pass@k, pass^k, and A/A width beside a bootstrap
+  interval. Run specs opt in with `execution.repetition_plan`.
+- **Label hygiene at collection time.** `geode.contamination-detector@1` flags
+  relayed model-action diagnostics and provider throttle errors in agent or
+  user-simulator turns (empty turns for review). The Crucible tau2 evaluator
+  treats a flagged transcript as an infrastructure error, and
+  `python -m evals.collection_protocol annotate-tau2` writes a
+  `geode_label_hygiene` record onto every simulation of a native receipt.
+- **v2 learning-view records.** `geode.eval-rollout@2` (policy served model,
+  candidate patch, prompt/tool-schema digests, user simulator, environment
+  budgets, harness vs provider seed, repetition plan, `agent_completed` vs
+  `verifier_pass`, label hygiene), `geode.eval-reward@2` (`grader_kind`,
+  grader ID and stochasticity per component), and `geode.eval-example@2`
+  (split, family, benchmark eval-set flag, license, redistribution, canary,
+  output terms). The learning-view validator accepts v1 and v2 and adds split,
+  route, and repeat-plan checks.
 
 ## [1.0.35] - 2026-11-02
 

@@ -94,7 +94,7 @@
       "authority": "derived-view-contract",
       "path": "docs/eval/data-model.md",
       "summary": "Versioned joins for examples, rollouts, immutable trajectories, and evaluator-owned rewards, with supplementary usage and cache-accounting evidence.",
-      "sha256": "aba06865f922c5e25af2929e02e72314239757ae6f87f0586bf88762f81d7768",
+      "sha256": "3860a8b74ee64bae89b83dbcd999d291411b80aafc93f0eda6d87510a45e5552",
       "triggers": [
         "cache accounting",
         "evaluation data model",
@@ -104,9 +104,12 @@
       ],
       "contracts": [
         "core/observability/schemas/trajectory.schema.json",
+        "docs/eval/schemas/example-v2.schema.json",
         "docs/eval/schemas/example.schema.json",
         "docs/eval/schemas/learning-view-manifest.schema.json",
+        "docs/eval/schemas/reward-v2.schema.json",
         "docs/eval/schemas/reward.schema.json",
+        "docs/eval/schemas/rollout-v2.schema.json",
         "docs/eval/schemas/rollout.schema.json"
       ]
     },

@@ -1903,3 +1903,53 @@ def test_templates_are_valid_json_but_rejected_until_filled() -> None:
     assert isinstance(json.loads(template.read_text(encoding="utf-8")), dict)
     with pytest.raises(ValueError, match="unresolved template placeholders"):
         contract.validate_run_spec(template)
+
+
+@pytest.mark.parametrize(
+    ("plan", "repetitions", "authority", "match"),
+    [
+        ({"purpose": "diagnostic"}, 1, "none", None),
+        ({"purpose": "evaluation-gate"}, 2, "none", "evaluation-gate needs k >= 3"),
+        ({"purpose": "evaluation-gate", "power_admission_ref": None}, 3, "none", "power_admission"),
+        ({"purpose": "rl-group"}, 8, "none", "rl-group needs k >= 16"),
+        ({"purpose": "preference"}, 4, "none", None),
+        ({"purpose": "evaluation-gate", "aa_baseline_runs": 1}, 3, "suite-native", "aa_baseline"),
+        ({"purpose": "evaluation-gate", "aa_baseline_runs": 2}, 3, "suite-native", None),
+    ],
+)
+def test_run_spec_repetition_plan_enforces_collection_minimums(
+    tmp_path: Path,
+    plan: dict[str, object],
+    repetitions: int,
+    authority: str,
+    match: str | None,
+) -> None:
+    path = tmp_path / "run-spec.json"
+    payload = _run_spec()
+    reproduction = payload["reproduction"]
+    assert isinstance(reproduction, dict)
+    execution, comparison = reproduction["execution"], reproduction["comparison"]
+    assert isinstance(execution, dict) and isinstance(comparison, dict)
+    execution["repetitions"] = repetitions
+    execution["seed_schedule"] = [
+        f"unseeded-provider-inference-repeat-{i}" for i in range(repetitions)
+    ]
+    execution["repetition_plan"] = {
+        "aa_baseline_runs": None,
+        "power_admission_ref": "power-admission.json",
+        **plan,
+    }
+    if authority != "none":
+        comparison.update(
+            promotion_authority=authority,
+            claim_class="suite-headline",
+            comparability="direct",
+            comparator="native harness",
+        )
+    _write_json(path, payload)
+
+    if match is None:
+        contract.validate_run_spec(path)
+    else:
+        with pytest.raises(ValueError, match=match):
+            contract.validate_run_spec(path)
