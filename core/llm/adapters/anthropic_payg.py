@@ -13,7 +13,7 @@ import hashlib
 import logging
 import os
 from collections.abc import AsyncIterator
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 from core.config.policy_source import PolicySourcePaths
@@ -35,6 +35,7 @@ from core.llm.adapters.base import (
     StreamEvent,
     TextCompletionResult,
     WebSearchResult,
+    sent_params_receipt,
 )
 from core.llm.errors import LLMResponseValidationError
 from core.llm.loop_affinity import LoopAffineClientCache
@@ -129,10 +130,12 @@ class AnthropicPaygAdapter:
         lane_key = f"anthropic-payg:{req.model}"
         async with acquire_anthropic_api_lane_async(lane_key):
             try:
-                response = await client.messages.create(
-                    **build_create_kwargs(req, base_url=str(client.base_url))
+                kwargs = build_create_kwargs(req, base_url=str(client.base_url))
+                response = await client.messages.create(**kwargs)
+                return replace(
+                    translate_response(response),
+                    request_params=sent_params_receipt(req, kwargs),
                 )
-                return translate_response(response)
             except Exception as exc:
                 self._last_error = exc
                 log.warning(

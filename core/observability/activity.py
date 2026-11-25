@@ -30,6 +30,7 @@ builders plus one LLM completion projection, and a single declarative
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -160,7 +161,7 @@ class ActivityRowBase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: int = 12
+    schema_version: int = 13
     """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
     field is added/renamed/retyped on any row class so JSONL re-readers
     can branch on shape instead of guessing from key presence.
@@ -180,7 +181,10 @@ class ActivityRowBase(BaseModel):
     v9: native text helpers retain their producer-specific call purpose.
     v10: nested classification/extraction calls retain structured_decision purpose.
     v11: known 1-hour cache writes remain separate from total cache writes.
-    v12: LLM call terminal latency stays null when unobserved instead of 0.0."""
+    v12: LLM call terminal latency stays null when unobserved instead of 0.0.
+    v13: LLM attempts retain sent/dropped decoding knobs, provider seed,
+    system fingerprint, prompt/tool-schema digests, and a requested-vs-served
+    route check that marks a substituted model invalid."""
 
     ts: float
     run_id: str
@@ -302,6 +306,36 @@ class LLMRequestImageReceiptDetails(BaseModel):
         return self
 
 
+class LLMCallIdentityDetails(BaseModel):
+    """v13 sampling and route identity of one model attempt.
+
+    Fields are ``None`` when the producer did not observe them. ``params_sent``
+    holds only decoding knobs that reached the wire; message, tool, and schema
+    bodies stay out and are represented by their digests.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    system_fingerprint: str | None = Field(default=None, max_length=128)
+    system_prompt_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    tool_schema_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    temperature_requested: float | None = None
+    params_sent: dict[str, Any] | None = None
+    params_dropped: list[str] | None = None
+    provider_seed: int | Literal["not-sent"] | None = None
+    route_check: Literal["match", "mismatch", "unobserved"] | None = None
+    validity: Literal["valid", "invalid"] | None = None
+    invalid_reason: Literal["route_contamination"] | None = None
+
+    @model_validator(mode="after")
+    def validate_call_identity(self) -> LLMCallIdentityDetails:
+        if self.params_sent is not None and len(json.dumps(self.params_sent, default=str)) > 2048:
+            raise ValueError("params_sent exceeds 2 KiB")
+        if (self.validity == "invalid") != (self.invalid_reason is not None):
+            raise ValueError("invalid_reason is required exactly when validity is invalid")
+        return self
+
+
 class LLMCallEndedDetails(LifecycleCompletedDetails):
     """Durable billing and serving-route evidence for one model attempt.
 
@@ -343,6 +377,7 @@ class LLMCallEndedDetails(LifecycleCompletedDetails):
     routing_strategy: str | None = None
     routing_attempt: int | None = Field(default=None, ge=0)
     request_image_receipt: LLMRequestImageReceiptDetails | None = None
+    call_identity: LLMCallIdentityDetails | None = None
 
 
 class LifecycleFailedDetails(BaseModel):

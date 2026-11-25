@@ -47,6 +47,19 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **LLM call identity (activity schema v13).** Each `llm.call.ended` row now
+  carries a bounded `call_identity`: the decoding knobs the adapter actually
+  serialized (`params_sent`), requested knobs it removed (`params_dropped`,
+  e.g. `temperature` on GPT-5-family Responses requests), the provider seed or
+  `not-sent`, the provider `system_fingerprint`, SHA-256 digests of the system
+  prompt and tool schemas, and the requested temperature. Reasoning-token
+  counts stay in `usage`. A served model that differs from the requested one
+  (dated snapshots and relay namespaces aside) marks the attempt
+  `validity=invalid` with `invalid_reason=route_contamination`. All six
+  `acomplete` adapters report the knob receipt.
+
 ## [1.0.35] - 2026-11-02
 
 ### Added

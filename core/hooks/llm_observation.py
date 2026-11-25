@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -23,6 +26,60 @@ def resolve_llm_correlation(correlation: Mapping[str, Any]) -> dict[str, Any]:
         **correlation,
         "llm_call_id": call_id,
         "llm_attempt_id": correlation.get("llm_attempt_id") or f"{call_id}:attempt-1",
+    }
+
+
+# Providers echo an alias with a dated snapshot suffix (gpt-5.5-2026-01-01,
+# claude-sonnet-4-5-20250929); that is the requested model, not a substitute.
+_SNAPSHOT_SUFFIX = re.compile(r"-(?:\d{4}-\d{2}-\d{2}|\d{8})$")
+
+
+def route_check(requested: str, served: str | None) -> str:
+    """Classify one attempt's served model as ``match``, ``mismatch`` or ``unobserved``.
+
+    A relay namespace (``openai/gpt-5.5``) is ignored only when the request
+    itself named no namespace.
+    """
+    if not served:
+        return "unobserved"
+
+    def normalize(model: str) -> str:
+        model = _SNAPSHOT_SUFFIX.sub("", model)
+        return model if "/" in requested else model.rsplit("/", 1)[-1]
+
+    return "match" if normalize(served) == normalize(requested) else "mismatch"
+
+
+def _sha256_json(value: Any) -> str:
+    raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _request_identity(request: Any) -> dict[str, Any]:
+    """Digest the policy-shaping request parts; bodies never enter the record."""
+    if request is None:
+        return {}
+    system_prompt = getattr(request, "system_prompt", "") or ""
+    tools = [
+        {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+        for t in getattr(request, "tools", ()) or ()
+    ]
+    return {
+        "system_prompt_sha256": (
+            hashlib.sha256(system_prompt.encode("utf-8")).hexdigest() if system_prompt else None
+        ),
+        "tool_schema_sha256": _sha256_json(tools) if tools else None,
+        "temperature_requested": getattr(request, "temperature", None),
+    }
+
+
+def _call_validity(model: str, result: Any) -> dict[str, Any]:
+    """Mark the attempt invalid when the provider served a different model."""
+    check = route_check(model, getattr(result, "response_model", None))
+    return {
+        "route_check": check,
+        "validity": {"match": "valid", "mismatch": "invalid"}.get(check),
+        "invalid_reason": "route_contamination" if check == "mismatch" else None,
     }
 
 
@@ -78,12 +135,15 @@ def _completed_attempt_payload(
                 "response_id",
                 "response_model",
                 "response_provider",
+                "system_fingerprint",
                 "routing_strategy",
                 "routing_attempt",
                 "request_image_receipt",
             )
             if (value := getattr(result, key, None))
         },
+        **(getattr(result, "request_params", None) or {}),
+        **_call_validity(model, result),
     }
 
 
@@ -99,13 +159,16 @@ async def observe_llm_call[T](
     source: str | None = None,
     effort: str | None = None,
     cost_estimator: Callable[..., float] | None = None,
+    request: Any = None,
 ) -> T:
     """Record a dispatch attempt, not every internal SDK retry or semantic success.
 
     Call only at the physical terminal, after middleware transforms. Missing IDs
     get fresh identities; supplied main-loop retry identities remain unchanged.
-    No request content or returned text is inspected or copied. Without an
-    explicit estimator, cost is provider-reported only; missing cost stays unknown.
+    No request content or returned text is copied: an optional adapter
+    ``request`` contributes only system-prompt and tool-schema digests. Without
+    an explicit estimator, cost is provider-reported only; missing cost stays
+    unknown.
     """
     metadata = {
         **resolve_llm_correlation(correlation),
@@ -115,6 +178,7 @@ async def observe_llm_call[T](
         "purpose": purpose,
         "source": source,
         "effort": effort,
+        **_request_identity(request),
     }
     started_at = time.monotonic()
     await fire_hook_async(hooks, HookEvent.LLM_CALL_STARTED, metadata)

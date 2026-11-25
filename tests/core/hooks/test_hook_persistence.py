@@ -169,7 +169,7 @@ def test_public_extension_audit_uses_sqlite_and_active_timeline_only(
         "step_id": "t-1:step-1",
         "session_generation": 0,
         "verify_attempt": 0,
-        "activity_schema_version": 12,
+        "activity_schema_version": 13,
         "_dispatch_duration_ms": row.payload["_dispatch_duration_ms"],
     }
     assert not (tmp_path / "events.jsonl").exists()
@@ -285,11 +285,11 @@ def test_llm_route_charge_and_usage_survive_durable_projection(tmp_path: Path) -
     assert row.payload["response_provider"] == "OpenInference"
     assert row.payload["routing_strategy"] == "direct"
     assert row.payload["routing_attempt"] == 1
-    assert row.payload["activity_schema_version"] == 12
+    assert row.payload["activity_schema_version"] == 13
     timeline_payload = _read_timeline(tmp_path / "events.jsonl")[0]["payload"]
     assert timeline_payload["response_provider"] == "OpenInference"
     assert timeline_payload["cost_usd"] == 0.00012
-    assert timeline_payload["activity_schema_version"] == 12
+    assert timeline_payload["activity_schema_version"] == 13
     hooks.close()
 
 
@@ -331,7 +331,7 @@ def test_llm_terminal_latency_persists_observed_value_or_null(
         durable.close()
     assert "_generic_projection" not in row.payload
     assert row.payload["duration_ms"] == expected
-    assert row.payload["activity_schema_version"] == 12
+    assert row.payload["activity_schema_version"] == 13
     mirror = _read_timeline(tmp_path / "events.jsonl")[0]
     validate_record(mirror)
     assert mirror["payload"]["duration_ms"] == expected
@@ -439,7 +439,7 @@ def test_structured_decision_observation_survives_durable_and_export_boundaries(
         payload = row.payload
         assert payload["purpose"] == "structured_decision"
         assert payload["source"] == "payg"
-        assert payload["activity_schema_version"] == 12
+        assert payload["activity_schema_version"] == 13
         failed = outcome in {"error", "cancel", "empty"}
         assert row.status == ("failed" if failed else "ok")
         assert payload["success"] is not failed
